@@ -52,12 +52,12 @@ export class SoundPlayer {
    * Play a loaded sound immediately.
    * @param {string} name - the name from the manifest, e.g. "dayan_open"
    */
-  play(name) {
+  play(name, time) {
     const player = this._players.get(name);
     if (!player) {
       console.warn(`SoundPlayer: no sound named "${name}"`);
       return;
     }
-    player.start();  // Tone.js plays the sound now
+    player.start(time);  // play at the exact scheduled time (or now if undefined)
   }
 }
