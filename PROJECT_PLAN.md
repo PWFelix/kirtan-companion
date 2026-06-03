@@ -87,7 +87,7 @@ What the first usable version must do:
 - **Sequencer** — plays a beat in time using Tone.js Transport; two independent sound voices; emits a "step" event each tick; step interval isolated for future multi-timing. Tested (heard a looping two-voice rhythm).
 - Committed and pushed at each working milestone.
 
-### ⬜ Phase 3 — Wrap the Engine (NEXT)
+### ✅  Phase 3 — Wrap the Engine (NEXT)
 - Combine EventEmitter, SoundPlayer, Sequencer into one clean **KirtanEngine** object so the UI talks to a single thing.
 - Define its public interface: load, setBeat, setBpm, start, stop + events.
 
