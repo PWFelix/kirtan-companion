@@ -4,53 +4,54 @@
  * Loads sound files using Tone.js and plays them on command.
  * Each sound is held in its own Tone.Player.
  *
+ * Also owns a master volume (via a Tone.Gain) that all sounds
+ * pass through, so the UI can control overall loudness.
+ *
  * Knows nothing about beats, timing patterns, or React.
- * Its only job: "load these sounds" and "play this sound now".
  */
 import * as Tone from "tone";
 
 export class SoundPlayer {
   constructor() {
-    // A place to keep each loaded sound, looked up by a name.
-    // e.g. "dayan_open" → the Tone.Player holding that sound.
+    // name -> Tone.Player
     this._players = new Map();
+
+    // A single volume control that everything routes through.
+    // Tone.Gain is a volume knob: 0 = silent, 1 = full.
+    // We connect it to the speakers, and connect every player to IT
+    // instead of straight to the speakers — so changing this one
+    // knob changes the volume of all sounds at once.
+    this._masterGain = new Tone.Gain(1).toDestination();
   }
 
   /**
    * Load a set of sounds.
-   * @param {Object} manifest - maps a name to a file path, e.g.
-   *   { dayan_open: "/sounds/dayan_open.wav" }
-   * @returns {Promise} resolves when ALL sounds have finished loading.
+   * @param {Object} manifest - { name: url, ... }
+   * @returns {Promise} resolves when ALL sounds have loaded.
    */
   async load(manifest) {
-    // We create a Tone.Player for each sound. Each Player loading
-    // is asynchronous (takes time), so we collect all the "loading
-    // promises" and wait for all of them together.
     const loadingPromises = [];
 
     for (const [name, url] of Object.entries(manifest)) {
-      // Create a promise that resolves when THIS player has loaded.
       const promise = new Promise((resolve, reject) => {
         const player = new Tone.Player({
           url: url,
-          onload: () => resolve(),          // success
-          onerror: (e) => reject(e),         // failure
-        }).toDestination();                  // route it to the speakers
+          onload: () => resolve(),
+          onerror: (e) => reject(e),
+        }).connect(this._masterGain); // route through the volume knob
 
-        // Remember this player by its name so we can play it later.
         this._players.set(name, player);
       });
-
       loadingPromises.push(promise);
     }
 
-    // Wait for every sound to finish loading before we say we're done.
     await Promise.all(loadingPromises);
   }
 
   /**
-   * Play a loaded sound immediately.
-   * @param {string} name - the name from the manifest, e.g. "dayan_open"
+   * Play a loaded sound.
+   * @param {string} name
+   * @param {number} time - exact time to play (from the sequencer)
    */
   play(name, time) {
     const player = this._players.get(name);
@@ -58,6 +59,18 @@ export class SoundPlayer {
       console.warn(`SoundPlayer: no sound named "${name}"`);
       return;
     }
-    player.start(time);  // play at the exact scheduled time (or now if undefined)
+    player.start(time);
+  }
+
+  /**
+   * Set the master volume.
+   * @param {number} value - 0 (silent) to 1 (full)
+   */
+  setVolume(value) {
+    // Clamp to the valid range just in case.
+    const safe = Math.max(0, Math.min(1, value));
+    // rampTo glides smoothly to the new volume over 0.05s,
+    // avoiding clicks/pops from instant volume jumps.
+    this._masterGain.gain.rampTo(safe, 0.05);
   }
 }

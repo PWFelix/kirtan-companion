@@ -43,6 +43,7 @@ export class Sequencer extends EventEmitter {
   setBpm(bpm) {
     // Tone.Transport is the global musical clock. Its bpm controls
     // how fast everything scheduled on it runs.
+    
     Tone.Transport.bpm.value = bpm;
   }
 
@@ -104,22 +105,29 @@ export class Sequencer extends EventEmitter {
   _tick(time) {
     const step = this._currentStep;
 
-    // Look at what each drum end does on this step.
+    // What does each end do on this step?
+    // "O" = open hit, "X" = closed hit, null = silent.
     const dayanHit = this._beat.dayan[step];
     const bayanHit = this._beat.bayan[step];
 
-    // If there's a hit ("O"), play the matching sound at the exact time.
-    if (dayanHit) {
+    // Dayan (small end): choose the sound based on the stroke type.
+    if (dayanHit === "O") {
       this._soundPlayer.play("dayan_open", time);
-    }
-        if (bayanHit) {
-      this._soundPlayer.play("bayan_open", time);
+    } else if (dayanHit === "X") {
+      this._soundPlayer.play("dayan_closed", time);
     }
 
-    // Tell anyone listening which step we're on (for the playhead later).
+    // Bayan (big end): same idea.
+    if (bayanHit === "O") {
+      this._soundPlayer.play("bayan_open", time);
+    } else if (bayanHit === "X") {
+      this._soundPlayer.play("bayan_closed", time);
+    }
+
+    // Tell anyone listening which step we're on (for the playhead).
     this.emit("step", step);
 
-    // Advance to the next step, looping back to 0 at the end.
+    // Advance, looping back to 0 at the end of the cycle.
     this._currentStep = (this._currentStep + 1) % this._beat.steps;
   }
 }
