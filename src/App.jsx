@@ -6,16 +6,10 @@ import BeatIndicator from "./BeatIndicator.jsx";
 
 const MIN_BPM = 40, MAX_BPM = 200;
 const SAVED_KEY = "kirtan-custom-beats";
-const LABEL_STYLE_KEY = "kirtan-label-style"; // "simple" | "traditional"
 
 function loadSavedBeats() {
   try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || []; }
   catch (e) { return []; }
-}
-
-function loadLabelStyle() {
-  const v = localStorage.getItem(LABEL_STYLE_KEY);
-  return v === "traditional" ? "traditional" : "simple";
 }
 
 function App() {
@@ -35,7 +29,6 @@ function App() {
   const [step, setStep]       = useState(-1);
   const [volume, setVolume]   = useState(0.9);
   const [mutedEnds, setMutedEnds] = useState({});
-  const [labelStyle, setLabelStyle] = useState(loadLabelStyle);
 
   const tapTimesRef = useRef([]);
   const beat = allBeats.find(b => b.id === beatId) || allBeats[0];
@@ -73,11 +66,6 @@ function App() {
       engine.setEndMuted(end, !!next[end]);
       return next;
     });
-  }
-
-  function changeLabelStyle(style) {
-    setLabelStyle(style);
-    try { localStorage.setItem(LABEL_STYLE_KEY, style); } catch (e) {}
   }
 
   function handleTap() {
@@ -130,7 +118,7 @@ function App() {
       </header>
 
       <main style={st.stage}>
-        <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ width: "100%", maxWidth: 360 }}>
           <BeatIndicator
             beat={beat}
             step={step}
@@ -139,25 +127,7 @@ function App() {
             compact
             mutedEnds={mutedEnds}
             onToggleMute={toggleMute}
-            labelStyle={labelStyle}
           />
-          <div style={st.labelToggle}>
-            <button
-              onClick={() => changeLabelStyle("simple")}
-              style={{ ...st.labelToggleBtn, color: labelStyle === "simple" ? "var(--saffron-d)" : "var(--faint)" }}
-              aria-pressed={labelStyle === "simple"}
-            >
-              Top / Bottom
-            </button>
-            <span style={st.labelToggleDot}>·</span>
-            <button
-              onClick={() => changeLabelStyle("traditional")}
-              style={{ ...st.labelToggleBtn, color: labelStyle === "traditional" ? "var(--saffron-d)" : "var(--faint)" }}
-              aria-pressed={labelStyle === "traditional"}
-            >
-              Dayan / Bayan
-            </button>
-          </div>
         </div>
 
         <div style={st.playWrap}>
@@ -258,9 +228,6 @@ const st = {
   bpmUnit: { fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--faint)" },
   scaleRow: { display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--faint)", fontWeight: 600, marginTop: 2, letterSpacing: "0.04em" },
   createBtn: { marginTop: 2, padding: "15px", borderRadius: 16, border: "1.5px dashed var(--saffron)", background: "transparent", color: "var(--saffron-d)", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.03em" },
-  labelToggle: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 2 },
-  labelToggleBtn: { background: "transparent", border: "none", padding: "2px 4px", fontFamily: "inherit", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", transition: "color 150ms ease" },
-  labelToggleDot: { fontSize: 11, color: "var(--faint)" },
 };
 
 export default App;

@@ -78,9 +78,9 @@ function BeatIndicator({
     }
   }
 
-  function MutedIcon({ size = 13 }) {
+  function MutedIcon({ size = 28 }) {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M11 5 L6 9 H3 V15 H6 L11 19 Z" fill="currentColor" stroke="none" />
         <line x1="16" y1="9" x2="22" y2="15" />
         <line x1="22" y1="9" x2="16" y2="15" />
@@ -123,10 +123,7 @@ function BeatIndicator({
         <span style={{
           width: labelW,
           flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 3,
+          textAlign: "center",
           fontSize: compact ? 9.5 : 10.5,
           letterSpacing: "0.12em",
           textTransform: "uppercase",
@@ -134,8 +131,7 @@ function BeatIndicator({
           color: muted ? "var(--faint)" : "var(--muted)",
           transition: "color 160ms ease",
         }}>
-          {muted && <MutedIcon size={compact ? 10 : 11} />}
-          <span>{labelText}</span>
+          {labelText}
         </span>
 
         <div style={{ display: "flex", flex: 1, gap, position: "relative" }}>
@@ -178,6 +174,19 @@ function BeatIndicator({
               transition: "left 90ms linear",
               pointerEvents: "none",
             }} />
+          )}
+
+          {muted && (
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "var(--muted)",
+              pointerEvents: "none",
+            }}>
+              <MutedIcon size={compact ? 26 : 32} />
+            </div>
           )}
         </div>
       </div>
