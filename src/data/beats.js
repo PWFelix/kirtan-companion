@@ -58,8 +58,8 @@ export const BEATS = [
     id: "double_time", name: "Double Time", note: "Fast", bpm: 140, steps: 16,
     // Forwards top end at double subdivision.
     //        1    e    +    a    2    e    +    a    3    e    +    a    4    e    +    a
-    dayan: ["X", "O", "O", "X", "O", "O", "X", "O", "O", "X", "O", "O", "X", "O", "O", "X"],
-    bayan: ["O", null,"X", null,"O", null,null,null,"O", null,"X", null,"O", null,null,null],
+    dayan: ["X", null, "O", "O", "X", null, "O", "O", "X", null, "O", "O", "X", null, "O", "O"],
+    bayan: ["O", null, null, "X",null, "O","O",null,"O", null,null, "X",null, "O","O",null],
   },
 
   // ── Dadra taal sample (12 steps) ──

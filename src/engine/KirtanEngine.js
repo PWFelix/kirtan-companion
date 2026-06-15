@@ -63,6 +63,14 @@ export class KirtanEngine extends EventEmitter {
   setVolume(value) {
     this._soundPlayer.setVolume(value);
   }
+ /**
+   * Mute or unmute a drum end (for practice isolation).
+   * @param {"dayan"|"bayan"} end
+   * @param {boolean} muted
+   */
+  setEndMuted(end, muted) {
+    this._soundPlayer.setEndMuted(end, muted);
+  }
 
   start() {
     this._sequencer.start();

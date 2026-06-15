@@ -2,35 +2,26 @@ import { useState, useEffect, useRef } from "react";
 import { KirtanEngine } from "./engine/KirtanEngine.js";
 import { BEATS } from "./data/beats.js";
 import BeatEditor from "./BeatEditor.jsx";
+import BeatIndicator from "./BeatIndicator.jsx";
 
 const MIN_BPM = 40, MAX_BPM = 200;
-const SAVED_KEY = "kirtan-custom-beats"; // localStorage key for saved beats
+const SAVED_KEY = "kirtan-custom-beats";
 
-// Load any beats the user saved in a previous session.
 function loadSavedBeats() {
-  try {
-    return JSON.parse(localStorage.getItem(SAVED_KEY)) || [];
-  } catch (e) {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || []; }
+  catch (e) { return []; }
 }
 
 function App() {
-  // ── Engine: created once ──
   const engineRef = useRef(null);
-  if (engineRef.current === null) {
-    engineRef.current = new KirtanEngine();
-  }
+  if (engineRef.current === null) engineRef.current = new KirtanEngine();
   const engine = engineRef.current;
 
-  // ── Which view are we showing? ──
   const [view, setView] = useState("main"); // "main" | "editor"
 
-  // ── Beats: built-in plus any the user has saved ──
   const [customBeats, setCustomBeats] = useState(loadSavedBeats);
   const allBeats = [...BEATS, ...customBeats];
 
-  // ── State ──
   const [ready, setReady]     = useState(false);
   const [beatId, setBeatId]   = useState(BEATS[0].id);
   const [bpm, setBpm]         = useState(BEATS[0].bpm);
@@ -39,10 +30,8 @@ function App() {
   const [volume, setVolume]   = useState(0.9);
 
   const tapTimesRef = useRef([]);
-
   const beat = allBeats.find(b => b.id === beatId) || allBeats[0];
 
-  // ── One-time setup ──
   useEffect(() => {
     engine.loadSounds({
       dayan_open:   "/sounds/dayan_open.wav",
@@ -57,34 +46,18 @@ function App() {
     engine.setVolume(volume);
   }, []);
 
-  // ── Handlers ──
   async function togglePlay() {
     await engine.unlock();
-    if (playing) {
-      engine.stop();
-    } else {
-      engine.setBpm(bpm);
-      engine.setBeat(beat);
-      engine.start();
-    }
+    if (playing) engine.stop();
+    else { engine.setBpm(bpm); engine.setBeat(beat); engine.start(); }
   }
 
   function selectBeat(b) {
-    setBeatId(b.id);
-    setBpm(b.bpm);
-    engine.setBeat(b);
-    engine.setBpm(b.bpm);
+    setBeatId(b.id); setBpm(b.bpm);
+    engine.setBeat(b); engine.setBpm(b.bpm);
   }
-
-  function changeBpm(value) {
-    setBpm(value);
-    engine.setBpm(value);
-  }
-
-  function changeVolume(value) {
-    setVolume(value);
-    engine.setVolume(value);
-  }
+  function changeBpm(value) { setBpm(value); engine.setBpm(value); }
+  function changeVolume(value) { setVolume(value); engine.setVolume(value); }
 
   function handleTap() {
     const now = Date.now();
@@ -101,36 +74,24 @@ function App() {
     }
   }
 
-  // ── Saving a custom beat from the editor ──
   function handleSaveBeat(newBeat) {
     const updated = [...customBeats, newBeat];
     setCustomBeats(updated);
-    // Persist to the browser so it survives a refresh.
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
   }
-
   function deleteCustomBeat(id, e) {
-    e.stopPropagation(); // don't also select the card
+    e.stopPropagation();
     const updated = customBeats.filter(b => b.id !== id);
     setCustomBeats(updated);
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
-    // If we deleted the selected beat, fall back to the first built-in.
     if (beatId === id) selectBeat(BEATS[0]);
   }
 
   // ── Editor view ──
   if (view === "editor") {
     return (
-      <BeatEditor
-        engine={engine}
-        onSave={handleSaveBeat}
-        onClose={() => {
-          // Make sure preview isn't left running, and reflect state.
-          engine.stop();
-          setPlaying(false);
-          setView("main");
-        }}
-      />
+      <BeatEditor engine={engine} onSave={handleSaveBeat}
+        onClose={() => { engine.stop(); setPlaying(false); setView("main"); }} />
     );
   }
 
@@ -148,26 +109,9 @@ function App() {
       </header>
 
       <main style={st.stage}>
-        <div style={st.beatRow} role="img" aria-label={`Beat ${step + 1} of ${beat.steps}`}>
-          {beat.dayan.map((hit, i) => {
-            const active   = playing && i === step;
-            const isAccent = i % 2 === 0;
-            const isRest   = hit === null && beat.bayan[i] === null;
-            return (
-              <div
-                key={i}
-                style={{
-                  ...st.cell,
-                  height: isAccent ? 34 : 24,
-                  background: active ? "var(--gold)" : isRest ? "transparent" : "var(--cell)",
-                  border: isRest ? "2px solid var(--cell)" : "2px solid transparent",
-                  opacity: active ? 1 : isRest ? 0.6 : 0.85,
-                  transform: active ? "scaleY(1.18)" : "scaleY(1)",
-                  boxShadow: active ? "0 0 16px oklch(0.815 0.135 80 / 0.7)" : "none",
-                }}
-              />
-            );
-          })}
+        {/* New two-line shape indicator (compact, cells light up) */}
+        <div style={{ width: "100%", maxWidth: 360 }}>
+          <BeatIndicator beat={beat} step={step} playing={playing} playhead="cells" compact />
         </div>
 
         <div style={st.playWrap}>
@@ -187,7 +131,6 @@ function App() {
       </main>
 
       <section style={st.controls}>
-        {/* Rhythm cards */}
         <div>
           <div style={st.controlLabel}>Rhythm</div>
           <div style={st.cardRow}>
@@ -196,13 +139,10 @@ function App() {
               const isCustom = b.note === "Custom";
               return (
                 <button key={b.id} onClick={() => selectBeat(b)}
-                  style={{
-                    ...st.card,
+                  style={{ ...st.card, position: "relative",
                     background: sel ? "var(--saffron)" : "var(--surface)",
                     borderColor: sel ? "var(--saffron)" : "var(--line)",
-                    boxShadow: sel ? "0 8px 20px oklch(0.62 0.16 46 / 0.25)" : "0 1px 2px oklch(0.5 0.05 60 / 0.06)",
-                    position: "relative",
-                  }}>
+                    boxShadow: sel ? "0 8px 20px oklch(0.62 0.16 46 / 0.25)" : "0 1px 2px oklch(0.5 0.05 60 / 0.06)" }}>
                   <span style={{ ...st.cardName, color: sel ? "#fff" : "var(--ink)" }}>{b.name}</span>
                   <span style={{ ...st.cardNote, color: sel ? "oklch(0.97 0.02 80)" : "var(--faint)" }}>{b.note}</span>
                   {isCustom && (
@@ -215,7 +155,6 @@ function App() {
           </div>
         </div>
 
-        {/* Tempo + tap */}
         <div>
           <div style={st.tempoHead}>
             <span style={st.controlLabel}>Tempo</span>
@@ -229,7 +168,6 @@ function App() {
           <div style={st.scaleRow}><span>Slow</span><span>Fast</span></div>
         </div>
 
-        {/* Volume */}
         <div>
           <div style={st.tempoHead}>
             <span style={st.controlLabel}>Volume</span>
@@ -239,7 +177,6 @@ function App() {
             onChange={(e) => changeVolume(Number(e.target.value) / 100)} style={{ "--fill": volPct + "%" }} aria-label="Volume" />
         </div>
 
-        {/* Create a beat — opens the editor */}
         <button onClick={() => { engine.stop(); setPlaying(false); setView("editor"); }} style={st.createBtn}>
           + Create a beat
         </button>
@@ -254,9 +191,7 @@ const st = {
   emblem: { width: 30, height: 30, borderRadius: "50%", background: "radial-gradient(circle at 50% 38%, var(--gold), var(--saffron) 70%)", boxShadow: "0 4px 14px oklch(0.7 0.15 60 / 0.35)", marginBottom: 4 },
   title: { fontFamily: '"Marcellus", serif', fontWeight: 400, fontSize: 30, margin: 0, letterSpacing: "0.01em", color: "var(--ink)" },
   subtitle: { margin: 0, fontSize: 14.5, color: "var(--muted)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
-  stage: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 40, minHeight: 0, padding: "10px 0" },
-  beatRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: 11, height: 44 },
-  cell: { width: 16, borderRadius: 99, transition: "transform 90ms ease, background 90ms ease, box-shadow 120ms ease, opacity 120ms ease" },
+  stage: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 36, minHeight: 0, padding: "10px 0" },
   playWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 18 },
   glow: { position: "absolute", top: -18, left: "50%", marginLeft: -109, width: 218, height: 218, borderRadius: "50%", background: "radial-gradient(circle, oklch(0.78 0.14 62 / 0.55) 0%, transparent 68%)", pointerEvents: "none" },
   play: { position: "relative", width: 182, height: 182, borderRadius: "50%", border: "none", cursor: "pointer", display: "grid", placeItems: "center", background: "radial-gradient(circle at 50% 32%, var(--saffron) 0%, var(--saffron-d) 100%)", boxShadow: "0 18px 44px oklch(0.6 0.16 48 / 0.4), inset 0 2px 6px oklch(0.85 0.12 80 / 0.6), inset 0 -10px 22px oklch(0.5 0.14 44 / 0.45)", transition: "transform 140ms ease" },

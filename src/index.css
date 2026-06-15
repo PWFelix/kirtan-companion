@@ -14,6 +14,9 @@
   --gold:     oklch(0.815 0.135 80);
   --cell:     oklch(0.905 0.026 72);
   --line:     oklch(0.90 0.018 70);
+  --duggi:  oklch(0.58 0.13 38);
+  --nak:    oklch(0.80 0.11 70);
+  --kartal: oklch(0.70 0.06 90);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
