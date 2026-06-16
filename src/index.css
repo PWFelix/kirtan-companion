@@ -62,3 +62,9 @@ input[type="range"].kc-range::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   .kc-glow { animation: none !important; }
 }
+
+/* ── Beat-indicator playhead line: glides across the cells region ── */
+@keyframes kc-glide {
+  from { left: 0%; }
+  to   { left: 100%; }
+}

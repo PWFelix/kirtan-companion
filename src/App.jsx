@@ -123,10 +123,11 @@ function App() {
             beat={beat}
             step={step}
             playing={playing}
-            playhead="cells"
+            playhead="line"
             compact
             mutedEnds={mutedEnds}
             onToggleMute={toggleMute}
+            bpm={bpm}
           />
         </div>
 

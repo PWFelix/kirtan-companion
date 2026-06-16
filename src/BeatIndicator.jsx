@@ -21,6 +21,7 @@ import { strokeVisual } from "./data/strokes.js";
  *   onToggleMute - optional (end) => void; if provided, pills become tappable
  *   compact      - smaller version (used on the main screen)
  *   labelStyle   - "simple" (Top/Bottom) | "traditional" (Dayan/Bayan)
+ *   bpm          - current tempo; used to time the line playhead's glide
  */
 
 // Each entry = one row. Add new instruments here in future.
@@ -39,13 +40,24 @@ function BeatIndicator({
   onToggleMute,
   compact = false,
   labelStyle = "simple",
+  bpm,
 }) {
   const steps = beat.steps;
   const gap = steps === 16 ? 3 : steps === 12 ? 5 : 6;
   const cellSize = compact ? 36 : 44;
   const labelW = compact ? 44 : 54;
+  const padX = compact ? 10 : 14;
+  const labelGap = 6;
 
   const rows = ROWS.filter(r => Array.isArray(beat[r.patternKey]));
+
+  // One full bar = steps × step interval. The line animates over this
+  // span via CSS keyframes (kc-glide), looping forever, so it moves at
+  // a constant speed rather than jumping cell-to-cell.
+  // 8 and 12 step beats run at 2 subdivisions per beat; 16 runs at 4.
+  const stepsPerBeat = steps === 16 ? 4 : 2;
+  const stepIntervalMs = bpm ? 60000 / (bpm * stepsPerBeat) : 200;
+  const barDurationMs = steps * stepIntervalMs;
 
   function renderShape(value, active, dim) {
     const v = strokeVisual(value);
@@ -58,24 +70,50 @@ function BeatIndicator({
     }
 
     const fill = v.color;
-    const glow = active ? "drop-shadow(0 0 6px rgba(216,138,43,0.85))" : "none";
     const opacity = dim ? 0.3 : 1;
-    const common = { fill, style: { filter: glow, opacity, transition: "filter 90ms ease, opacity 160ms ease" } };
+    // The "glow" is a slightly bigger version of the same shape, behind
+    // the main shape, in the same colour. Opacity fades in/out as the
+    // line crosses each cell. Each shape's halo matches its silhouette.
+    const haloOpacity = active ? 0.45 : 0;
+    const haloStyle  = { transition: "opacity 140ms ease" };
+    const mainStyle  = { opacity, transition: "opacity 160ms ease" };
 
+    let layers;
     switch (v.shape) {
       case "circle":
-        return <svg viewBox="0 0 40 40" style={shapeStyle}><circle cx="20" cy="20" r="14" {...common} /></svg>;
+        layers = <>
+          <circle cx="20" cy="20" r="19" fill={fill} opacity={haloOpacity} style={haloStyle} />
+          <circle cx="20" cy="20" r="14" fill={fill} style={mainStyle} />
+        </>;
+        break;
       case "square":
-        return <svg viewBox="0 0 40 40" style={shapeStyle}><rect x="7" y="7" width="26" height="26" rx="5" {...common} /></svg>;
+        layers = <>
+          <rect x="2" y="2" width="36" height="36" rx="7" fill={fill} opacity={haloOpacity} style={haloStyle} />
+          <rect x="7" y="7" width="26" height="26" rx="5" fill={fill} style={mainStyle} />
+        </>;
+        break;
       case "diamond":
-        return <svg viewBox="0 0 40 40" style={shapeStyle}><rect x="8" y="8" width="24" height="24" rx="3" transform="rotate(45 20 20)" {...common} /></svg>;
+        layers = <>
+          <rect x="3" y="3" width="34" height="34" rx="5" transform="rotate(45 20 20)" fill={fill} opacity={haloOpacity} style={haloStyle} />
+          <rect x="8" y="8" width="24" height="24" rx="3" transform="rotate(45 20 20)" fill={fill} style={mainStyle} />
+        </>;
+        break;
       case "triangle":
-        return <svg viewBox="0 0 40 40" style={shapeStyle}><path d="M20 6 L34 32 L6 32 Z" {...common} /></svg>;
+        layers = <>
+          <path d="M20 1 L38 34 L2 34 Z" fill={fill} opacity={haloOpacity} style={haloStyle} />
+          <path d="M20 6 L34 32 L6 32 Z" fill={fill} style={mainStyle} />
+        </>;
+        break;
       case "ring":
-        return <svg viewBox="0 0 40 40" style={shapeStyle}><circle cx="20" cy="20" r="13" fill="none" stroke={fill} strokeWidth="4" style={common.style} /></svg>;
+        layers = <>
+          <circle cx="20" cy="20" r="16" fill="none" stroke={fill} strokeWidth="6" opacity={haloOpacity} style={haloStyle} />
+          <circle cx="20" cy="20" r="13" fill="none" stroke={fill} strokeWidth="4" style={mainStyle} />
+        </>;
+        break;
       default:
         return null;
     }
+    return <svg viewBox="0 0 40 40" style={shapeStyle}>{layers}</svg>;
   }
 
   function MutedIcon({ size = 28 }) {
@@ -92,7 +130,6 @@ function BeatIndicator({
     const values = beat[row.patternKey];
     const muted = !!mutedEnds[row.end];
     const tappable = !!onToggleMute;
-    const linePct = playing && step >= 0 ? ((step + 0.5) / steps) * 100 : 0;
     const labelText = labelStyle === "traditional" ? row.traditional : row.label;
 
     return (
@@ -107,6 +144,7 @@ function BeatIndicator({
         aria-pressed={tappable ? muted : undefined}
         aria-label={tappable ? `${labelText} drum, ${muted ? "muted, tap to unmute" : "playing, tap to mute"}` : undefined}
         style={{
+          position: "relative",
           display: "flex",
           alignItems: "center",
           gap: 6,
@@ -136,7 +174,7 @@ function BeatIndicator({
 
         <div style={{ display: "flex", flex: 1, gap, position: "relative" }}>
           {values.map((val, i) => {
-            const active = playhead === "cells" && playing && i === step && !muted;
+            const active = playing && i === step && !muted;
             return (
               <div key={i} style={{
                 flex: 1,
@@ -146,7 +184,7 @@ function BeatIndicator({
                 placeItems: "center",
                 position: "relative",
               }}>
-                {active && (
+                {playhead === "cells" && active && (
                   <span style={{
                     position: "absolute",
                     inset: 4,
@@ -161,41 +199,56 @@ function BeatIndicator({
             );
           })}
 
-          {playhead === "line" && playing && !muted && (
-            <div style={{
-              position: "absolute",
-              top: -4, bottom: -4,
-              left: `${linePct}%`,
-              width: 2.5,
-              background: "var(--saffron-d)",
-              borderRadius: 2,
-              transform: "translateX(-50%)",
-              boxShadow: "0 0 8px rgba(176,106,24,0.6)",
-              transition: "left 90ms linear",
-              pointerEvents: "none",
-            }} />
-          )}
-
-          {muted && (
-            <div style={{
-              position: "absolute",
-              inset: 0,
-              display: "grid",
-              placeItems: "center",
-              color: "var(--muted)",
-              pointerEvents: "none",
-            }}>
-              <MutedIcon size={compact ? 26 : 32} />
-            </div>
-          )}
         </div>
+
+        {muted && (
+          <div style={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "var(--muted)",
+            pointerEvents: "none",
+          }}>
+            <MutedIcon size={compact ? 26 : 32} />
+          </div>
+        )}
       </div>
     );
   }
 
+  // The line lives inside a container that exactly covers the cells
+  // region (label column excluded). A CSS keyframe animation moves it
+  // from left: 0 to left: 100% across that container, looping every bar.
+  // Audio for cell N fires when the line is at the LEFT edge of cell N;
+  // the line is at the MIDDLE of cell N midway through that cell's sound.
+  const cellsLeftOffset = padX + labelW + labelGap;
+  const cellsRightOffset = padX;
+
   return (
-    <div style={wrapStyle}>
+    <div style={{ ...wrapStyle, position: "relative" }}>
       {rows.map(renderRow)}
+
+      {playhead === "line" && playing && (
+        <div style={{
+          position: "absolute",
+          top: -8, bottom: -8,
+          left: cellsLeftOffset,
+          right: cellsRightOffset,
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            position: "absolute",
+            top: 0, bottom: 0,
+            width: 2.5,
+            background: "var(--saffron-d)",
+            borderRadius: 2,
+            transform: "translateX(-50%)",
+            boxShadow: "0 0 8px rgba(176,106,24,0.6)",
+            animation: `kc-glide ${barDurationMs}ms linear infinite`,
+          }} />
+        </div>
+      )}
     </div>
   );
 }

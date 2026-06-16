@@ -20,7 +20,7 @@ export const BEATS = [
     id: "te_ta", name: "Te Ta", note: "Foundational", bpm: 80, steps: 8,
     //        1     +     2     +     3     +     4     +
     dayan: ["X",  "O",  "X",  "O",  "X",  "O",  "X",  "O"],
-    bayan: ["O",  null, "X",  null, "O",  null, "O",  null],
+    bayan: ["O",  null, null,  "X", null,  "O", "O",  null],
   },
   {
     id: "forward", name: "Forward", note: "Everyday", bpm: 90, steps: 8,
