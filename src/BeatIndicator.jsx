@@ -55,8 +55,13 @@ function BeatIndicator({
   // bar-long animation: that way a mid-play BPM or beat change only
   // desyncs the line for at most one step before the next remount
   // restarts the keyframe at the new duration.
-  // 8 and 12 step beats run at 2 subdivisions per beat; 16 runs at 4.
-  const stepsPerBeat = steps === 16 ? 4 : 2;
+  // The glide duration MUST equal the sequencer's real step interval, or
+  // the line gets yanked to the next cell before it finishes and looks
+  // jittery. The engine derives that interval from steps / beatsPerBar
+  // (8/4 → 2 per beat, 12/4 → 3 per beat triplets, 16/4 → 4 per beat),
+  // so we mirror the same formula here rather than hard-coding it.
+  const beatsPerBar = beat.beatsPerBar ?? 4;
+  const stepsPerBeat = steps / beatsPerBar;
   const stepIntervalMs = bpm ? 60000 / (bpm * stepsPerBeat) : 200;
 
   function renderShape(value, active, dim) {
