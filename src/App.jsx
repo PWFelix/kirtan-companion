@@ -29,6 +29,7 @@ function App() {
   const [step, setStep]       = useState(-1);
   const [volume, setVolume]   = useState(0.9);
   const [mutedEnds, setMutedEnds] = useState({});
+  const [tempoLocked, setTempoLocked] = useState(false);
 
   const tapTimesRef = useRef([]);
   const beat = allBeats.find(b => b.id === beatId) || allBeats[0];
@@ -54,8 +55,9 @@ function App() {
   }
 
   function selectBeat(b) {
-    setBeatId(b.id); setBpm(b.bpm);
-    engine.setBeat(b); engine.setBpm(b.bpm);
+    setBeatId(b.id);
+    engine.setBeat(b);
+    if (!tempoLocked) { setBpm(b.bpm); engine.setBpm(b.bpm); }
   }
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
@@ -179,7 +181,17 @@ function App() {
           </div>
           <div style={st.tempoRow}>
             <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
-              onChange={(e) => changeBpm(Number(e.target.value))} style={{ "--fill": fillPct + "%", flex: 1 }} aria-label="Tempo" />
+              onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
+              style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
+              aria-label="Tempo" />
+            <button onClick={() => setTempoLocked(v => !v)}
+              style={{ ...st.lockBtn,
+                background: tempoLocked ? "var(--saffron)" : "var(--surface)",
+                color: tempoLocked ? "#fff" : "var(--saffron-d)" }}
+              aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
+              aria-pressed={tempoLocked}>
+              {tempoLocked ? "🔒" : "🔓"}
+            </button>
             <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
           </div>
           <div style={st.scaleRow}><span>Slow</span><span>Fast</span></div>
@@ -223,6 +235,7 @@ const st = {
   tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
   tempoRow: { display: "flex", alignItems: "center", gap: 10 },
   tapBtn: { flexShrink: 0, padding: "8px 16px", borderRadius: 12, border: "1.5px solid var(--saffron)", background: "var(--surface)", color: "var(--saffron-d)", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.04em" },
+  lockBtn: { flexShrink: 0, width: 36, height: 34, padding: 0, borderRadius: 12, border: "1.5px solid var(--saffron)", fontSize: 15, lineHeight: 1, cursor: "pointer", fontFamily: "inherit", display: "grid", placeItems: "center" },
   bpmReadout: { display: "flex", alignItems: "baseline", gap: 5 },
   bpmNum: { fontFamily: '"Marcellus", serif', fontSize: 28, color: "var(--saffron-d)", lineHeight: 1 },
   volNum: { fontFamily: '"Marcellus", serif', fontSize: 22, color: "var(--saffron-d)", lineHeight: 1 },

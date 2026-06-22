@@ -13,9 +13,11 @@
  *   setBeat(beat)         - choose which beat to play
  *   setBpm(bpm)           - set the tempo
  *   setVolume(value)      - set master volume (0..1)
+ *   setEndMuted(end, b)   - mute/unmute a drum end
  *   start()               - begin playing
  *   stop()                - stop playing
- *   on("step", cb)        - playhead advanced
+ *   getPhase()            - bar phase in [0, 1) for the UI playhead
+ *   on("step", cb)        - playhead advanced (derived from phase)
  *   on("ready", cb)       - sounds finished loading
  *   on("started"/"stopped", cb)
  *
@@ -80,6 +82,11 @@ export class KirtanEngine extends EventEmitter {
   stop() {
     this._sequencer.stop();
     this.emit("stopped");
+  }
+
+  /** Current bar phase in [0, 1). 0 while stopped. */
+  getPhase() {
+    return this._sequencer.getPhase();
   }
 
   get isReady() {

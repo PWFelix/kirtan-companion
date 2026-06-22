@@ -1,47 +1,35 @@
 /**
  * stepLabels.js
  * -------------
- * Pure helper. Given a step count, returns the count labels for each cell
- * in the traditional spoken style, plus which cells are "strong" beats.
+ * Pure helper. Given (steps, beatsPerBar), returns the count labels for
+ * each cell in the traditional spoken style, plus which cells are
+ * "strong" beats (the numbered downbeats).
  *
- *   8 steps  (standard 4/4):   1 + 2 + 3 + 4 +
- *   16 steps (double-time):    1 e + a 2 e + a 3 e + a 4 e + a
- *   12 steps (dadra taal 6/8): 1 + 2 + 3 + 4 + 5 + 6 +
+ *   subdivPerBeat = steps / beatsPerBar
+ *      2  →  number + "+"             ("1 + 2 + 3 + 4 +")
+ *      3  →  number + "trip" + "let"  triplet feel (12/4 dadra)
+ *      4  →  number + "e" + "+" + "a" (16/4 double-time)
  *
- * No logic about audio or UI — just turns a number into labels.
- * Both the editor and the beat indicator import this so they always agree.
+ * Both the editor and the beat indicator import this so they always agree
+ * with what the engine is actually playing.
  */
 
-export function getStepLabels(steps) {
-  if (steps === 16) {
-    // Four subdivisions per beat: the number, then "e", "+", "a".
-    const sub = ["", "e", "+", "a"];
-    return Array.from({ length: 16 }, (_, i) => {
-      const inBeat = i % 4;
-      return {
-        text: inBeat === 0 ? String(i / 4 + 1) : sub[inBeat],
-        strong: inBeat === 0,            // the numbered beats are strong
-      };
-    });
-  }
+export function getStepLabels(steps, beatsPerBar = 4) {
+  const subdivPerBeat = steps / beatsPerBar;
 
-  if (steps === 12) {
-    // Dadra taal: count as 6 beats, each split into beat-number then "+".
-    return Array.from({ length: 12 }, (_, i) => {
-      const isNum = i % 2 === 0;
-      return {
-        text: isNum ? String(i / 2 + 1) : "+",
-        strong: isNum,
-      };
-    });
-  }
+  let subs;
+  if (subdivPerBeat === 2) subs = ["", "+"];
+  else if (subdivPerBeat === 3) subs = ["", "trip", "let"];
+  else if (subdivPerBeat === 4) subs = ["", "e", "+", "a"];
+  // Fallback for non-integer or unusual ratios: just mark downbeats.
+  else subs = Array.from({ length: Math.max(1, Math.floor(subdivPerBeat)) }, (_, i) => (i === 0 ? "" : "·"));
 
-  // Default: 8 steps — "1 + 2 + 3 + 4 +"
-  return Array.from({ length: 8 }, (_, i) => {
-    const isNum = i % 2 === 0;
+  return Array.from({ length: steps }, (_, i) => {
+    const inBeat = i % subdivPerBeat;
+    const isDownbeat = inBeat === 0;
     return {
-      text: isNum ? String(i / 2 + 1) : "+",
-      strong: isNum,
+      text: isDownbeat ? String(Math.floor(i / subdivPerBeat) + 1) : (subs[inBeat] ?? ""),
+      strong: isDownbeat,
     };
   });
 }

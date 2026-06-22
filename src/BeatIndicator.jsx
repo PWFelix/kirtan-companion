@@ -51,13 +51,13 @@ function BeatIndicator({
 
   const rows = ROWS.filter(r => Array.isArray(beat[r.patternKey]));
 
-  // One full bar = steps × step interval. The line animates over this
-  // span via CSS keyframes (kc-glide), looping forever, so it moves at
-  // a constant speed rather than jumping cell-to-cell.
+  // The line is re-anchored on every step rather than running a single
+  // bar-long animation: that way a mid-play BPM or beat change only
+  // desyncs the line for at most one step before the next remount
+  // restarts the keyframe at the new duration.
   // 8 and 12 step beats run at 2 subdivisions per beat; 16 runs at 4.
   const stepsPerBeat = steps === 16 ? 4 : 2;
   const stepIntervalMs = bpm ? 60000 / (bpm * stepsPerBeat) : 200;
-  const barDurationMs = steps * stepIntervalMs;
 
   function renderShape(value, active, dim) {
     const v = strokeVisual(value);
@@ -217,11 +217,10 @@ function BeatIndicator({
     );
   }
 
-  // The line lives inside a container that exactly covers the cells
-  // region (label column excluded). A CSS keyframe animation moves it
-  // from left: 0 to left: 100% across that container, looping every bar.
-  // Audio for cell N fires when the line is at the LEFT edge of cell N;
-  // the line is at the MIDDLE of cell N midway through that cell's sound.
+  // The outer container covers the cells region (label column excluded).
+  // Inside it, a one-cell-wide window is positioned at the current step
+  // and re-mounted each tick via React `key`, so the keyframe inside
+  // always replays from 0% at the current stepIntervalMs.
   const cellsLeftOffset = padX + labelW + labelGap;
   const cellsRightOffset = padX;
 
@@ -229,7 +228,7 @@ function BeatIndicator({
     <div style={{ ...wrapStyle, position: "relative" }}>
       {rows.map(renderRow)}
 
-      {playhead === "line" && playing && (
+      {playhead === "line" && playing && step >= 0 && (
         <div style={{
           position: "absolute",
           top: -8, bottom: -8,
@@ -237,16 +236,26 @@ function BeatIndicator({
           right: cellsRightOffset,
           pointerEvents: "none",
         }}>
-          <div style={{
-            position: "absolute",
-            top: 0, bottom: 0,
-            width: 2.5,
-            background: "var(--saffron-d)",
-            borderRadius: 2,
-            transform: "translateX(-50%)",
-            boxShadow: "0 0 8px rgba(176,106,24,0.6)",
-            animation: `kc-glide ${barDurationMs}ms linear infinite`,
-          }} />
+          <div
+            key={step}
+            style={{
+              position: "absolute",
+              top: 0, bottom: 0,
+              left: `${(step / steps) * 100}%`,
+              width: `${100 / steps}%`,
+            }}
+          >
+            <div style={{
+              position: "absolute",
+              top: 0, bottom: 0,
+              width: 2.5,
+              background: "var(--saffron-d)",
+              borderRadius: 2,
+              transform: "translateX(-50%)",
+              boxShadow: "0 0 8px rgba(176,106,24,0.6)",
+              animation: `kc-glide-cell ${stepIntervalMs}ms linear forwards`,
+            }} />
+          </div>
         </div>
       )}
     </div>

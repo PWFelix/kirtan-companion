@@ -23,11 +23,15 @@ function BeatEditor({ engine, onSave, onClose }) {
   const [name, setName]   = useState("");
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
+  // All custom beats are 4/4 in this pass — the editor doesn't expose
+  // a meter control yet. 12-step custom beats therefore play as triplets,
+  // matching how the built-in dadra is now defined.
+  const beatsPerBar = 4;
 
-  const labels = getStepLabels(steps);
+  const labels = getStepLabels(steps, beatsPerBar);
 
   const beatRef = useRef(null);
-  beatRef.current = { id: "preview", name: name || "Preview", note: "Custom", bpm, steps, dayan, bayan };
+  beatRef.current = { id: "preview", name: name || "Preview", note: "Custom", bpm, steps, beatsPerBar, dayan, bayan };
 
   useEffect(() => {
     const onStep = (s) => setStep(s);
@@ -66,7 +70,7 @@ function BeatEditor({ engine, onSave, onClose }) {
     if (!hasAnyHit) { alert("Add at least one stroke before saving."); return; }
     const finalName = name.trim() || "Custom Beat";
     const id = "custom_" + finalName.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
-    onSave({ id, name: finalName, note: "Custom", bpm, steps, dayan, bayan });
+    onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar, dayan, bayan });
     onClose();
   }
 
@@ -103,7 +107,7 @@ function BeatEditor({ engine, onSave, onClose }) {
     );
   }
 
-  const typeName = steps === 16 ? "Double-time" : steps === 12 ? "Dadra taal" : "Standard";
+  const typeName = steps === 16 ? "Double-time" : steps === 12 ? "Triplets" : "Standard";
 
   return (
     <div style={st.screen}>

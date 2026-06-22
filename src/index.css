@@ -63,8 +63,12 @@ input[type="range"].kc-range::-moz-range-thumb {
   .kc-glow { animation: none !important; }
 }
 
-/* ── Beat-indicator playhead line: glides across the cells region ── */
-@keyframes kc-glide {
+/* ── Beat-indicator playhead line ──
+   Glides across one cell. The wrapping element in BeatIndicator is
+   sized to a single cell and re-keyed every step, so 0→100% covers
+   exactly one cell width and any BPM/beat change picked up by the
+   next step naturally restarts the animation at the new duration. */
+@keyframes kc-glide-cell {
   from { left: 0%; }
   to   { left: 100%; }
 }
