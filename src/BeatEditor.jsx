@@ -8,6 +8,11 @@ import { getStepLabels } from "./data/stepLabels.js";
  * Tap a cell to cycle: empty -> "O" open -> "X" closed -> empty.
  * A toggle cycles the step count (8 -> 12 -> 16 -> 8), clearing the grid.
  * Live preview drives the engine. Save hands the beat up to App.
+ *
+ * Optional `initialBeat` pre-fills the grid/tempo/name for editing an
+ * existing beat. When provided we keep its id (so App overwrites the
+ * matching saved entry); when absent the editor mints a fresh id (new beat).
+ * Arrays are cloned on seed so a built-in's data is never mutated in place.
  */
 
 const STEP_OPTIONS = [8, 12, 16];
@@ -15,12 +20,12 @@ const CYCLE = [null, "O", "X"];
 const nextValue = (c) => CYCLE[(CYCLE.indexOf(c) + 1) % CYCLE.length];
 const emptyGrid = (n) => Array(n).fill(null);
 
-function BeatEditor({ engine, onSave, onClose }) {
-  const [steps, setSteps] = useState(8);
-  const [dayan, setDayan] = useState(emptyGrid(8));
-  const [bayan, setBayan] = useState(emptyGrid(8));
-  const [bpm, setBpm]     = useState(90);
-  const [name, setName]   = useState("");
+function BeatEditor({ engine, onSave, onClose, initialBeat }) {
+  const [steps, setSteps] = useState(initialBeat?.steps ?? 8);
+  const [dayan, setDayan] = useState(initialBeat ? [...initialBeat.dayan] : emptyGrid(8));
+  const [bayan, setBayan] = useState(initialBeat ? [...initialBeat.bayan] : emptyGrid(8));
+  const [bpm, setBpm]     = useState(initialBeat?.bpm ?? 90);
+  const [name, setName]   = useState(initialBeat?.name ?? "");
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
   // All custom beats are 4/4 in this pass — the editor doesn't expose
@@ -69,7 +74,9 @@ function BeatEditor({ engine, onSave, onClose }) {
     const hasAnyHit = dayan.some(c => c !== null) || bayan.some(c => c !== null);
     if (!hasAnyHit) { alert("Add at least one stroke before saving."); return; }
     const finalName = name.trim() || "Custom Beat";
-    const id = "custom_" + finalName.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
+    // Editing keeps the original id so App overwrites the saved entry;
+    // a new beat (or a fork of a built-in) carries its own fresh id.
+    const id = initialBeat?.id ?? ("custom_" + finalName.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now());
     onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar, dayan, bayan });
     onClose();
   }
@@ -113,7 +120,7 @@ function BeatEditor({ engine, onSave, onClose }) {
     <div style={st.screen}>
       <header style={st.header}>
         <button onClick={() => { if (previewing) engine.stop(); onClose(); }} style={st.backBtn}>‹ Back</button>
-        <h1 style={st.title}>Beat Editor</h1>
+        <h1 style={st.title}>{initialBeat ? "Edit beat" : "New beat"}</h1>
         <div style={{ width: 56 }} />
       </header>
 
@@ -165,6 +172,9 @@ function BeatEditor({ engine, onSave, onClose }) {
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name your beat" style={st.nameInput} />
         <button onClick={handleSave} style={st.saveBtn}>Save</button>
       </div>
+
+      {/* Cancel — closes without saving; never touches localStorage */}
+      <button onClick={() => { if (previewing) engine.stop(); onClose(); }} style={st.cancelBtn}>Cancel</button>
     </div>
   );
 }
@@ -198,6 +208,7 @@ const st = {
   saveRow: { display: "flex", gap: 10, marginTop: 2 },
   nameInput: { flex: 1, padding: "12px 14px", borderRadius: 14, border: "1.5px solid var(--line)", fontSize: 15, fontFamily: "inherit", color: "var(--ink)", background: "var(--surface)", outline: "none" },
   saveBtn: { padding: "12px 24px", borderRadius: 14, border: "none", background: "var(--saffron-d)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" },
+  cancelBtn: { marginTop: -6, padding: "11px", borderRadius: 14, border: "1.5px solid var(--line)", background: "transparent", color: "var(--muted)", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.03em" },
 };
 
 export default BeatEditor;

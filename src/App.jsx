@@ -18,6 +18,7 @@ function App() {
   const engine = engineRef.current;
 
   const [view, setView] = useState("main"); // "main" | "editor"
+  const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
 
   const [customBeats, setCustomBeats] = useState(loadSavedBeats);
   const allBeats = [...BEATS, ...customBeats];
@@ -85,10 +86,43 @@ function App() {
     }
   }
 
+  const isCustomBeat = (id) => customBeats.some(b => b.id === id);
+
+  // Upsert by id: editing a custom beat overwrites its entry, a new beat
+  // (or a fork of a built-in) appends. Only ever touches customBeats, so the
+  // read-only BEATS are always safe.
   function handleSaveBeat(newBeat) {
-    const updated = [...customBeats, newBeat];
-    setCustomBeats(updated);
-    try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
+    setCustomBeats(prev => {
+      const exists = prev.some(b => b.id === newBeat.id);
+      const updated = exists
+        ? prev.map(b => (b.id === newBeat.id ? newBeat : b))
+        : [...prev, newBeat];
+      try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+    selectBeat(newBeat); // reflect the saved beat in the engine + main view (engine already stopped)
+  }
+
+  // Open the editor blank (new beat).
+  function openNewBeat() {
+    engine.stop(); setPlaying(false);
+    setEditorInitial(null);
+    setView("editor");
+  }
+  // Open the editor on the loaded beat. Custom beats edit in place (same id);
+  // built-ins fork into a fresh custom copy that the original never sees.
+  function openEditBeat() {
+    engine.stop(); setPlaying(false);
+    const seed = isCustomBeat(beat.id)
+      ? beat
+      : {
+          ...beat,
+          id: "custom_" + beat.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
+          name: beat.name + " (custom)",
+          note: "Custom",
+        };
+    setEditorInitial(seed);
+    setView("editor");
   }
   function deleteCustomBeat(id, e) {
     e.stopPropagation();
@@ -101,8 +135,8 @@ function App() {
   // ── Editor view ──
   if (view === "editor") {
     return (
-      <BeatEditor engine={engine} onSave={handleSaveBeat}
-        onClose={() => { engine.stop(); setPlaying(false); setView("main"); }} />
+      <BeatEditor engine={engine} initialBeat={editorInitial} onSave={handleSaveBeat}
+        onClose={() => { engine.stop(); setPlaying(false); setEditorInitial(null); setView("main"); }} />
     );
   }
 
@@ -114,13 +148,19 @@ function App() {
   return (
     <div style={st.screen}>
       <header style={st.header}>
-        <div style={st.emblem} aria-hidden="true" />
+        <img src="/images/dharma-wheel.png" alt="" style={st.emblem} aria-hidden="true" />
         <h1 style={st.title}>Kirtan Companion</h1>
         <p style={st.subtitle}>Let the mridanga keep time while you chant</p>
       </header>
 
       <main style={st.stage}>
         <div style={{ width: "100%", maxWidth: 360 }}>
+          <div style={st.nowPlaying}>
+            <span style={st.nowPlayingName}>{beat.name}</span>
+            <button onClick={openEditBeat} style={st.editBtn}>
+              {isCustomBeat(beat.id) ? "Edit this beat" : "Customize"}
+            </button>
+          </div>
           <BeatIndicator
             beat={beat}
             step={step}
@@ -206,7 +246,7 @@ function App() {
             onChange={(e) => changeVolume(Number(e.target.value) / 100)} style={{ "--fill": volPct + "%" }} aria-label="Volume" />
         </div>
 
-        <button onClick={() => { engine.stop(); setPlaying(false); setView("editor"); }} style={st.createBtn}>
+        <button onClick={openNewBeat} style={st.createBtn}>
           + Create a beat
         </button>
       </section>
@@ -217,10 +257,13 @@ function App() {
 const st = {
   screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "34px 26px calc(34px + env(safe-area-inset-bottom))", gap: 18 },
   header: { textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 },
-  emblem: { width: 30, height: 30, borderRadius: "50%", background: "radial-gradient(circle at 50% 38%, var(--gold), var(--saffron) 70%)", boxShadow: "0 4px 14px oklch(0.7 0.15 60 / 0.35)", marginBottom: 4 },
+  emblem: { width: 72, height: 72, objectFit: "contain", filter: "drop-shadow(0 4px 10px oklch(0.7 0.15 60 / 0.4)) drop-shadow(0 0 10px oklch(0.78 0.14 62 / 0.55))", marginBottom: -6 },
   title: { fontFamily: '"Marcellus", serif', fontWeight: 400, fontSize: 30, margin: 0, letterSpacing: "0.01em", color: "var(--ink)" },
   subtitle: { margin: 0, fontSize: 14.5, color: "var(--muted)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
   stage: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 36, minHeight: 0, padding: "10px 0" },
+  nowPlaying: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, marginBottom: 12 },
+  nowPlayingName: { fontFamily: '"Marcellus", serif', fontSize: 18, color: "var(--ink)", letterSpacing: "0.01em" },
+  editBtn: { padding: "5px 12px", borderRadius: 11, border: "1.5px solid var(--line)", background: "transparent", color: "var(--saffron-d)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.02em" },
   playWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 18 },
   glow: { position: "absolute", top: -18, left: "50%", marginLeft: -109, width: 218, height: 218, borderRadius: "50%", background: "radial-gradient(circle, oklch(0.78 0.14 62 / 0.55) 0%, transparent 68%)", pointerEvents: "none" },
   play: { position: "relative", width: 182, height: 182, borderRadius: "50%", border: "none", cursor: "pointer", display: "grid", placeItems: "center", background: "radial-gradient(circle at 50% 32%, var(--saffron) 0%, var(--saffron-d) 100%)", boxShadow: "0 18px 44px oklch(0.6 0.16 48 / 0.4), inset 0 2px 6px oklch(0.85 0.12 80 / 0.6), inset 0 -10px 22px oklch(0.5 0.14 44 / 0.45)", transition: "transform 140ms ease" },
