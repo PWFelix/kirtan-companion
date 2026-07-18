@@ -175,8 +175,10 @@ function BeatIndicator({ beat, step, playing, mutedEnds = {}, onToggleMute, onPl
       </g>
     );
 
+    // viewBox extends 12 units above the ring geometry so the sam triangle
+    // can float clear of the top marker without clipping.
     return (
-      <svg ref={rootRef} className="kc-chakra" viewBox={`0 0 ${VIEW} ${VIEW}`} width="100%"
+      <svg ref={rootRef} className="kc-chakra" viewBox={`0 -12 ${VIEW} ${VIEW + 12}`} width="100%"
         role="img" aria-label={`${beat.name}, ${beatsPerBar} by 4, ${beat.steps} steps`}>
         {/* Pulse-group ticks, behind everything. */}
         {ticks.map((t, k) => (
@@ -195,7 +197,7 @@ function BeatIndicator({ beat, step, playing, mutedEnds = {}, onToggleMute, onPl
             the cycle resolve" is the #1 glance question, so it's sized to
             be findable from across a harmonium. */}
         <path className="kc-sam"
-          d={`M${CX},${CY - R_OUT - 15} l-8,-11 l16,0 z`} />
+          d={`M${CX},${CY - R_OUT - 20} l-8,-11 l16,0 z`} />
 
         {/* Centre: play/pause button — the primary action. The <g> carries
             data-action="playpause"; the wrapper's delegated handler turns a

@@ -156,7 +156,7 @@ input[type="range"].kc-range::-moz-range-thumb {
   font-weight: 700;
 }
 
-.kc-chakra .kc-sam { fill: var(--accent-saffron); }
+.kc-chakra .kc-sam { fill: var(--accent-action); }
 .kc-chakra .kc-ring { outline: none; }
 .kc-chakra .kc-muted { opacity: 0.4; }
 /* Play/pause centre button — the primary action, sitting where the eye rests.
