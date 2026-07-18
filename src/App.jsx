@@ -296,27 +296,15 @@ function App() {
 
   return (
     <div className="kc-screen" style={screenFixed}>
+      {/* Brand only — Settings lives in the bottom nav (one entry point).
+          The logo height flexes with viewport height so short phones give
+          the room back to the chakra below. */}
       <header style={st.header}>
-        {/* Spacer matching the settings button so the brand stays centered */}
-        <div style={st.headerSpacer} aria-hidden="true" />
-        <div style={st.brand}>
-          <img src="/images/dharma-wheel.png" alt="" style={st.brandChakra} aria-hidden="true" />
-          <img
-            src="/images/kirtan-companion-stacked1.svg"
-            alt="Kirtan Companion"
-            style={st.brandName}
-          />
-        </div>
-        <button onClick={() => setView("settings")}
-          style={st.settingsBtn} aria-label="Settings">
-          {/* Simple monochrome grey cog (lucide "settings" gear) */}
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-            stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-            aria-hidden="true">
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </button>
+        <img
+          src="/images/kirtan-companion-stacked1.svg"
+          alt="Kirtan Companion"
+          style={st.brandName}
+        />
       </header>
 
       <main style={st.stage}>
@@ -384,12 +372,8 @@ const st = {
   // NOTE: keep this padding identical to BeatEditor's st.screen so the bottom
   // nav sits at the exact same spot on every page and never shifts on switch.
   screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-5)" },
-  header: { flexShrink: 0, display: "flex", flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: "var(--space-3)" },
-  brand: { flex: 1, minWidth: 0, position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" },
-  headerSpacer: { flexShrink: 0, width: 44, height: 44 },
-  brandChakra: { position: "absolute", left: -88, top: "50%", transform: "translateY(-50%)", width: 160, height: 160, objectFit: "contain", opacity: 0.12, pointerEvents: "none", zIndex: 0 },
-  brandName: { position: "relative", display: "block", height: 80, width: "auto", zIndex: 1 },
-  settingsBtn: { flexShrink: 0, position: "relative", zIndex: 2, width: 44, height: 44, marginBottom: 13, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
+  header: { flexShrink: 0, display: "flex", justifyContent: "center" },
+  brandName: { display: "block", height: "clamp(52px, 10vh, 80px)", width: "auto" },
   subHeader: { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   subTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", letterSpacing: "0.01em", color: "var(--ink-primary)" },
   backBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
