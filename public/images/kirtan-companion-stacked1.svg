@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" width="520" height="120">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Marcellus&amp;family=Noto+Sans+Devanagari:wght@400;500&amp;display=swap');
+    .marc { font-family: 'Marcellus', 'Times New Roman', serif; }
+    .deva { font-family: 'Noto Sans Devanagari', sans-serif; }
+  </style>
+
+  <!-- Devanagari header -->
+  <text x="8" y="40" text-anchor="start" class="deva"
+        font-size="28" fill="#c89a3d" font-weight="500">कीर्तन</text>
+
+  <!-- "Kirtan Compan" -->
+  <text x="8" y="96" text-anchor="start" class="marc"
+        font-size="56" fill="#b8581f">Kirtan Compan</text>
+
+  <!-- Vaishnava tilak (same gold as the Devanagari) -->
+  <g transform="translate(358 56)" fill="#c89a3d">
+    <path d="M 0 0 L 0 19 A 6 6 0 0 0 12 19 L 12 0" fill="none" stroke="#c89a3d" stroke-width="3"/>
+    <path d="M 3 32 A 3 3 0 0 1 9 32 Q 8 37 6 40 Q 4 37 3 32 Z"/>
+  </g>
+
+  <!-- "on" -->
+  <text x="373" y="96" text-anchor="start" class="marc"
+        font-size="56" fill="#b8581f">on</text>
+</svg>

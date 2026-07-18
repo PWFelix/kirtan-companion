@@ -12,12 +12,75 @@ function loadSavedBeats() {
   catch (e) { return []; }
 }
 
+// ── Bottom navigation ───────────────────────────────────────────────────────
+// A persistent tab bar. Home and Settings are square icon buttons at the ends;
+// Beats and Editor are rectangular labelled buttons in the middle. The active
+// destination is filled saffron. Switching pages does NOT stop playback (except
+// the editor, which takes over the engine) so you can browse while a beat plays.
+function HomeIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 10.2 12 3l9 7.2V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
+function CogIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function BottomNav({ view, onHome, onBeats, onEditor, onSettings }) {
+  const cell = (v, base) => ({ ...base, ...(view === v ? st.navActive : null) });
+  const cur = (v) => (view === v ? "page" : undefined);
+  return (
+    <nav style={st.nav} aria-label="Primary">
+      <button onClick={onHome} aria-label="Home" aria-current={cur("home")} style={cell("home", st.navSquare)}><HomeIcon /></button>
+      <button onClick={onBeats} aria-current={cur("beats")} style={cell("beats", st.navRect)}>Beats</button>
+      <button onClick={onEditor} aria-current={cur("editor")} style={cell("editor", st.navRect)}>Editor</button>
+      <button onClick={onSettings} aria-label="Settings" aria-current={cur("settings")} style={cell("settings", st.navSquare)}><CogIcon /></button>
+    </nav>
+  );
+}
+
+// Little waveform glyph built from a beat's dayan pattern — tall bar = open,
+// short bar = closed, faint stub = rest. Purely decorative (aria-hidden).
+function BeatGlyph({ pattern }) {
+  const bw = 3, gap = 2, h = 26;
+  const w = pattern.length * (bw + gap);
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" style={{ flexShrink: 0 }}>
+      {pattern.map((c, i) => {
+        const bh = c === "O" ? 22 : c === "X" ? 13 : 5;
+        return <rect key={i} x={i * (bw + gap)} y={(h - bh) / 2} width={bw} height={bh} rx={1.5}
+          fill="var(--accent-saffron)" opacity={c ? 0.6 : 0.3} />;
+      })}
+    </svg>
+  );
+}
+
+// Selection radio for the beat list — hollow ring, saffron dot when chosen.
+function RadioDot({ selected }) {
+  return (
+    <span aria-hidden="true" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: "50%",
+      display: "grid", placeItems: "center",
+      border: `2px solid ${selected ? "var(--accent-saffron)" : "var(--rule)"}` }}>
+      {selected && <span style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--accent-saffron)" }} />}
+    </span>
+  );
+}
+
 function App() {
   const engineRef = useRef(null);
   if (engineRef.current === null) engineRef.current = new KirtanEngine();
   const engine = engineRef.current;
 
-  const [view, setView] = useState("main"); // "main" | "editor"
+  const [view, setView] = useState("home"); // "home" | "beats" | "editor" | "settings"
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
 
   const [customBeats, setCustomBeats] = useState(loadSavedBeats);
@@ -50,9 +113,18 @@ function App() {
   }, []);
 
   async function togglePlay() {
+    if (!ready) return;            // sounds still loading — ignore the tap
     await engine.unlock();
     if (playing) engine.stop();
     else { engine.setBpm(bpm); engine.setBeat(beat); engine.start(); }
+  }
+
+  // From the Beats page: jump to Home and start the selected beat playing.
+  async function startBeat() {
+    setView("home");
+    if (!ready || playing) return;
+    await engine.unlock();
+    engine.setBpm(bpm); engine.setBeat(beat); engine.start();
   }
 
   function selectBeat(b) {
@@ -132,35 +204,118 @@ function App() {
     if (beatId === id) selectBeat(BEATS[0]);
   }
 
+  // Persistent tab bar + the fixed (non-scrolling) screen frame shared by the
+  // Home, Beats and Settings pages. The Editor keeps its own scrolling frame.
+  const screenFixed = { ...st.screen, minHeight: 0 };
+  const bottomNav = (
+    <BottomNav
+      view={view}
+      onHome={() => setView("home")}
+      onBeats={() => setView("beats")}
+      onEditor={openNewBeat}
+      onSettings={() => setView("settings")}
+    />
+  );
+
   // ── Editor view ──
   if (view === "editor") {
     return (
-      <BeatEditor engine={engine} initialBeat={editorInitial} onSave={handleSaveBeat}
-        onClose={() => { engine.stop(); setPlaying(false); setEditorInitial(null); setView("main"); }} />
+      <BeatEditor engine={engine} initialBeat={editorInitial} onSave={handleSaveBeat} nav={bottomNav}
+        onClose={() => { engine.stop(); setPlaying(false); setEditorInitial(null); setView("home"); }} />
     );
   }
 
-  // ── Main view ──
+  // ── Beats view — library-first "Choose a beat" list ──
+  if (view === "beats") {
+    return (
+      <div className="kc-screen" style={screenFixed}>
+        <header style={st.subHeader}>
+          <span style={{ width: 44 }} aria-hidden="true" />
+          <h1 style={st.subTitle}>Choose a beat</h1>
+          <span style={{ width: 44 }} aria-hidden="true" />
+        </header>
+        <section style={st.beatList}>
+          {allBeats.map(b => {
+            const sel = b.id === beatId;
+            const isCustom = b.note === "Custom";
+            return (
+              <button key={b.id} onClick={() => selectBeat(b)}
+                style={{ ...st.beatRow, borderColor: sel ? "var(--accent-saffron)" : "var(--rule)" }}>
+                <BeatGlyph pattern={b.dayan} />
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={st.beatRowName}>{b.name}</span>
+                  <span style={st.beatRowMeta}>{b.steps}-step · {b.note}</span>
+                </div>
+                {isCustom && (
+                  <span onClick={(e) => deleteCustomBeat(b.id, e)} role="button" aria-label={`Delete ${b.name}`}
+                    style={{ ...st.deleteDot, position: "static", color: "var(--ink-secondary)" }}>×</span>
+                )}
+                <RadioDot selected={sel} />
+              </button>
+            );
+          })}
+        </section>
+        <button onClick={startBeat} disabled={!ready} style={{ ...st.startBtn, opacity: ready ? 1 : 0.5 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5 19 12 7 19 Z" fill="currentColor" /></svg>
+          Start · {beat.name}
+        </button>
+        {bottomNav}
+      </div>
+    );
+  }
+
+  // ── Settings view ──
+  if (view === "settings") {
+    return (
+      <div className="kc-screen" style={screenFixed}>
+        <header style={st.subHeader}>
+          <button onClick={() => setView("home")} style={st.backBtn} aria-label="Back">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M15 5 8 12l7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <h1 style={st.subTitle}>Settings</h1>
+          <span style={{ width: 44 }} />
+        </header>
+        <section style={{ ...st.controls, flex: 1 }}>
+          <p style={st.subtitle}>More settings coming soon.</p>
+        </section>
+        {bottomNav}
+      </div>
+    );
+  }
+
+  // ── Home view ──
   const fillPct = ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)) * 100;
   const volPct  = volume * 100;
-  const beatMs  = (60 * 1000) / bpm;
 
   return (
-    <div style={st.screen}>
+    <div className="kc-screen" style={screenFixed}>
       <header style={st.header}>
-        <img src="/images/dharma-wheel.png" alt="" style={st.emblem} aria-hidden="true" />
-        <h1 style={st.title}>Kirtan Companion</h1>
-        <p style={st.subtitle}>Let the mridanga keep time while you chant</p>
+        {/* Spacer matching the settings button so the brand stays centered */}
+        <div style={st.headerSpacer} aria-hidden="true" />
+        <div style={st.brand}>
+          <img src="/images/dharma-wheel.png" alt="" style={st.brandChakra} aria-hidden="true" />
+          <img
+            src="/images/kirtan-companion-stacked1.svg"
+            alt="Kirtan Companion"
+            style={st.brandName}
+          />
+        </div>
+        <button onClick={() => setView("settings")}
+          style={st.settingsBtn} aria-label="Settings">
+          {/* Simple monochrome grey cog (lucide "settings" gear) */}
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+            aria-hidden="true">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
       </header>
 
       <main style={st.stage}>
-        <div style={{ width: "100%", maxWidth: 360 }}>
-          <div style={st.nowPlaying}>
-            <span style={st.nowPlayingName}>{beat.name}</span>
-            <button onClick={openEditBeat} style={st.editBtn}>
-              {isCustomBeat(beat.id) ? "Edit this beat" : "Customize"}
-            </button>
-          </div>
+        <div style={st.chakraWrap}>
           <BeatIndicator
             beat={beat}
             step={step}
@@ -169,51 +324,19 @@ function App() {
             compact
             mutedEnds={mutedEnds}
             onToggleMute={toggleMute}
+            onPlayPause={togglePlay}
             bpm={bpm}
           />
         </div>
-
-        <div style={st.playWrap}>
-          {playing && (
-            <span className="kc-glow" style={{ ...st.glow, animation: `kc-breathe ${beatMs * 2}ms ease-in-out infinite` }} aria-hidden="true" />
-          )}
-          <button onClick={togglePlay} disabled={!ready} aria-label={playing ? "Stop" : "Play"}
-            style={{ ...st.play, transform: playing ? "scale(0.97)" : "scale(1)", opacity: ready ? 1 : 0.5 }}>
-            {playing ? (
-              <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="11" y="11" width="24" height="24" rx="7" fill="#fff" /></svg>
-            ) : (
-              <svg width="50" height="50" viewBox="0 0 50 50" aria-hidden="true"><path d="M18 12 L38 25 L18 38 Z" fill="#fff" /></svg>
-            )}
+        <div style={st.nowPlaying}>
+          <span style={st.nowPlayingName}>{beat.name}</span>
+          <button onClick={openEditBeat} style={st.editBtn}>
+            {isCustomBeat(beat.id) ? "Edit this beat" : "Customize"}
           </button>
-          <span style={st.playLabel}>{!ready ? "Loading…" : playing ? "Tap to stop" : "Tap to begin"}</span>
         </div>
       </main>
 
       <section style={st.controls}>
-        <div>
-          <div style={st.controlLabel}>Rhythm</div>
-          <div style={st.cardRow}>
-            {allBeats.map(b => {
-              const sel = b.id === beatId;
-              const isCustom = b.note === "Custom";
-              return (
-                <button key={b.id} onClick={() => selectBeat(b)}
-                  style={{ ...st.card, position: "relative",
-                    background: sel ? "var(--saffron)" : "var(--surface)",
-                    borderColor: sel ? "var(--saffron)" : "var(--line)",
-                    boxShadow: sel ? "0 8px 20px oklch(0.62 0.16 46 / 0.25)" : "0 1px 2px oklch(0.5 0.05 60 / 0.06)" }}>
-                  <span style={{ ...st.cardName, color: sel ? "#fff" : "var(--ink)" }}>{b.name}</span>
-                  <span style={{ ...st.cardNote, color: sel ? "oklch(0.97 0.02 80)" : "var(--faint)" }}>{b.note}</span>
-                  {isCustom && (
-                    <span onClick={(e) => deleteCustomBeat(b.id, e)} role="button" aria-label={`Delete ${b.name}`}
-                      style={{ ...st.deleteDot, color: sel ? "#fff" : "var(--faint)" }}>×</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         <div>
           <div style={st.tempoHead}>
             <span style={st.controlLabel}>Tempo</span>
@@ -226,11 +349,11 @@ function App() {
               aria-label="Tempo" />
             <button onClick={() => setTempoLocked(v => !v)}
               style={{ ...st.lockBtn,
-                background: tempoLocked ? "var(--saffron)" : "var(--surface)",
-                color: tempoLocked ? "#fff" : "var(--saffron-d)" }}
+                background: tempoLocked ? "var(--accent-saffron)" : "transparent",
+                color: tempoLocked ? "var(--ink-primary)" : "var(--ink-secondary)" }}
               aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
               aria-pressed={tempoLocked}>
-              {tempoLocked ? "🔒" : "🔓"}
+              {tempoLocked ? "Locked" : "Lock"}
             </button>
             <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
           </div>
@@ -245,46 +368,57 @@ function App() {
           <input className="kc-range" type="range" min={0} max={100} value={volPct}
             onChange={(e) => changeVolume(Number(e.target.value) / 100)} style={{ "--fill": volPct + "%" }} aria-label="Volume" />
         </div>
-
-        <button onClick={openNewBeat} style={st.createBtn}>
-          + Create a beat
-        </button>
       </section>
+
+      {bottomNav}
     </div>
   );
 }
 
 const st = {
-  screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "16px 24px calc(14px + env(safe-area-inset-bottom))", gap: 12 },
-  header: { textAlign: "center", display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 },
-  emblem: { width: 44, height: 44, objectFit: "contain", filter: "drop-shadow(0 4px 10px oklch(0.7 0.15 60 / 0.4)) drop-shadow(0 0 10px oklch(0.78 0.14 62 / 0.55))" },
-  title: { fontFamily: '"Marcellus", serif', fontWeight: 400, fontSize: 24, margin: 0, letterSpacing: "0.01em", color: "var(--ink)" },
-  subtitle: { display: "none" },
-  stage: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, minHeight: 0, padding: "4px 0" },
-  nowPlaying: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, marginBottom: 8 },
-  nowPlayingName: { fontFamily: '"Marcellus", serif', fontSize: 18, color: "var(--ink)", letterSpacing: "0.01em" },
-  editBtn: { padding: "5px 12px", borderRadius: 11, border: "1.5px solid var(--line)", background: "transparent", color: "var(--saffron-d)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.02em" },
-  playWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 },
-  glow: { position: "absolute", top: -14, left: "50%", marginLeft: -85, width: 170, height: 170, borderRadius: "50%", background: "radial-gradient(circle, oklch(0.78 0.14 62 / 0.55) 0%, transparent 68%)", pointerEvents: "none" },
-  play: { position: "relative", width: 132, height: 132, borderRadius: "50%", border: "none", cursor: "pointer", display: "grid", placeItems: "center", background: "radial-gradient(circle at 50% 32%, var(--saffron) 0%, var(--saffron-d) 100%)", boxShadow: "0 18px 44px oklch(0.6 0.16 48 / 0.4), inset 0 2px 6px oklch(0.85 0.12 80 / 0.6), inset 0 -10px 22px oklch(0.5 0.14 44 / 0.45)", transition: "transform 140ms ease" },
-  playLabel: { fontSize: 12.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--faint)", fontWeight: 600 },
-  controls: { display: "flex", flexDirection: "column", gap: 14 },
-  controlLabel: { fontSize: 12.5, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 700, marginBottom: 7 },
-  cardRow: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 9 },
-  card: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "13px 4px 11px", borderRadius: 18, border: "1.5px solid var(--line)", cursor: "pointer", transition: "all 150ms ease", fontFamily: "inherit" },
-  cardName: { fontSize: 14, fontWeight: 700, letterSpacing: "0.01em" },
-  cardNote: { fontSize: 10.5, fontWeight: 500 },
-  deleteDot: { position: "absolute", top: 4, right: 7, fontSize: 16, lineHeight: 1, fontWeight: 700, cursor: "pointer" },
+  // NOTE: keep this padding identical to BeatEditor's st.screen so the bottom
+  // nav sits at the exact same spot on every page and never shifts on switch.
+  screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-5)" },
+  header: { flexShrink: 0, display: "flex", flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: "var(--space-3)" },
+  brand: { flex: 1, minWidth: 0, position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" },
+  headerSpacer: { flexShrink: 0, width: 44, height: 44 },
+  brandChakra: { position: "absolute", left: -88, top: "50%", transform: "translateY(-50%)", width: 160, height: 160, objectFit: "contain", opacity: 0.12, pointerEvents: "none", zIndex: 0 },
+  brandName: { position: "relative", display: "block", height: 80, width: "auto", zIndex: 1 },
+  settingsBtn: { flexShrink: 0, position: "relative", zIndex: 2, width: 44, height: 44, marginBottom: 13, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
+  subHeader: { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
+  subTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", letterSpacing: "0.01em", color: "var(--ink-primary)" },
+  backBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
+  subtitle: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
+  stage: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-4)", minHeight: 0, padding: "10px 0" },
+  chakraWrap: { flex: 1, minHeight: 0, width: "100%", maxWidth: 360, display: "flex", alignItems: "center", justifyContent: "center" },
+  nowPlaying: { flexShrink: 0, display: "flex", alignItems: "baseline", justifyContent: "center", gap: "var(--space-3)" },
+  nowPlayingName: { fontFamily: "var(--font-display)", fontSize: 18, color: "var(--ink-primary)", letterSpacing: "0.01em" },
+  editBtn: { padding: "5px 12px", borderRadius: 11, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em" },
+  controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-6)" },
+  controlLabel: { fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 400, marginBottom: "var(--space-3)" },
+  deleteDot: { flexShrink: 0, fontSize: 16, lineHeight: 1, fontWeight: 700, cursor: "pointer" },
+
+  // ── Beats page (library-first list) ──
+  beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
+  beatRow: { display: "flex", alignItems: "center", gap: "var(--space-4)", padding: "14px 16px", borderRadius: 18, border: "var(--rule-hairline)", background: "var(--surface-raised)", cursor: "pointer", textAlign: "left", width: "100%" },
+  beatRowName: { fontFamily: "var(--font-display)", fontSize: 17, letterSpacing: "0.01em", color: "var(--ink-primary)" },
+  beatRowMeta: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 500, color: "var(--ink-secondary)" },
+  startBtn: { flexShrink: 0, width: "100%", padding: "16px", borderRadius: 18, border: "none", background: "var(--accent-saffron)", color: "var(--surface-paper)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 800, letterSpacing: "0.02em", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 },
+
+  // ── Bottom navigation — iOS-style pill wrapping the four buttons ──
+  nav: { flexShrink: 0, marginTop: "auto", display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-1)", borderRadius: 999, border: "var(--rule-hairline)", background: "var(--surface-raised)" },
+  navSquare: { flexShrink: 0, width: 46, height: 44, borderRadius: 999, border: "none", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
+  navRect: { flex: 1, height: 44, borderRadius: 999, border: "none", background: "transparent", color: "var(--ink-secondary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
+  navActive: { background: "var(--accent-saffron)", color: "var(--ink-primary)" },
   tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
-  tempoRow: { display: "flex", alignItems: "center", gap: 10 },
-  tapBtn: { flexShrink: 0, padding: "8px 16px", borderRadius: 12, border: "1.5px solid var(--saffron)", background: "var(--surface)", color: "var(--saffron-d)", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.04em" },
-  lockBtn: { flexShrink: 0, width: 36, height: 34, padding: 0, borderRadius: 12, border: "1.5px solid var(--saffron)", fontSize: 15, lineHeight: 1, cursor: "pointer", fontFamily: "inherit", display: "grid", placeItems: "center" },
+  tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
+  tapBtn: { flexShrink: 0, padding: "8px 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
+  lockBtn: { flexShrink: 0, height: 34, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
   bpmReadout: { display: "flex", alignItems: "baseline", gap: 5 },
-  bpmNum: { fontFamily: '"Marcellus", serif', fontSize: 28, color: "var(--saffron-d)", lineHeight: 1 },
-  volNum: { fontFamily: '"Marcellus", serif', fontSize: 22, color: "var(--saffron-d)", lineHeight: 1 },
-  bpmUnit: { fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--faint)" },
-  scaleRow: { display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--faint)", fontWeight: 600, marginTop: 2, letterSpacing: "0.04em" },
-  createBtn: { marginTop: 2, padding: "15px", borderRadius: 16, border: "1.5px dashed var(--saffron)", background: "transparent", color: "var(--saffron-d)", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.03em" },
+  bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--accent-saffron)", lineHeight: 1 },
+  volNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.375rem", fontWeight: 700, color: "var(--accent-saffron)", lineHeight: 1 },
+  bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--ink-secondary)" },
+  scaleRow: { display: "flex", justifyContent: "space-between", fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", color: "var(--ink-secondary)", fontWeight: 600, marginTop: 2, letterSpacing: "0.04em" },
 };
 
 export default App;

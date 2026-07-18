@@ -1,273 +1,249 @@
-import { strokeVisual } from "./data/strokes.js";
+import { useMemo, useEffect, useRef } from "react";
 
 /**
- * BeatIndicator
- * -------------
- * One pill (oval) per drum end, with shape cells laid out inside.
- * Tap a pill to mute/unmute that end (if `onToggleMute` is provided).
+ * BeatIndicator — the tal chakra
+ * ------------------------------
+ * Renders the beat as a circular rhythm cycle instead of a left-to-right strip.
+ * Two concentric rings of step positions:
+ *   Outer ring = dayan (right hand, higher pitch)
+ *   Inner ring = bayan (left hand, lower pitch)
+ * Step 0 sits at the top — this is `sam`, where the cycle resolves — and is
+ * emphasised with a saffron tick. The active step pulses by position.
  *
- * Designed to grow when more instruments are added:
- *   1. Add an entry to ROWS below (label + pattern key).
- *   2. Give each beat a matching pattern array (e.g. `beat.kartal`).
- *   3. Name the sound files with the same prefix (e.g. `kartal_open`)
- *      — SoundPlayer routes by prefix into per-end gains automatically.
+ * Performance contract: the engine emits "step" many times per second, so the
+ * SVG STRUCTURE (rings, markers, bols, sam, centre text) is memo'd and rebuilt
+ * only when the beat (or mute) changes — never per step. The active-step
+ * highlight is applied imperatively by toggling `data-active` on the affected
+ * <g> nodes via refs; CSS (.kc-chakra rules in index.css) animates the pulse
+ * with transitions. React never re-renders the markers on a step tick.
  *
- * Props:
- *   beat         - { dayan, bayan, steps, ... }
- *   step         - current step index (-1 = not playing)
+ * Props (leaf display component — same external contract as before):
+ *   beat         - { name, steps, beatsPerBar, dayan[], bayan[], ... }
+ *   step         - current step index (-1 = stopped)
  *   playing      - whether playback is active
- *   playhead     - "cells" (active cell highlights) | "line" (gliding bar)
- *   mutedEnds    - e.g. { dayan: true } — drives the muted look
- *   onToggleMute - optional (end) => void; if provided, pills become tappable
- *   compact      - smaller version (used on the main screen)
- *   labelStyle   - "simple" (Top/Bottom) | "traditional" (Dayan/Bayan)
- *   bpm          - current tempo; used to time the line playhead's glide
+ *   mutedEnds    - e.g. { dayan: true } — dims that ring, suppresses its pulse
+ *   onToggleMute - optional (end) => void; taps on a ring toggle its mute
+ *
+ * `playhead`, `compact`, `labelStyle` and `bpm` are still accepted (App passes
+ * them) but the chakra doesn't need them: it has one intrinsic size and the
+ * pulse is CSS-transition driven, not timed from bpm.
  */
 
-// Each entry = one row. Add new instruments here in future.
-const ROWS = [
-  { end: "dayan", label: "Top",    traditional: "Dayan", patternKey: "dayan" },
-  { end: "bayan", label: "Bottom", traditional: "Bayan", patternKey: "bayan" },
-  // { end: "kartal", label: "Kartal", traditional: "Karatalas", patternKey: "kartal" },
-];
+// ── Geometry constants (SVG user units; viewBox is 0 0 320 320) ──
+const VIEW = 320;
+const CX = 160, CY = 160;
+const R_OUT = 132;          // dayan ring radius
+const R_IN = 90;            // bayan ring radius
+const LBL_OUT = R_OUT;      // dayan bols sit centred inside their ring marker
+const LBL_IN = R_IN;        // bayan bols sit centred inside their ring marker
+const HIT_W = 30;           // width of the invisible tap-to-mute hit ring
+const R_MARK = 9;           // normal marker radius
+const R_SAM = 10.5;         // sam marker is a touch larger (~1.15×)
 
-function BeatIndicator({
-  beat,
-  step,
-  playing,
-  playhead = "cells",
-  mutedEnds = {},
-  onToggleMute,
-  compact = false,
-  labelStyle = "simple",
-  bpm,
-}) {
-  const steps = beat.steps;
-  const gap = steps === 16 ? 3 : steps === 12 ? 5 : 6;
-  const cellSize = compact ? 36 : 44;
-  const labelW = compact ? 44 : 54;
-  const padX = compact ? 10 : 14;
-  const labelGap = 6;
+// Marker/bol sizes shrink once the ring gets crowded so 24- and 32-cell beats
+// stay legible. Keyed to the arc spacing on the TIGHTER inner ring; the clamp
+// upper bounds are the original constants, so anything up to 16 cells renders
+// pixel-identical to before — only denser rings scale down.
+function computeSizes(steps) {
+  const clamp = (lo, hi, v) => Math.max(lo, Math.min(hi, v));
+  const markSpacing = (2 * Math.PI * R_IN) / steps;   // markers ride the inner ring
+  const bolSpacing = (2 * Math.PI * LBL_IN) / steps;  // inner bols sit tighter still
+  const markR = clamp(4.5, R_MARK, markSpacing * 0.42);
+  return {
+    markR,
+    samR: markR * (R_SAM / R_MARK),
+    bolFont: clamp(7, 13, bolSpacing * 0.6),           // 13 = the CSS .kc-bol size
+  };
+}
 
-  const rows = ROWS.filter(r => Array.isArray(beat[r.patternKey]));
+// Pure geometry: where each step sits on each ring, plus pulse-group ticks.
+function computeGeometry(beat) {
+  const { steps, beatsPerBar = 4, dayan, bayan } = beat;
+  const sizes = computeSizes(steps);
 
-  // The line is re-anchored on every step rather than running a single
-  // bar-long animation: that way a mid-play BPM or beat change only
-  // desyncs the line for at most one step before the next remount
-  // restarts the keyframe at the new duration.
-  // The glide duration MUST equal the sequencer's real step interval, or
-  // the line gets yanked to the next cell before it finishes and looks
-  // jittery. The engine derives that interval from steps / beatsPerBar
-  // (8/4 → 2 per beat, 12/4 → 3 per beat triplets, 16/4 → 4 per beat),
-  // so we mirror the same formula here rather than hard-coding it.
-  const beatsPerBar = beat.beatsPerBar ?? 4;
+  const pts = [];
+  for (let i = 0; i < steps; i++) {
+    const ang = (i / steps) * 2 * Math.PI - Math.PI / 2; // step 0 → top (sam)
+    const cos = Math.cos(ang), sin = Math.sin(ang);
+    pts.push({
+      i,
+      isSam: i === 0,
+      dayan: {
+        mx: CX + cos * R_OUT, my: CY + sin * R_OUT,
+        lx: CX + cos * LBL_OUT, ly: CY + sin * LBL_OUT,
+        bol: dayan[i],
+      },
+      bayan: {
+        mx: CX + cos * R_IN, my: CY + sin * R_IN,
+        lx: CX + cos * LBL_IN, ly: CY + sin * LBL_IN,
+        bol: bayan[i],
+      },
+    });
+  }
+
+  // One tick per quarter-note pulse, crossing both rings. Only when the steps
+  // divide evenly into the bar (all current beats do); otherwise skip.
   const stepsPerBeat = steps / beatsPerBar;
-  const stepIntervalMs = bpm ? 60000 / (bpm * stepsPerBeat) : 200;
-
-  function renderShape(value, active, dim) {
-    const v = strokeVisual(value);
-    if (v.shape === "rest") {
-      return (
-        <svg viewBox="0 0 40 40" style={shapeStyle}>
-          <circle cx="20" cy="20" r="6" fill="none" stroke="var(--faint)" strokeWidth="2" strokeDasharray="3 3" opacity={dim ? 0.25 : 0.55} />
-        </svg>
-      );
-    }
-
-    const fill = v.color;
-    const opacity = dim ? 0.3 : 1;
-    // The "glow" is a slightly bigger version of the same shape, behind
-    // the main shape, in the same colour. Opacity fades in/out as the
-    // line crosses each cell. Each shape's halo matches its silhouette.
-    const haloOpacity = active ? 0.45 : 0;
-    const haloStyle  = { transition: "opacity 140ms ease" };
-    const mainStyle  = { opacity, transition: "opacity 160ms ease" };
-
-    let layers;
-    switch (v.shape) {
-      case "circle":
-        layers = <>
-          <circle cx="20" cy="20" r="19" fill={fill} opacity={haloOpacity} style={haloStyle} />
-          <circle cx="20" cy="20" r="14" fill={fill} style={mainStyle} />
-        </>;
-        break;
-      case "square":
-        layers = <>
-          <rect x="2" y="2" width="36" height="36" rx="7" fill={fill} opacity={haloOpacity} style={haloStyle} />
-          <rect x="7" y="7" width="26" height="26" rx="5" fill={fill} style={mainStyle} />
-        </>;
-        break;
-      case "diamond":
-        layers = <>
-          <rect x="3" y="3" width="34" height="34" rx="5" transform="rotate(45 20 20)" fill={fill} opacity={haloOpacity} style={haloStyle} />
-          <rect x="8" y="8" width="24" height="24" rx="3" transform="rotate(45 20 20)" fill={fill} style={mainStyle} />
-        </>;
-        break;
-      case "triangle":
-        layers = <>
-          <path d="M20 1 L38 34 L2 34 Z" fill={fill} opacity={haloOpacity} style={haloStyle} />
-          <path d="M20 6 L34 32 L6 32 Z" fill={fill} style={mainStyle} />
-        </>;
-        break;
-      case "ring":
-        layers = <>
-          <circle cx="20" cy="20" r="16" fill="none" stroke={fill} strokeWidth="6" opacity={haloOpacity} style={haloStyle} />
-          <circle cx="20" cy="20" r="13" fill="none" stroke={fill} strokeWidth="4" style={mainStyle} />
-        </>;
-        break;
-      default:
-        return null;
-    }
-    return <svg viewBox="0 0 40 40" style={shapeStyle}>{layers}</svg>;
+  let ticks = [];
+  if (Number.isInteger(stepsPerBeat) && stepsPerBeat > 1) {
+    ticks = Array.from({ length: beatsPerBar }, (_, k) => {
+      const ang = ((k * stepsPerBeat) / steps) * 2 * Math.PI - Math.PI / 2;
+      const cos = Math.cos(ang), sin = Math.sin(ang);
+      return {
+        x1: CX + cos * (R_IN - 14), y1: CY + sin * (R_IN - 14),
+        x2: CX + cos * (R_OUT + 12), y2: CY + sin * (R_OUT + 12),
+      };
+    });
   }
 
-  function MutedIcon({ size = 28 }) {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M11 5 L6 9 H3 V15 H6 L11 19 Z" fill="currentColor" stroke="none" />
-        <line x1="16" y1="9" x2="22" y2="15" />
-        <line x1="22" y1="9" x2="16" y2="15" />
-      </svg>
-    );
-  }
+  return { pts, ticks, sizes };
+}
 
-  function renderRow(row) {
-    const values = beat[row.patternKey];
-    const muted = !!mutedEnds[row.end];
-    const tappable = !!onToggleMute;
-    const labelText = labelStyle === "traditional" ? row.traditional : row.label;
+function BeatIndicator({ beat, step, playing, mutedEnds = {}, onToggleMute, onPlayPause }) {
+  const geometry = useMemo(() => computeGeometry(beat), [beat]);
 
-    return (
-      <div
-        key={row.end}
+  // One stable ref to the root <svg>. The active-step effect queries the step
+  // <g> nodes under it by data-attribute — no per-node refs, so nothing reads
+  // a ref during render.
+  const rootRef = useRef(null);
+
+  const beatsPerBar = beat.beatsPerBar ?? 4;
+  const tappable = onToggleMute != null;
+
+  // Mute and play/pause are handled by event delegation on the wrapper below
+  // (which is NOT memo'd), so the fresh `onToggleMute` / `onPlayPause` each
+  // render never force the SVG to rebuild. A click on the centre button finds
+  // its data-action; a click anywhere inside a ring group finds its data-ring.
+  const actionFromEvent = (e) => {
+    if (onPlayPause && e.target.closest?.("[data-action='playpause']")) {
+      onPlayPause();
+      return;
+    }
+    if (!tappable) return;
+    const g = e.target.closest?.("[data-ring]");
+    if (g) onToggleMute(g.dataset.ring);
+  };
+  const actionFromKey = (e) => {
+    if (e.key !== " " && e.key !== "Enter") return;
+    if (onPlayPause && e.target.closest?.("[data-action='playpause']")) {
+      e.preventDefault();
+      onPlayPause();
+      return;
+    }
+    if (!tappable) return;
+    const g = e.target.closest?.("[data-ring]");
+    if (g) { e.preventDefault(); onToggleMute(g.dataset.ring); }
+  };
+
+  // The whole SVG is memo'd on [beat, mutedEnds] — NOT on `step`. React bails
+  // out of reconciling this subtree while the element reference is unchanged,
+  // so markers/labels never re-render on a step tick. (Verifiable: the DEV log
+  // below fires once per beat switch, not per step.)
+  const chakra = useMemo(() => {
+    if (import.meta.env.DEV) console.log("[chakra] build structure", beat.id);
+    const { pts, ticks, sizes } = geometry;
+    const dayMuted = !!mutedEnds.dayan;
+    const bayMuted = !!mutedEnds.bayan;
+
+    const renderRing = (label, ringKey, muted) => (
+      <g
+        className={"kc-ring" + (muted ? " kc-muted" : "")}
+        data-ring={ringKey}
         role={tappable ? "button" : undefined}
         tabIndex={tappable ? 0 : undefined}
-        onClick={tappable ? () => onToggleMute(row.end) : undefined}
-        onKeyDown={tappable ? (e) => {
-          if (e.key === " " || e.key === "Enter") { e.preventDefault(); onToggleMute(row.end); }
-        } : undefined}
-        aria-pressed={tappable ? muted : undefined}
-        aria-label={tappable ? `${labelText} drum, ${muted ? "muted, tap to unmute" : "playing, tap to mute"}` : undefined}
-        style={{
-          position: "relative",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          background: muted ? "var(--cell)" : "oklch(0.945 0.028 72)",
-          border: `1.5px solid ${muted ? "var(--line)" : "oklch(0.88 0.05 72)"}`,
-          borderRadius: 999,
-          padding: `${compact ? 5 : 7}px ${compact ? 10 : 14}px`,
-          cursor: tappable ? "pointer" : "default",
-          transition: "background 160ms ease, border-color 160ms ease",
-          userSelect: "none",
-          WebkitTapHighlightColor: "transparent",
-        }}
+        aria-label={tappable ? `${label} drum, ${muted ? "muted, tap to unmute" : "playing, tap to mute"}` : undefined}
       >
-        <span style={{
-          width: labelW,
-          flexShrink: 0,
-          textAlign: "center",
-          fontSize: compact ? 9.5 : 10.5,
-          letterSpacing: "0.12em",
-          textTransform: "uppercase",
-          fontWeight: 700,
-          color: muted ? "var(--faint)" : "var(--muted)",
-          transition: "color 160ms ease",
-        }}>
-          {labelText}
-        </span>
-
-        <div style={{ display: "flex", flex: 1, gap, position: "relative" }}>
-          {values.map((val, i) => {
-            const active = playing && i === step && !muted;
-            return (
-              <div key={i} style={{
-                flex: 1,
-                minWidth: 0,
-                height: cellSize,
-                display: "grid",
-                placeItems: "center",
-                position: "relative",
-              }}>
-                {playhead === "cells" && active && (
-                  <span style={{
-                    position: "absolute",
-                    inset: 4,
-                    borderRadius: "50%",
-                    background: "oklch(0.97 0.04 80)",
-                    boxShadow: "0 0 14px oklch(0.85 0.13 78 / 0.55)",
-                    transition: "opacity 90ms ease",
-                  }} />
-                )}
-                {renderShape(val, active, muted)}
-              </div>
-            );
-          })}
-
-        </div>
-
-        {muted && (
-          <div style={{
-            position: "absolute",
-            inset: 0,
-            display: "grid",
-            placeItems: "center",
-            color: "var(--muted)",
-            pointerEvents: "none",
-          }}>
-            <MutedIcon size={compact ? 26 : 32} />
-          </div>
-        )}
-      </div>
+        {/* Fat transparent hit-ring so the thin guide circle is easy to tap. */}
+        <circle cx={CX} cy={CY} r={ringKey === "dayan" ? R_OUT : R_IN}
+          fill="none" stroke="transparent" strokeWidth={HIT_W}
+          style={{ cursor: tappable ? "pointer" : "default" }} />
+        {pts.map((p) => {
+          const s = p[ringKey];
+          const silent = s.bol == null;
+          return (
+            <g key={p.i} data-i={p.i} data-active="false">
+              <circle
+                className={silent ? "kc-silent" : "kc-marker"}
+                cx={s.mx} cy={s.my} r={p.isSam && !silent ? sizes.samR : sizes.markR} />
+              {!silent && (
+                <text className="kc-bol" x={s.lx} y={s.ly} style={{ fontSize: sizes.bolFont }}
+                  textAnchor="middle" dominantBaseline="central">{s.bol}</text>
+              )}
+            </g>
+          );
+        })}
+      </g>
     );
-  }
 
-  // The outer container covers the cells region (label column excluded).
-  // Inside it, a one-cell-wide window is positioned at the current step
-  // and re-mounted each tick via React `key`, so the keyframe inside
-  // always replays from 0% at the current stepIntervalMs.
-  const cellsLeftOffset = padX + labelW + labelGap;
-  const cellsRightOffset = padX;
+    return (
+      <svg ref={rootRef} className="kc-chakra" viewBox={`0 0 ${VIEW} ${VIEW}`} width="100%"
+        role="img" aria-label={`${beat.name}, ${beatsPerBar} by 4, ${beat.steps} steps`}>
+        {/* Pulse-group ticks, behind everything. */}
+        {ticks.map((t, k) => (
+          <line key={k} className="kc-tick" x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} />
+        ))}
 
+        {/* Faint guide rings. */}
+        <circle className="kc-guide" cx={CX} cy={CY} r={R_OUT} fill="none" />
+        <circle className="kc-guide" cx={CX} cy={CY} r={R_IN} fill="none" />
+
+        {renderRing("Top", "dayan", dayMuted)}
+        {renderRing("Bottom", "bayan", bayMuted)}
+
+        {/* Sam marker — small triangle just OUTSIDE the outer ring at the top,
+            pointing inward at step 0 where the cycle resolves. */}
+        <path className="kc-sam"
+          d={`M${CX},${CY - R_OUT - 13} l-6,-9 l12,0 z`} />
+
+        {/* Centre: play/pause button — the primary action. The <g> carries
+            data-action="playpause"; the wrapper's delegated handler turns a
+            tap into onPlayPause(). */}
+        {playing ? (
+          <g className="kc-pause-btn" data-action="playpause"
+             role="button" tabIndex={0} aria-label="Pause" style={{ cursor: "pointer" }}>
+            <circle cx={CX} cy={CY} r={28} fill="transparent" />
+            <rect className="kc-pause-icon" x={CX - 8} y={CY - 10} width={5} height={20} rx={1.5} />
+            <rect className="kc-pause-icon" x={CX + 3} y={CY - 10} width={5} height={20} rx={1.5} />
+          </g>
+        ) : (
+          <g className="kc-play-btn" data-action="playpause"
+             role="button" tabIndex={0} aria-label="Play" style={{ cursor: "pointer" }}>
+            <circle cx={CX} cy={CY} r={28} fill="transparent" />
+            <path className="kc-play-icon"
+              d={`M${CX - 11},${CY - 16} L${CX - 11},${CY + 16} L${CX + 17},${CY} Z`} />
+          </g>
+        )}
+      </svg>
+    );
+  }, [geometry, beat, beatsPerBar, mutedEnds, tappable, playing]);
+
+  // Active-step highlight: flip data-active on the matching step <g> nodes only.
+  // This runs on every step but only touches a handful of DOM attributes —
+  // React does NOT re-render the memo'd SVG. CSS animates the pulse from the
+  // toggle. Reading rootRef.current here is an effect, so it's allowed.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const apply = (ring, muted) => {
+      root.querySelectorAll(`[data-ring="${ring}"] [data-i]`).forEach((node) => {
+        const i = Number(node.dataset.i);
+        node.dataset.active = (playing && i === step && !muted) ? "true" : "false";
+      });
+    };
+    apply("dayan", !!mutedEnds.dayan);
+    apply("bayan", !!mutedEnds.bayan);
+    // `geometry` is included so the highlight re-applies after a beat switch
+    // rebuilds the markers (the new nodes default to data-active="false").
+  }, [step, playing, mutedEnds, geometry]);
+
+  // Thin wrapper (re-renders per step, but it's just a <div>) delegates centre
+  // and ring taps to the fresh onPlayPause / onToggleMute; the memo'd {chakra}
+  // inside is untouched.
   return (
-    <div style={{ ...wrapStyle, position: "relative" }}>
-      {rows.map(renderRow)}
-
-      {playhead === "line" && playing && step >= 0 && (
-        <div style={{
-          position: "absolute",
-          top: -8, bottom: -8,
-          left: cellsLeftOffset,
-          right: cellsRightOffset,
-          pointerEvents: "none",
-        }}>
-          <div
-            key={step}
-            style={{
-              position: "absolute",
-              top: 0, bottom: 0,
-              left: `${(step / steps) * 100}%`,
-              width: `${100 / steps}%`,
-            }}
-          >
-            <div style={{
-              position: "absolute",
-              top: 0, bottom: 0,
-              width: 2.5,
-              background: "var(--saffron-d)",
-              borderRadius: 2,
-              transform: "translateX(-50%)",
-              boxShadow: "0 0 8px rgba(176,106,24,0.6)",
-              animation: `kc-glide-cell ${stepIntervalMs}ms linear forwards`,
-            }} />
-          </div>
-        </div>
-      )}
+    <div onClick={actionFromEvent} onKeyDown={actionFromKey}>
+      {chakra}
     </div>
   );
 }
-
-const wrapStyle  = { display: "flex", flexDirection: "column", gap: 8, width: "100%" };
-const shapeStyle = { width: "82%", height: "82%" };
 
 export default BeatIndicator;

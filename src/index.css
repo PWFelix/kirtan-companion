@@ -1,8 +1,13 @@
 /* ── Fonts ── */
 @import url('https://fonts.googleapis.com/css2?family=Marcellus&family=Nunito+Sans:opsz,wght@6..12,400;6..12,500;6..12,600;6..12,700&display=swap');
 
-/* ── Colour palette and design tokens ── */
+/* ── Colour palette and design tokens ──
+   Two layers. The base palette (raw hues) is kept intact — BeatIndicator and
+   the beat data read these names directly. On top sits a SEMANTIC layer
+   (surface/ink/rule/accent + type + spacing) that the UI should prefer.
+   New shades are derived by holding hue+chroma and varying lightness only. */
 :root {
+  /* ── Base palette (raw hues) ── */
   --cream:    oklch(0.973 0.014 78);
   --cream-2:  oklch(0.955 0.022 70);
   --surface:  oklch(0.992 0.008 85);
@@ -17,15 +22,58 @@
   --duggi:  oklch(0.58 0.13 38);
   --nak:    oklch(0.80 0.11 70);
   --kartal: oklch(0.70 0.06 90);
+
+  /* ── Semantic surfaces (lightness varies, hue/chroma held) ── */
+  --surface-paper:  var(--cream);   /* primary page background, lightest */
+  --surface-raised: var(--cream-2); /* grouped sections, slightly darker */
+  --surface-sunken: var(--cell);    /* inset areas (tracks, grids), darker */
+
+  /* ── Semantic ink ── */
+  --ink-primary:   var(--ink);      /* main text — deep burnt umber */
+  --ink-secondary: var(--muted);    /* secondary text — ~60% of primary */
+
+  /* ── Rule: a warm burnt-orange hairline, used in place of shadows ── */
+  --rule:          oklch(0.855 0.030 52);
+  --rule-hairline: 1px solid var(--rule);
+
+  /* ── Semantic accent ── */
+  --accent-saffron:     var(--saffron);          /* brand — active states, key marks */
+  --accent-saffron-dim: oklch(0.785 0.075 54);   /* muted saffron — hover/inactive */
+
+  /* ── Type families ── */
+  --font-display: "Marcellus", serif;            /* beat names, section labels, bols */
+  --font-body:    "Nunito Sans", system-ui, sans-serif;
+  --font-numeric: "Nunito Sans", system-ui, sans-serif; /* pair with tabular-nums */
+
+  /* ── Type scale ── */
+  --text-display-lg: 1.625rem;  /* beat / screen title */
+  --text-display-md: 0.78rem;   /* section labels (uppercase + letter-spacing) */
+  --text-body-md:    0.95rem;   /* default body */
+  --text-body-sm:    0.84rem;   /* captions */
+  --text-body-xs:    0.72rem;   /* utility / meta */
+  --text-numeric-xl: 1.75rem;   /* BPM big number */
+  --text-numeric-md: 1rem;      /* counts */
+
+  /* ── Spacing scale (4px base) ── */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-7: 32px; --space-8: 40px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; min-height: 100%; }
+/* Full-height chain so the app's fixed (non-scrolling) pages reliably fill the
+   viewport on mobile. Percentage height is universally supported; dvh below is
+   a progressive enhancement for browsers that track the dynamic viewport. */
+html, body, #root { height: 100%; }
 body {
-  font-family: "Nunito Sans", system-ui, sans-serif;
-  color: var(--ink);
-  background: radial-gradient(120% 80% at 50% 0%, var(--cream) 0%, var(--cream-2) 100%);
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--ink-primary);
+  background: var(--surface-paper);
 }
+
+/* Fixed page frame: fills the height chain, never scrolls (inner regions do). */
+.kc-screen { height: 100%; overflow: hidden; }
+@supports (height: 100dvh) { .kc-screen { height: 100dvh; } }
 
 /* ── Tempo slider — warm saffron track + soft thumb ── */
 input[type="range"].kc-range {
@@ -45,30 +93,122 @@ input[type="range"].kc-range::-moz-range-progress {
 input[type="range"].kc-range::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 28px; height: 28px; margin-top: -10px; border-radius: 50%;
-  background: var(--surface); border: 2px solid var(--saffron);
-  box-shadow: 0 4px 12px oklch(0.62 0.16 46 / 0.28);
+  background: var(--surface-paper); border: 2px solid var(--accent-saffron);
 }
 input[type="range"].kc-range::-moz-range-thumb {
   width: 28px; height: 28px; border-radius: 50%;
-  background: var(--surface); border: 2px solid var(--saffron);
-  box-shadow: 0 4px 12px oklch(0.62 0.16 46 / 0.28);
+  background: var(--surface-paper); border: 2px solid var(--accent-saffron);
 }
 
-/* ── Breathing glow behind the play button ── */
-@keyframes kc-breathe {
-  0%, 100% { transform: scale(1);   opacity: 0.55; }
-  50%      { transform: scale(1.12); opacity: 0.9; }
+/* ── Tal chakra (circular BeatIndicator) ──
+   The SVG structure is memo'd in React and never re-renders per step. The
+   active step is highlighted by toggling data-active on a step's <g>; the
+   pulse (scale 1 → 1.15 → 1) plays out entirely through these CSS transitions
+   as a step goes active then inactive. No JS animation loop. */
+/* Scales to fill its flex wrapper by width OR height (whichever binds first),
+   so on short phones the whole ring shrinks to fit instead of being clipped. */
+.kc-chakra { display: block; width: 100%; height: auto; max-height: 100%; margin: 0 auto; }
+
+.kc-chakra .kc-guide { stroke: var(--rule); stroke-width: 1; }
+.kc-chakra .kc-tick  { stroke: var(--rule); stroke-width: 1; }
+
+/* Step markers — fill encodes active state, the bol letter encodes stroke. */
+.kc-chakra .kc-marker {
+  fill: var(--surface-sunken);
+  stroke: var(--rule); stroke-width: 1;
+  transform-box: fill-box; transform-origin: center;
+  transition: fill 120ms ease, transform 180ms ease;
 }
+.kc-chakra .kc-silent {
+  fill: none;
+  stroke: var(--rule); stroke-width: 1;
+  opacity: 0.55;
+}
+.kc-chakra .kc-bol {
+  fill: var(--ink-secondary);
+  font-family: var(--font-display);
+  font-size: 13px;
+  transition: fill 120ms ease;
+}
+
+/* Active step — saffron marker that pulses up, bol darkens and thickens. */
+.kc-chakra [data-active="true"] .kc-marker {
+  fill: var(--accent-saffron);
+  stroke: var(--accent-saffron);
+  transform: scale(1.15);
+}
+.kc-chakra [data-active="true"] .kc-bol {
+  fill: var(--ink-primary);
+  font-weight: 700;
+}
+
+.kc-chakra .kc-sam { fill: var(--accent-saffron); }
+.kc-chakra .kc-ring { outline: none; }
+.kc-chakra .kc-muted { opacity: 0.4; }
+/* Play/pause centre button — the primary action, sitting where the eye rests. */
+.kc-chakra .kc-play-icon {
+  fill: var(--accent-saffron);
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+}
+.kc-chakra .kc-pause-icon {
+  fill: var(--accent-saffron);
+  opacity: 0.45;                  /* recedes into the background during playback */
+  transition: opacity 0.15s ease;
+}
+.kc-chakra .kc-play-btn:hover .kc-play-icon,
+.kc-chakra .kc-pause-btn:hover .kc-pause-icon {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .kc-glow { animation: none !important; }
+  .kc-chakra .kc-marker { transition: fill 120ms ease; }
+  .kc-chakra [data-active="true"] .kc-marker { transform: none; }
 }
 
-/* ── Beat-indicator playhead line ──
-   Glides across one cell. The wrapping element in BeatIndicator is
-   sized to a single cell and re-keyed every step, so 0→100% covers
-   exactly one cell width and any BPM/beat change picked up by the
-   next step naturally restarts the animation at the new duration. */
-@keyframes kc-glide-cell {
-  from { left: 0%; }
-  to   { left: 100%; }
+/* ── BeatEditor grid — narrow-screen horizontal scroll ──
+   Below 480px the editor's `1fr` cell tracks shrink well under the 44px touch
+   target, so each block becomes ONE horizontal scroll container: the numbers,
+   Top and Bottom rows scroll together (staying column-aligned) while the row
+   labels pin to the left. Cells grow on the free vertical axis to a guaranteed
+   >=44px. Everything here is scoped to the phone breakpoint; the desktop grid
+   is untouched. The .kc-cellrow overrides need !important because BeatEditor's
+   layout lives in inline-style objects, not classes (see the file header). */
+@media (max-width: 480px) {
+  .kc-block {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    /* land a snapped group just past the pinned 48px label (+10px row gap) */
+    scroll-padding-left: 58px;
+    padding-left:  env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  /* rows size to their content so the block (fixed width) is what scrolls */
+  .kc-block > * { width: max-content; }
+
+  .kc-cellrow {
+    display: flex !important;
+    flex: 0 0 auto !important;   /* beat the inline flex:1 so it won't shrink */
+    flex-wrap: nowrap;
+    gap: var(--space-2) !important;
+    width: max-content;
+  }
+  /* every track — cell buttons AND the number spans — shares one width so the
+     three rows stay aligned; box-sizing:border-box is already global */
+  .kc-cellrow > * { flex: 0 0 clamp(44px, 12vw, 52px); }
+
+  .kc-cell {
+    height: 56px;
+    aspect-ratio: auto;   /* explicit height wins over the inline square ratio */
+  }
+
+  /* keep the Top/Bottom (and numbers) labels visible while cells scroll under */
+  .kc-rowLabel {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    align-self: stretch;
+    background: var(--surface-raised);
+  }
 }
