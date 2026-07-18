@@ -11,7 +11,7 @@
 
   <!-- "Kirtan Compan" -->
   <text x="8" y="96" text-anchor="start" class="marc"
-        font-size="56" fill="#b8581f">Kirtan Compan</text>
+        font-size="56" fill="#9c2815">Kirtan Compan</text>
 
   <!-- Vaishnava tilak (same gold as the Devanagari) -->
   <g transform="translate(358 56)" fill="#c89a3d">
@@ -21,5 +21,5 @@
 
   <!-- "on" -->
   <text x="373" y="96" text-anchor="start" class="marc"
-        font-size="56" fill="#b8581f">on</text>
+        font-size="56" fill="#9c2815">on</text>
 </svg>
