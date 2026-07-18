@@ -135,15 +135,18 @@ input[type="range"].kc-range::-moz-range-thumb {
 .kc-chakra .kc-bol {
   fill: var(--ink-secondary);
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 15px;
   transition: fill 120ms ease;
 }
 
-/* Active step — saffron marker that pulses up, bol darkens and thickens. */
+/* Active step — saffron marker that pulses up with a soft glow, bol darkens
+   and thickens. Scale + glow (not just a colour flip) so the moving step is
+   findable at arm's length in peripheral vision. */
 .kc-chakra [data-active="true"] .kc-marker {
   fill: var(--accent-saffron);
   stroke: var(--accent-saffron);
-  transform: scale(1.15);
+  transform: scale(1.3);
+  filter: drop-shadow(0 0 6px var(--accent-saffron));
 }
 .kc-chakra [data-active="true"] .kc-bol {
   fill: var(--ink-primary);

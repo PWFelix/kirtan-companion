@@ -37,8 +37,8 @@ const R_IN = 90;            // bayan ring radius
 const LBL_OUT = R_OUT;      // dayan bols sit centred inside their ring marker
 const LBL_IN = R_IN;        // bayan bols sit centred inside their ring marker
 const HIT_W = 30;           // width of the invisible tap-to-mute hit ring
-const R_MARK = 9;           // normal marker radius
-const R_SAM = 10.5;         // sam marker is a touch larger (~1.15×)
+const R_MARK = 11;          // normal marker radius — sized to read at arm's length
+const R_SAM = 13;           // sam marker is a touch larger (~1.18×)
 
 // Marker/bol sizes shrink once the ring gets crowded so 24- and 32-cell beats
 // stay legible. Keyed to the arc spacing on the TIGHTER inner ring; the clamp
@@ -52,7 +52,7 @@ function computeSizes(steps) {
   return {
     markR,
     samR: markR * (R_SAM / R_MARK),
-    bolFont: clamp(7, 13, bolSpacing * 0.6),           // 13 = the CSS .kc-bol size
+    bolFont: clamp(7, 15, bolSpacing * 0.6),           // 15 = the CSS .kc-bol size
   };
 }
 
@@ -190,10 +190,12 @@ function BeatIndicator({ beat, step, playing, mutedEnds = {}, onToggleMute, onPl
         {renderRing("Top", "dayan", dayMuted)}
         {renderRing("Bottom", "bayan", bayMuted)}
 
-        {/* Sam marker — small triangle just OUTSIDE the outer ring at the top,
-            pointing inward at step 0 where the cycle resolves. */}
+        {/* Sam marker — triangle just OUTSIDE the outer ring at the top,
+            pointing inward at step 0 where the cycle resolves. "Where does
+            the cycle resolve" is the #1 glance question, so it's sized to
+            be findable from across a harmonium. */}
         <path className="kc-sam"
-          d={`M${CX},${CY - R_OUT - 13} l-6,-9 l12,0 z`} />
+          d={`M${CX},${CY - R_OUT - 15} l-8,-11 l16,0 z`} />
 
         {/* Centre: play/pause button — the primary action. The <g> carries
             data-action="playpause"; the wrapper's delegated handler turns a
