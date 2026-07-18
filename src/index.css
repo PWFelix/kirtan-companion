@@ -11,12 +11,13 @@
   --cream:    oklch(0.973 0.014 78);
   --cream-2:  oklch(0.955 0.022 70);
   --surface:  oklch(0.992 0.008 85);
-  --ink:      oklch(0.345 0.035 52);
-  --muted:    oklch(0.585 0.032 58);
+  --ink:      oklch(0.29 0.033 48);   /* near-espresso — ~12:1 on cream */
+  --muted:    oklch(0.51 0.032 55);   /* ≥4.5:1 on cream even at small sizes */
   --faint:    oklch(0.70 0.028 62);
   --saffron:  oklch(0.705 0.155 52);
-  --saffron-d:oklch(0.625 0.165 46);
+  --saffron-d:oklch(0.58 0.16 44);    /* dark enough to read as TEXT on cream */
   --gold:     oklch(0.815 0.135 80);
+  --kumkum:   oklch(0.46 0.155 32);   /* deep madder red — actions; white text passes AA */
   --cell:     oklch(0.905 0.026 72);
   --line:     oklch(0.90 0.018 70);
   --duggi:  oklch(0.58 0.13 38);
@@ -36,9 +37,16 @@
   --rule:          oklch(0.855 0.030 52);
   --rule-hairline: 1px solid var(--rule);
 
-  /* ── Semantic accent ── */
-  --accent-saffron:     var(--saffron);          /* brand — active states, key marks */
+  /* ── Semantic accent ──
+     Saffron and kumkum each do ONE job:
+       saffron = the LIVE thing — the sounding step, playhead, playing state.
+                 Never text on cream (≈2:1 — fails contrast); fills/marks only.
+       kumkum  = ACTIONS — primary buttons, selected controls. Dark enough
+                 that --on-action text on it passes WCAG AA. */
+  --accent-saffron:     var(--saffron);          /* live/sounding marks only */
   --accent-saffron-dim: oklch(0.785 0.075 54);   /* muted saffron — hover/inactive */
+  --accent-action:      var(--kumkum);           /* primary buttons, active nav */
+  --on-action:          oklch(0.985 0.01 80);    /* warm white text on kumkum */
 
   /* ── Type families ── */
   --font-display: "Marcellus", serif;            /* beat names, section labels, bols */
@@ -50,8 +58,8 @@
   --text-display-md: 0.78rem;   /* section labels (uppercase + letter-spacing) */
   --text-body-md:    0.95rem;   /* default body */
   --text-body-sm:    0.84rem;   /* captions */
-  --text-body-xs:    0.72rem;   /* utility / meta */
-  --text-numeric-xl: 1.75rem;   /* BPM big number */
+  --text-body-xs:    0.75rem;   /* utility / meta — 12px floor for legibility */
+  --text-numeric-xl: 2.25rem;   /* BPM big number — glanceable at arm's length */
   --text-numeric-md: 1rem;      /* counts */
 
   /* ── Spacing scale (4px base) ── */
