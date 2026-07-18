@@ -298,13 +298,19 @@ function App() {
     <div className="kc-screen" style={screenFixed}>
       {/* Brand only — Settings lives in the bottom nav (one entry point).
           The logo height flexes with viewport height so short phones give
-          the room back to the chakra below. */}
+          the room back to the chakra below. The dharma wheel is a faint
+          watermark anchored to the logo's left edge: sized and positioned
+          relative to the logo itself, it scales with it and never clips
+          differently across screen widths. */}
       <header style={st.header}>
-        <img
-          src="/images/kirtan-companion-stacked1.svg"
-          alt="Kirtan Companion"
-          style={st.brandName}
-        />
+        <div style={st.brand}>
+          <img src="/images/dharma-wheel.png" alt="" aria-hidden="true" style={st.brandChakra} />
+          <img
+            src="/images/kirtan-companion-stacked1.svg"
+            alt="Kirtan Companion"
+            style={st.brandName}
+          />
+        </div>
       </header>
 
       <main style={st.stage}>
@@ -373,7 +379,9 @@ const st = {
   // nav sits at the exact same spot on every page and never shifts on switch.
   screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-5)" },
   header: { flexShrink: 0, display: "flex", justifyContent: "center" },
-  brandName: { display: "block", height: "clamp(52px, 10vh, 80px)", width: "auto" },
+  brand: { position: "relative", display: "inline-flex" },
+  brandChakra: { position: "absolute", left: 0, top: "50%", transform: "translate(-50%, -50%)", height: "200%", width: "auto", opacity: 0.12, pointerEvents: "none" },
+  brandName: { position: "relative", display: "block", height: "clamp(52px, 10vh, 80px)", width: "auto" },
   subHeader: { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   subTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", letterSpacing: "0.01em", color: "var(--ink-primary)" },
   backBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
