@@ -1,0 +1,74 @@
+/* ── Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Marcellus&family=Nunito+Sans:opsz,wght@6..12,400;6..12,500;6..12,600;6..12,700&display=swap');
+
+/* ── Colour palette and design tokens ── */
+:root {
+  --cream:    oklch(0.973 0.014 78);
+  --cream-2:  oklch(0.955 0.022 70);
+  --surface:  oklch(0.992 0.008 85);
+  --ink:      oklch(0.345 0.035 52);
+  --muted:    oklch(0.585 0.032 58);
+  --faint:    oklch(0.70 0.028 62);
+  --saffron:  oklch(0.705 0.155 52);
+  --saffron-d:oklch(0.625 0.165 46);
+  --gold:     oklch(0.815 0.135 80);
+  --cell:     oklch(0.905 0.026 72);
+  --line:     oklch(0.90 0.018 70);
+  --duggi:  oklch(0.58 0.13 38);
+  --nak:    oklch(0.80 0.11 70);
+  --kartal: oklch(0.70 0.06 90);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  font-family: "Nunito Sans", system-ui, sans-serif;
+  color: var(--ink);
+  background: radial-gradient(120% 80% at 50% 0%, var(--cream) 0%, var(--cream-2) 100%);
+}
+
+/* ── Tempo slider — warm saffron track + soft thumb ── */
+input[type="range"].kc-range {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 34px; background: transparent; cursor: pointer; margin: 0;
+}
+input[type="range"].kc-range::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 99px;
+  background: linear-gradient(90deg, var(--saffron) 0%, var(--saffron) var(--fill,50%), var(--cell) var(--fill,50%), var(--cell) 100%);
+}
+input[type="range"].kc-range::-moz-range-track {
+  height: 8px; border-radius: 99px; background: var(--cell);
+}
+input[type="range"].kc-range::-moz-range-progress {
+  height: 8px; border-radius: 99px; background: var(--saffron);
+}
+input[type="range"].kc-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 28px; height: 28px; margin-top: -10px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--saffron);
+  box-shadow: 0 4px 12px oklch(0.62 0.16 46 / 0.28);
+}
+input[type="range"].kc-range::-moz-range-thumb {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--saffron);
+  box-shadow: 0 4px 12px oklch(0.62 0.16 46 / 0.28);
+}
+
+/* ── Breathing glow behind the play button ── */
+@keyframes kc-breathe {
+  0%, 100% { transform: scale(1);   opacity: 0.55; }
+  50%      { transform: scale(1.12); opacity: 0.9; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kc-glow { animation: none !important; }
+}
+
+/* ── Beat-indicator playhead line ──
+   Glides across one cell. The wrapping element in BeatIndicator is
+   sized to a single cell and re-keyed every step, so 0→100% covers
+   exactly one cell width and any BPM/beat change picked up by the
+   next step naturally restarts the animation at the new duration. */
+@keyframes kc-glide-cell {
+  from { left: 0%; }
+  to   { left: 100%; }
+}

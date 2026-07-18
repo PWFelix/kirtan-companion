@@ -1,0 +1,290 @@
+import { useState, useEffect, useRef } from "react";
+import { KirtanEngine } from "./engine/KirtanEngine.js";
+import { BEATS } from "./data/beats.js";
+import BeatEditor from "./BeatEditor.jsx";
+import BeatIndicator from "./BeatIndicator.jsx";
+
+const MIN_BPM = 40, MAX_BPM = 200;
+const SAVED_KEY = "kirtan-custom-beats";
+
+function loadSavedBeats() {
+  try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || []; }
+  catch (e) { return []; }
+}
+
+function App() {
+  const engineRef = useRef(null);
+  if (engineRef.current === null) engineRef.current = new KirtanEngine();
+  const engine = engineRef.current;
+
+  const [view, setView] = useState("main"); // "main" | "editor"
+  const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
+
+  const [customBeats, setCustomBeats] = useState(loadSavedBeats);
+  const allBeats = [...BEATS, ...customBeats];
+
+  const [ready, setReady]     = useState(false);
+  const [beatId, setBeatId]   = useState(BEATS[0].id);
+  const [bpm, setBpm]         = useState(BEATS[0].bpm);
+  const [playing, setPlaying] = useState(false);
+  const [step, setStep]       = useState(-1);
+  const [volume, setVolume]   = useState(0.9);
+  const [mutedEnds, setMutedEnds] = useState({});
+  const [tempoLocked, setTempoLocked] = useState(false);
+
+  const tapTimesRef = useRef([]);
+  const beat = allBeats.find(b => b.id === beatId) || allBeats[0];
+
+  useEffect(() => {
+    engine.loadSounds({
+      dayan_open:   "/sounds/dayan_open.wav",
+      dayan_closed: "/sounds/dayan_closed.wav",
+      bayan_open:   "/sounds/bayan_open.wav",
+      bayan_closed: "/sounds/bayan_closed.wav",
+    });
+    engine.on("ready",   () => setReady(true));
+    engine.on("started", () => setPlaying(true));
+    engine.on("stopped", () => setPlaying(false));
+    engine.on("step",    (s) => setStep(s));
+    engine.setVolume(volume);
+  }, []);
+
+  async function togglePlay() {
+    await engine.unlock();
+    if (playing) engine.stop();
+    else { engine.setBpm(bpm); engine.setBeat(beat); engine.start(); }
+  }
+
+  function selectBeat(b) {
+    setBeatId(b.id);
+    engine.setBeat(b);
+    if (!tempoLocked) { setBpm(b.bpm); engine.setBpm(b.bpm); }
+  }
+  function changeBpm(value) { setBpm(value); engine.setBpm(value); }
+  function changeVolume(value) { setVolume(value); engine.setVolume(value); }
+
+  function toggleMute(end) {
+    setMutedEnds(prev => {
+      const next = { ...prev, [end]: !prev[end] };
+      engine.setEndMuted(end, !!next[end]);
+      return next;
+    });
+  }
+
+  function handleTap() {
+    const now = Date.now();
+    const taps = tapTimesRef.current;
+    taps.push(now);
+    if (taps.length > 4) taps.shift();
+    if (taps.length >= 2) {
+      const gaps = [];
+      for (let i = 1; i < taps.length; i++) gaps.push(taps[i] - taps[i - 1]);
+      if (gaps[gaps.length - 1] > 2000) { tapTimesRef.current = [now]; return; }
+      const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      const clamped = Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(60000 / avgGap)));
+      changeBpm(clamped);
+    }
+  }
+
+  const isCustomBeat = (id) => customBeats.some(b => b.id === id);
+
+  // Upsert by id: editing a custom beat overwrites its entry, a new beat
+  // (or a fork of a built-in) appends. Only ever touches customBeats, so the
+  // read-only BEATS are always safe.
+  function handleSaveBeat(newBeat) {
+    setCustomBeats(prev => {
+      const exists = prev.some(b => b.id === newBeat.id);
+      const updated = exists
+        ? prev.map(b => (b.id === newBeat.id ? newBeat : b))
+        : [...prev, newBeat];
+      try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+    selectBeat(newBeat); // reflect the saved beat in the engine + main view (engine already stopped)
+  }
+
+  // Open the editor blank (new beat).
+  function openNewBeat() {
+    engine.stop(); setPlaying(false);
+    setEditorInitial(null);
+    setView("editor");
+  }
+  // Open the editor on the loaded beat. Custom beats edit in place (same id);
+  // built-ins fork into a fresh custom copy that the original never sees.
+  function openEditBeat() {
+    engine.stop(); setPlaying(false);
+    const seed = isCustomBeat(beat.id)
+      ? beat
+      : {
+          ...beat,
+          id: "custom_" + beat.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
+          name: beat.name + " (custom)",
+          note: "Custom",
+        };
+    setEditorInitial(seed);
+    setView("editor");
+  }
+  function deleteCustomBeat(id, e) {
+    e.stopPropagation();
+    const updated = customBeats.filter(b => b.id !== id);
+    setCustomBeats(updated);
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
+    if (beatId === id) selectBeat(BEATS[0]);
+  }
+
+  // ── Editor view ──
+  if (view === "editor") {
+    return (
+      <BeatEditor engine={engine} initialBeat={editorInitial} onSave={handleSaveBeat}
+        onClose={() => { engine.stop(); setPlaying(false); setEditorInitial(null); setView("main"); }} />
+    );
+  }
+
+  // ── Main view ──
+  const fillPct = ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)) * 100;
+  const volPct  = volume * 100;
+  const beatMs  = (60 * 1000) / bpm;
+
+  return (
+    <div style={st.screen}>
+      <header style={st.header}>
+        <img src="/images/dharma-wheel.png" alt="" style={st.emblem} aria-hidden="true" />
+        <h1 style={st.title}>Kirtan Companion</h1>
+        <p style={st.subtitle}>Let the mridanga keep time while you chant</p>
+      </header>
+
+      <main style={st.stage}>
+        <div style={{ width: "100%", maxWidth: 360 }}>
+          <div style={st.nowPlaying}>
+            <span style={st.nowPlayingName}>{beat.name}</span>
+            <button onClick={openEditBeat} style={st.editBtn}>
+              {isCustomBeat(beat.id) ? "Edit this beat" : "Customize"}
+            </button>
+          </div>
+          <BeatIndicator
+            beat={beat}
+            step={step}
+            playing={playing}
+            playhead="line"
+            compact
+            mutedEnds={mutedEnds}
+            onToggleMute={toggleMute}
+            bpm={bpm}
+          />
+        </div>
+
+        <div style={st.playWrap}>
+          {playing && (
+            <span className="kc-glow" style={{ ...st.glow, animation: `kc-breathe ${beatMs * 2}ms ease-in-out infinite` }} aria-hidden="true" />
+          )}
+          <button onClick={togglePlay} disabled={!ready} aria-label={playing ? "Stop" : "Play"}
+            style={{ ...st.play, transform: playing ? "scale(0.97)" : "scale(1)", opacity: ready ? 1 : 0.5 }}>
+            {playing ? (
+              <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><rect x="11" y="11" width="24" height="24" rx="7" fill="#fff" /></svg>
+            ) : (
+              <svg width="50" height="50" viewBox="0 0 50 50" aria-hidden="true"><path d="M18 12 L38 25 L18 38 Z" fill="#fff" /></svg>
+            )}
+          </button>
+          <span style={st.playLabel}>{!ready ? "Loading…" : playing ? "Tap to stop" : "Tap to begin"}</span>
+        </div>
+      </main>
+
+      <section style={st.controls}>
+        <div>
+          <div style={st.controlLabel}>Rhythm</div>
+          <div style={st.cardRow}>
+            {allBeats.map(b => {
+              const sel = b.id === beatId;
+              const isCustom = b.note === "Custom";
+              return (
+                <button key={b.id} onClick={() => selectBeat(b)}
+                  style={{ ...st.card, position: "relative",
+                    background: sel ? "var(--saffron)" : "var(--surface)",
+                    borderColor: sel ? "var(--saffron)" : "var(--line)",
+                    boxShadow: sel ? "0 8px 20px oklch(0.62 0.16 46 / 0.25)" : "0 1px 2px oklch(0.5 0.05 60 / 0.06)" }}>
+                  <span style={{ ...st.cardName, color: sel ? "#fff" : "var(--ink)" }}>{b.name}</span>
+                  <span style={{ ...st.cardNote, color: sel ? "oklch(0.97 0.02 80)" : "var(--faint)" }}>{b.note}</span>
+                  {isCustom && (
+                    <span onClick={(e) => deleteCustomBeat(b.id, e)} role="button" aria-label={`Delete ${b.name}`}
+                      style={{ ...st.deleteDot, color: sel ? "#fff" : "var(--faint)" }}>×</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div style={st.tempoHead}>
+            <span style={st.controlLabel}>Tempo</span>
+            <span style={st.bpmReadout}><span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>BPM</span></span>
+          </div>
+          <div style={st.tempoRow}>
+            <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
+              onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
+              style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
+              aria-label="Tempo" />
+            <button onClick={() => setTempoLocked(v => !v)}
+              style={{ ...st.lockBtn,
+                background: tempoLocked ? "var(--saffron)" : "var(--surface)",
+                color: tempoLocked ? "#fff" : "var(--saffron-d)" }}
+              aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
+              aria-pressed={tempoLocked}>
+              {tempoLocked ? "🔒" : "🔓"}
+            </button>
+            <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
+          </div>
+          <div style={st.scaleRow}><span>Slow</span><span>Fast</span></div>
+        </div>
+
+        <div>
+          <div style={st.tempoHead}>
+            <span style={st.controlLabel}>Volume</span>
+            <span style={st.bpmReadout}><span style={st.volNum}>{Math.round(volPct)}</span><span style={st.bpmUnit}>%</span></span>
+          </div>
+          <input className="kc-range" type="range" min={0} max={100} value={volPct}
+            onChange={(e) => changeVolume(Number(e.target.value) / 100)} style={{ "--fill": volPct + "%" }} aria-label="Volume" />
+        </div>
+
+        <button onClick={openNewBeat} style={st.createBtn}>
+          + Create a beat
+        </button>
+      </section>
+    </div>
+  );
+}
+
+const st = {
+  screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "16px 24px calc(14px + env(safe-area-inset-bottom))", gap: 12 },
+  header: { textAlign: "center", display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 },
+  emblem: { width: 44, height: 44, objectFit: "contain", filter: "drop-shadow(0 4px 10px oklch(0.7 0.15 60 / 0.4)) drop-shadow(0 0 10px oklch(0.78 0.14 62 / 0.55))" },
+  title: { fontFamily: '"Marcellus", serif', fontWeight: 400, fontSize: 24, margin: 0, letterSpacing: "0.01em", color: "var(--ink)" },
+  subtitle: { display: "none" },
+  stage: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, minHeight: 0, padding: "4px 0" },
+  nowPlaying: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 12, marginBottom: 8 },
+  nowPlayingName: { fontFamily: '"Marcellus", serif', fontSize: 18, color: "var(--ink)", letterSpacing: "0.01em" },
+  editBtn: { padding: "5px 12px", borderRadius: 11, border: "1.5px solid var(--line)", background: "transparent", color: "var(--saffron-d)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.02em" },
+  playWrap: { position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 },
+  glow: { position: "absolute", top: -14, left: "50%", marginLeft: -85, width: 170, height: 170, borderRadius: "50%", background: "radial-gradient(circle, oklch(0.78 0.14 62 / 0.55) 0%, transparent 68%)", pointerEvents: "none" },
+  play: { position: "relative", width: 132, height: 132, borderRadius: "50%", border: "none", cursor: "pointer", display: "grid", placeItems: "center", background: "radial-gradient(circle at 50% 32%, var(--saffron) 0%, var(--saffron-d) 100%)", boxShadow: "0 18px 44px oklch(0.6 0.16 48 / 0.4), inset 0 2px 6px oklch(0.85 0.12 80 / 0.6), inset 0 -10px 22px oklch(0.5 0.14 44 / 0.45)", transition: "transform 140ms ease" },
+  playLabel: { fontSize: 12.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--faint)", fontWeight: 600 },
+  controls: { display: "flex", flexDirection: "column", gap: 14 },
+  controlLabel: { fontSize: 12.5, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 700, marginBottom: 7 },
+  cardRow: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 9 },
+  card: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "13px 4px 11px", borderRadius: 18, border: "1.5px solid var(--line)", cursor: "pointer", transition: "all 150ms ease", fontFamily: "inherit" },
+  cardName: { fontSize: 14, fontWeight: 700, letterSpacing: "0.01em" },
+  cardNote: { fontSize: 10.5, fontWeight: 500 },
+  deleteDot: { position: "absolute", top: 4, right: 7, fontSize: 16, lineHeight: 1, fontWeight: 700, cursor: "pointer" },
+  tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
+  tempoRow: { display: "flex", alignItems: "center", gap: 10 },
+  tapBtn: { flexShrink: 0, padding: "8px 16px", borderRadius: 12, border: "1.5px solid var(--saffron)", background: "var(--surface)", color: "var(--saffron-d)", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.04em" },
+  lockBtn: { flexShrink: 0, width: 36, height: 34, padding: 0, borderRadius: 12, border: "1.5px solid var(--saffron)", fontSize: 15, lineHeight: 1, cursor: "pointer", fontFamily: "inherit", display: "grid", placeItems: "center" },
+  bpmReadout: { display: "flex", alignItems: "baseline", gap: 5 },
+  bpmNum: { fontFamily: '"Marcellus", serif', fontSize: 28, color: "var(--saffron-d)", lineHeight: 1 },
+  volNum: { fontFamily: '"Marcellus", serif', fontSize: 22, color: "var(--saffron-d)", lineHeight: 1 },
+  bpmUnit: { fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: "var(--faint)" },
+  scaleRow: { display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--faint)", fontWeight: 600, marginTop: 2, letterSpacing: "0.04em" },
+  createBtn: { marginTop: 2, padding: "15px", borderRadius: 16, border: "1.5px dashed var(--saffron)", background: "transparent", color: "var(--saffron-d)", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.03em" },
+};
+
+export default App;
