@@ -296,9 +296,9 @@ const st = {
   title: { fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", margin: 0, color: "var(--ink-primary)" },
   feelLabel: { fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 400, marginBottom: "var(--space-2)" },
   feelRow: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 },
-  feelBtn: { padding: "11px 6px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", transition: "all 150ms ease" },
+  feelBtn: { minHeight: 44, padding: "0 6px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", transition: "all 150ms ease" },
   lengthRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 16, border: "var(--rule-hairline)", background: "var(--surface-raised)" },
-  groupBtn: { flexShrink: 0, minWidth: 84, padding: "10px 14px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
+  groupBtn: { flexShrink: 0, minWidth: 84, minHeight: 44, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
   lengthReadout: { display: "flex", flexDirection: "column", alignItems: "center", gap: 1, lineHeight: 1 },
   lengthNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
   lengthLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, color: "var(--ink-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" },
@@ -323,7 +323,7 @@ const st = {
   saveRow: { display: "flex", gap: 10, marginTop: 2 },
   nameInput: { flex: 1, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
   saveBtn: { padding: "12px 24px", borderRadius: 14, border: "1px solid var(--accent-action)", background: "var(--accent-action)", color: "var(--on-action)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
-  cancelBtn: { marginTop: -6, padding: "11px", borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.03em" },
+  cancelBtn: { marginTop: -6, minHeight: 44, padding: "0 11px", borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.03em" },
 };
 
 export default BeatEditor;

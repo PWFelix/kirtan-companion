@@ -238,20 +238,25 @@ function App() {
           {allBeats.map(b => {
             const sel = b.id === beatId;
             const isCustom = b.note === "Custom";
+            // The row is a div, not a button: nesting the delete button inside
+            // a row-button is invalid HTML and confuses screen readers. The
+            // name area is the keyboard-reachable select control; the whole
+            // row stays tappable via the div's onClick (delete stops
+            // propagation so it never also selects).
             return (
-              <button key={b.id} onClick={() => selectBeat(b)}
+              <div key={b.id} onClick={() => selectBeat(b)}
                 style={{ ...st.beatRow, borderColor: sel ? "var(--accent-action)" : "var(--rule)" }}>
                 <BeatGlyph pattern={b.dayan} />
-                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <button onClick={() => selectBeat(b)} aria-pressed={sel} style={st.beatRowSelect}>
                   <span style={st.beatRowName}>{b.name}</span>
                   <span style={st.beatRowMeta}>{b.steps}-step · {b.note}</span>
-                </div>
+                </button>
                 {isCustom && (
-                  <span onClick={(e) => deleteCustomBeat(b.id, e)} role="button" aria-label={`Delete ${b.name}`}
-                    style={{ ...st.deleteDot, position: "static", color: "var(--ink-secondary)" }}>×</span>
+                  <button onClick={(e) => deleteCustomBeat(b.id, e)} aria-label={`Delete ${b.name}`}
+                    style={st.deleteBtn}>×</button>
                 )}
                 <RadioDot selected={sel} />
-              </button>
+              </div>
             );
           })}
         </section>
@@ -391,16 +396,17 @@ const st = {
   subtitle: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
   stage: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-4)", minHeight: 0, padding: "10px 0" },
   chakraWrap: { flex: 1, minHeight: 0, width: "100%", maxWidth: 360, display: "flex", alignItems: "center", justifyContent: "center" },
-  nowPlaying: { flexShrink: 0, display: "flex", alignItems: "baseline", justifyContent: "center", gap: "var(--space-3)" },
+  nowPlaying: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-3)" },
   nowPlayingName: { fontFamily: "var(--font-display)", fontSize: 18, color: "var(--ink-primary)", letterSpacing: "0.01em" },
-  editBtn: { padding: "5px 12px", borderRadius: 11, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em" },
+  editBtn: { minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em", display: "grid", placeItems: "center" },
   controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-6)" },
   controlLabel: { fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 400, marginBottom: "var(--space-3)" },
-  deleteDot: { flexShrink: 0, fontSize: 16, lineHeight: 1, fontWeight: 700, cursor: "pointer" },
 
   // ── Beats page (library-first list) ──
   beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
   beatRow: { display: "flex", alignItems: "center", gap: "var(--space-4)", padding: "14px 16px", borderRadius: 18, border: "var(--rule-hairline)", background: "var(--surface-raised)", cursor: "pointer", textAlign: "left", width: "100%" },
+  beatRowSelect: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, padding: 0, border: "none", background: "transparent", textAlign: "left", cursor: "pointer" },
+  deleteBtn: { flexShrink: 0, width: 40, height: 44, margin: "-8px -6px", border: "none", background: "transparent", color: "var(--ink-secondary)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 12 },
   beatRowName: { fontFamily: "var(--font-display)", fontSize: 17, letterSpacing: "0.01em", color: "var(--ink-primary)" },
   beatRowMeta: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 500, color: "var(--ink-secondary)" },
   startBtn: { flexShrink: 0, width: "100%", padding: "16px", borderRadius: 18, border: "none", background: "var(--accent-action)", color: "var(--on-action)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 800, letterSpacing: "0.02em", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 },
@@ -412,8 +418,8 @@ const st = {
   navActive: { background: "var(--accent-action)", color: "var(--on-action)" },
   tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  tapBtn: { flexShrink: 0, padding: "8px 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
-  lockBtn: { flexShrink: 0, height: 34, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
+  tapBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
+  lockBtn: { flexShrink: 0, minHeight: 44, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
   bpmReadout: { display: "flex", alignItems: "baseline", gap: 5 },
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
   volNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.375rem", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
