@@ -48,14 +48,17 @@
   --accent-action:      var(--kumkum);           /* primary buttons, active nav */
   --on-action:          oklch(0.985 0.01 80);    /* warm white text on kumkum */
 
-  /* ── Type families ── */
-  --font-display: "Marcellus", serif;            /* beat names, section labels, bols */
+  /* ── Type families ──
+     Marcellus has no bold and goes mushy at small sizes, so it is reserved
+     for generous display settings; small uppercase labels use the body
+     sans at semibold instead. */
+  --font-display: "Marcellus", serif;            /* beat names, screen titles, bols */
   --font-body:    "Nunito Sans", system-ui, sans-serif;
   --font-numeric: "Nunito Sans", system-ui, sans-serif; /* pair with tabular-nums */
 
   /* ── Type scale ── */
   --text-display-lg: 1.625rem;  /* beat / screen title */
-  --text-display-md: 0.78rem;   /* section labels (uppercase + letter-spacing) */
+  --text-display-md: 0.78rem;   /* section labels (uppercase sans, semibold, tracked) */
   --text-body-md:    0.95rem;   /* default body */
   --text-body-sm:    0.84rem;   /* captions */
   --text-body-xs:    0.75rem;   /* utility / meta — 12px floor for legibility */

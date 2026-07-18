@@ -392,7 +392,7 @@ const st = {
   nowPlayingName: { fontFamily: "var(--font-display)", fontSize: 18, color: "var(--ink-primary)", letterSpacing: "0.01em" },
   editBtn: { minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em", display: "grid", placeItems: "center" },
   controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-6)" },
-  controlLabel: { fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 400, marginBottom: "var(--space-3)" },
+  controlLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-3)" },
 
   // ── Beats page (library-first list) ──
   beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
