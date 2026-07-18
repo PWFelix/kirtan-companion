@@ -169,7 +169,7 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
                   background: bg,
                   borderColor: active ? "var(--accent-saffron)" : "var(--rule)",
                   borderWidth: active ? 2 : 1,
-                  color: v ? "var(--surface-paper)" : "var(--ink-secondary)",
+                  color: v ? "var(--ink-primary)" : "var(--ink-secondary)",
                   // First cell of each group is a scroll-snap point on the
                   // narrow-screen block scroller (inert without a snap
                   // container, so desktop is unaffected).
@@ -204,9 +204,9 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
             return (
               <button key={f.cpg} onClick={() => changeFeel(f.cpg)} aria-pressed={sel}
                 style={{ ...st.feelBtn,
-                  background: sel ? "var(--accent-saffron)" : "transparent",
-                  borderColor: sel ? "var(--accent-saffron)" : "var(--rule)",
-                  color: sel ? "var(--ink-primary)" : "var(--ink-secondary)" }}>
+                  background: sel ? "var(--accent-action)" : "transparent",
+                  borderColor: sel ? "var(--accent-action)" : "var(--rule)",
+                  color: sel ? "var(--on-action)" : "var(--ink-secondary)" }}>
                 {f.label}
               </button>
             );
@@ -300,7 +300,7 @@ const st = {
   lengthRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 16, border: "var(--rule-hairline)", background: "var(--surface-raised)" },
   groupBtn: { flexShrink: 0, minWidth: 84, padding: "10px 14px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
   lengthReadout: { display: "flex", flexDirection: "column", alignItems: "center", gap: 1, lineHeight: 1 },
-  lengthNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--accent-saffron)", lineHeight: 1 },
+  lengthNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
   lengthLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, color: "var(--ink-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" },
   hint: { textAlign: "center", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", margin: 0 },
   grid: { display: "flex", flexDirection: "column", gap: 18, background: "var(--surface-raised)", borderRadius: 18, padding: 14, border: "var(--rule-hairline)" },
@@ -314,15 +314,15 @@ const st = {
   tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
   controlLabel: { fontFamily: "var(--font-display)", fontSize: "var(--text-display-md)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 400, marginBottom: "var(--space-2)" },
   bpmReadout: { display: "flex", alignItems: "baseline", gap: 5 },
-  bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--accent-saffron)", lineHeight: 1 },
+  bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--ink-secondary)" },
   actions: { display: "flex", gap: 10 },
   actionBtn: { flex: 1, padding: "13px", borderRadius: 14, fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", border: "var(--rule-hairline)" },
-  previewBtn: { background: "var(--accent-saffron)", color: "var(--ink-primary)", borderColor: "var(--accent-saffron)" },
+  previewBtn: { background: "var(--accent-action)", color: "var(--on-action)", borderColor: "var(--accent-action)" },
   clearBtn: { background: "transparent", color: "var(--ink-primary)" },
   saveRow: { display: "flex", gap: 10, marginTop: 2 },
   nameInput: { flex: 1, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
-  saveBtn: { padding: "12px 24px", borderRadius: 14, border: "1px solid var(--accent-saffron)", background: "var(--accent-saffron)", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
+  saveBtn: { padding: "12px 24px", borderRadius: 14, border: "1px solid var(--accent-action)", background: "var(--accent-action)", color: "var(--on-action)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
   cancelBtn: { marginTop: -6, padding: "11px", borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.03em" },
 };
 

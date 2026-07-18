@@ -83,29 +83,29 @@ body {
 .kc-screen { height: 100%; overflow: hidden; }
 @supports (height: 100dvh) { .kc-screen { height: 100dvh; } }
 
-/* ── Tempo slider — warm saffron track + soft thumb ── */
+/* ── Tempo slider — kumkum action track + soft thumb ── */
 input[type="range"].kc-range {
   -webkit-appearance: none; appearance: none;
   width: 100%; height: 34px; background: transparent; cursor: pointer; margin: 0;
 }
 input[type="range"].kc-range::-webkit-slider-runnable-track {
   height: 8px; border-radius: 99px;
-  background: linear-gradient(90deg, var(--saffron) 0%, var(--saffron) var(--fill,50%), var(--cell) var(--fill,50%), var(--cell) 100%);
+  background: linear-gradient(90deg, var(--accent-action) 0%, var(--accent-action) var(--fill,50%), var(--cell) var(--fill,50%), var(--cell) 100%);
 }
 input[type="range"].kc-range::-moz-range-track {
   height: 8px; border-radius: 99px; background: var(--cell);
 }
 input[type="range"].kc-range::-moz-range-progress {
-  height: 8px; border-radius: 99px; background: var(--saffron);
+  height: 8px; border-radius: 99px; background: var(--accent-action);
 }
 input[type="range"].kc-range::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 28px; height: 28px; margin-top: -10px; border-radius: 50%;
-  background: var(--surface-paper); border: 2px solid var(--accent-saffron);
+  background: var(--surface-paper); border: 2px solid var(--accent-action);
 }
 input[type="range"].kc-range::-moz-range-thumb {
   width: 28px; height: 28px; border-radius: 50%;
-  background: var(--surface-paper); border: 2px solid var(--accent-saffron);
+  background: var(--surface-paper); border: 2px solid var(--accent-action);
 }
 
 /* ── Tal chakra (circular BeatIndicator) ──
@@ -153,15 +153,17 @@ input[type="range"].kc-range::-moz-range-thumb {
 .kc-chakra .kc-sam { fill: var(--accent-saffron); }
 .kc-chakra .kc-ring { outline: none; }
 .kc-chakra .kc-muted { opacity: 0.4; }
-/* Play/pause centre button — the primary action, sitting where the eye rests. */
+/* Play/pause centre button — the primary action, sitting where the eye rests.
+   Kumkum (not saffron) so it reads as TAPPABLE, distinct from the saffron
+   step markers around it. */
 .kc-chakra .kc-play-icon {
-  fill: var(--accent-saffron);
+  fill: var(--accent-action);
   opacity: 0.9;
   transition: opacity 0.15s ease;
 }
 .kc-chakra .kc-pause-icon {
-  fill: var(--accent-saffron);
-  opacity: 0.45;                  /* recedes into the background during playback */
+  fill: var(--accent-action);
+  opacity: 0.55;                  /* recedes during playback, but stays findable */
   transition: opacity 0.15s ease;
 }
 .kc-chakra .kc-play-btn:hover .kc-play-icon,
