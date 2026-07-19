@@ -34,6 +34,21 @@ function loadSavedBeats() {
 // Beats and Editor are rectangular labelled buttons in the middle. The active
 // destination is filled saffron. Switching pages does NOT stop playback (except
 // the editor, which takes over the engine) so you can browse while a beat plays.
+// Padlock for the tempo lock — open when free, closed when locked. An icon
+// (not the words Lock/Locked) so the button's size never changes with state,
+// which would resize the flexible slider beside it.
+function LockIcon({ locked }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      {locked
+        ? <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        : <path d="M8 11V7a4 4 0 0 1 7.7-1.5" />}
+    </svg>
+  );
+}
+
 function HomeIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -368,7 +383,7 @@ function App() {
               color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
             aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
             aria-pressed={tempoLocked}>
-            {tempoLocked ? "Locked" : "Lock"}
+            <LockIcon locked={tempoLocked} />
           </button>
           <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
           <button onClick={togglePlay} disabled={!ready}
@@ -437,7 +452,7 @@ function App() {
                 color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
               aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
               aria-pressed={tempoLocked}>
-              {tempoLocked ? "Locked" : "Lock"}
+              <LockIcon locked={tempoLocked} />
             </button>
             <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
           </div>
@@ -505,7 +520,7 @@ const st = {
   tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   tapBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
-  lockBtn: { flexShrink: 0, minHeight: 44, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
+  lockBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
 
