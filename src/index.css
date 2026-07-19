@@ -196,6 +196,144 @@ input[type="range"].kc-range::-moz-range-thumb {
   .kc-chakra [data-active="true"] .kc-marker { transform: none; }
 }
 
+/* ── BeatStrip (.ks-*) — the straight-line visualizer ──
+   Layout: [labels | scroller] on row 1, loop-position bar on row 2.
+   Cells live in per-lane grids of minmax(cellmin, 1fr) columns; the
+   track is width:100% + min-width:max-content, which gives exactly the
+   agreed behaviour for free: short beats stretch to fill, long beats
+   overflow into horizontal scroll. Marks: filled = open, ring = closed,
+   dot = rest, each in its lane's colour; the SOUNDING mark turns syahi
+   (see the token header for why black = sound). */
+.ks-strip {
+  --ks-cellh: 46px;
+  --ks-cellmin: 40px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-2);
+  row-gap: 6px;
+  width: 100%;
+}
+
+.ks-labelcol { display: flex; flex-direction: column; gap: var(--space-2); }
+.ks-labelspacer { height: 18px; }  /* keeps labels level with lanes (matches .ks-numbers) */
+.ks-lanelabel {
+  height: var(--ks-cellh);
+  padding: 0 2px;
+  border: none; background: transparent; cursor: pointer;
+  font-family: var(--font-body); font-size: var(--text-body-xs);
+  font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ks-lanecolor);
+  transition: opacity 150ms ease;
+}
+.ks-lanelabel:disabled { cursor: default; }
+.ks-lanelabel[aria-pressed="true"] { opacity: 0.35; }
+
+.ks-scroller {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;            /* the loop bar replaces the scrollbar */
+  position: relative;
+  grid-column: 2;
+}
+.ks-scroller::-webkit-scrollbar { display: none; }
+
+.ks-track {
+  position: relative;
+  display: flex; flex-direction: column; gap: var(--space-2);
+  width: 100%;
+  min-width: max-content;           /* long beats push wider → scroll */
+}
+
+.ks-numbers, .ks-lane {
+  display: grid;
+  grid-template-columns: repeat(var(--ks-steps), minmax(var(--ks-cellmin), 1fr));
+  gap: 3px;
+}
+
+.ks-numbers { height: 18px; align-items: end; }
+.ks-num {
+  text-align: center;
+  font-family: var(--font-body); font-size: 11px; font-weight: 400;
+  color: var(--syahi-soft); opacity: 0.5;
+}
+.ks-num[data-strong="true"] { font-weight: 700; opacity: 0.9; }
+.ks-num[data-sam="true"] { color: var(--clay); }
+
+.ks-lane { transition: opacity 180ms ease; }
+.ks-lanemuted { opacity: 0.3; }
+
+.ks-cell {
+  height: var(--ks-cellh);
+  min-width: 0;
+  background: var(--head-worn);
+  border-radius: 9px;
+  display: grid; place-items: center; align-content: center;
+  gap: 1px;
+  position: relative;
+}
+.ks-cell[data-sam="true"] { box-shadow: inset 3px 0 0 var(--syahi); }
+.ks-cell[role="button"] { cursor: pointer; }
+
+/* Marks — the stroke glyphs. Sized for arm's-length reading. */
+.ks-mark {
+  display: block;
+  transition: transform 90ms ease, background-color 90ms ease, border-color 90ms ease;
+}
+.ks-open   { width: 18px; height: 18px; border-radius: 50%; background: var(--ks-lanecolor); }
+.ks-closed { width: 18px; height: 18px; border-radius: 50%; border: 3.5px solid var(--ks-lanecolor); }
+.ks-rest   { width: 6px; height: 6px; border-radius: 50%; background: var(--rule); }
+
+/* The sounding cell: mark turns syahi-black and swells. */
+.ks-cell[data-active="true"] .ks-open,
+.ks-cell[data-active="true"] .ks-rest { background: var(--syahi); transform: scale(1.3); }
+.ks-cell[data-active="true"] .ks-closed { border-color: var(--syahi); transform: scale(1.3); }
+
+.ks-bol {
+  font-family: var(--font-body); font-size: 10px; font-weight: 600;
+  color: var(--syahi-soft); line-height: 1;
+}
+
+/* Playhead line — positioned by phase (left %) from the rAF loop. */
+.ks-playhead {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  width: 2px; margin-left: -1px;
+  background: var(--syahi);
+  pointer-events: none;
+}
+
+/* Loop-position bar — appears only when the strip scrolls. */
+.ks-loopbar {
+  grid-column: 2;
+  height: 4px; border-radius: 99px;
+  background: var(--head-sunken);
+  position: relative;
+  display: none;
+}
+.ks-loopbar[data-show="true"] { display: block; }
+.ks-loopwin {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  border-radius: 99px;
+  background: var(--strap);
+}
+
+/* Mini mode — display-only rows for the Beats page. */
+.ks-mini { --ks-cellh: 16px; --ks-cellmin: 9px; grid-template-columns: 1fr; row-gap: 3px; }
+.ks-mini .ks-scroller { grid-column: 1; overflow: hidden; }
+.ks-mini .ks-track { gap: 3px; min-width: 0; }
+.ks-mini .ks-cell { background: transparent; border-radius: 0; }
+.ks-mini .ks-cell[data-sam="true"] { box-shadow: none; }
+.ks-mini .ks-open   { width: 8px; height: 8px; }
+.ks-mini .ks-closed { width: 8px; height: 8px; border-width: 2px; }
+.ks-mini .ks-rest   { width: 3px; height: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-mark { transition: background-color 90ms ease, border-color 90ms ease; }
+  .ks-cell[data-active="true"] .ks-mark { transform: none; }
+  .ks-playhead { display: none; }   /* cell lighting carries the position */
+}
+
 /* ── BeatEditor grid — narrow-screen horizontal scroll ──
    Below 480px the editor's `1fr` cell tracks shrink well under the 44px touch
    target, so each block becomes ONE horizontal scroll container: the numbers,
