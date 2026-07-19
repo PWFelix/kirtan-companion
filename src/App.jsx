@@ -7,6 +7,23 @@ import BeatStrip from "./BeatStrip.jsx";
 const MIN_BPM = 40, MAX_BPM = 200;
 const SAVED_KEY = "kirtan-custom-beats";
 
+// Landscape = rotated phones, propped tablets, and most laptop windows.
+// (Desktop monitors taller than 900px keep the centred portrait column.)
+const LANDSCAPE_Q = "(orientation: landscape) and (max-height: 900px)";
+
+function useLandscape() {
+  const [landscape, setLandscape] = useState(
+    () => window.matchMedia(LANDSCAPE_Q).matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(LANDSCAPE_Q);
+    const onChange = (e) => setLandscape(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return landscape;
+}
+
 function loadSavedBeats() {
   try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || []; }
   catch (e) { return []; }
@@ -79,6 +96,7 @@ function App() {
   const engineRef = useRef(null);
   if (engineRef.current === null) engineRef.current = new KirtanEngine();
   const engine = engineRef.current;
+  const isLandscape = useLandscape();
 
   const [view, setView] = useState("home"); // "home" | "beats" | "editor" | "settings"
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
@@ -298,6 +316,82 @@ function App() {
   const fillPct = ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)) * 100;
   const volPct  = volume * 100;
 
+  const playIcon = playing ? (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="5" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
+      <rect x="14" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
+    </svg>
+  ) : (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 4.5 20 12 8 19.5 Z" fill="currentColor" />
+    </svg>
+  );
+
+  // ── Home, landscape: the propped-up layout. The strip gets the full
+  //    width and taller cells; everything else compresses into a
+  //    transport rail (tempo cluster left, play block right). ──
+  if (isLandscape) {
+    return (
+      <div className="kc-screen" style={st.landScreen}>
+        <div style={st.landHead}>
+          <span style={st.landName}>{beat.name}</span>
+          <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={openEditBeat} style={st.editBtn}>
+            {isCustomBeat(beat.id) ? "Edit" : "Customize"}
+          </button>
+        </div>
+
+        <main style={st.landStripWrap}>
+          <BeatStrip
+            beat={beat}
+            step={step}
+            playing={playing}
+            getPhase={getPhase}
+            mutedEnds={mutedEnds}
+            onToggleMute={toggleMute}
+          />
+        </main>
+
+        <div style={st.landRail}>
+          <div style={st.landRailLeft}>
+            <div style={st.tempoRow}>
+              <span style={st.landBpmNum}>{bpm}</span>
+              <span style={st.bpmUnit}>BPM</span>
+              <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
+                onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
+                style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
+                aria-label="Tempo" />
+              <button onClick={() => setTempoLocked(v => !v)}
+                style={{ ...st.lockBtn,
+                  background: tempoLocked ? "var(--clay)" : "transparent",
+                  color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
+                aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
+                aria-pressed={tempoLocked}>
+                {tempoLocked ? "Locked" : "Lock"}
+              </button>
+              <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
+            </div>
+            <div style={st.volRow}>
+              <span style={st.volLabel}>Volume</span>
+              <input className="kc-range" type="range" min={0} max={100} value={volPct}
+                onChange={(e) => changeVolume(Number(e.target.value) / 100)}
+                style={{ "--fill": volPct + "%", flex: 1 }} aria-label="Volume" />
+            </div>
+          </div>
+          <button onClick={togglePlay} disabled={!ready}
+            style={{ ...st.landPlayBtn, opacity: ready ? 1 : 0.5 }}
+            aria-label={playing ? "Pause" : "Play"}>
+            {playIcon}
+            {playing ? "Pause" : "Play"}
+          </button>
+        </div>
+
+        <div style={st.landNavWrap}>{bottomNav}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="kc-screen" style={screenFixed}>
       {/* Small wordmark only — the full brand moment moves to the splash
@@ -372,16 +466,7 @@ function App() {
       <button onClick={togglePlay} disabled={!ready}
         style={{ ...st.playBtn, opacity: ready ? 1 : 0.5 }}
         aria-label={playing ? "Pause" : "Play"}>
-        {playing ? (
-          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="5" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
-            <rect x="14" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
-          </svg>
-        ) : (
-          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 4.5 20 12 8 19.5 Z" fill="currentColor" />
-          </svg>
-        )}
+        {playIcon}
         {playing ? "Pause" : "Play"}
       </button>
 
@@ -432,6 +517,18 @@ const st = {
   lockBtn: { flexShrink: 0, minHeight: 44, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
+
+  // ── Home, landscape (the propped-up layout) ──
+  landScreen: { width: "100%", maxWidth: 1100, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-4) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-3) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-3)" },
+  landHead: { flexShrink: 0, display: "flex", alignItems: "baseline", gap: "var(--space-3)" },
+  landName: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "1.375rem", color: "var(--syahi)", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  // Taller cells: the strip is the whole point of this orientation.
+  landStripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", "--ks-cellh": "clamp(46px, 16vh, 72px)" },
+  landRail: { flexShrink: 0, display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--space-4)", alignItems: "stretch" },
+  landRailLeft: { display: "flex", flexDirection: "column", gap: "var(--space-2)", minWidth: 0 },
+  landBpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.625rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
+  landPlayBtn: { width: 150, borderRadius: 16, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
+  landNavWrap: { flexShrink: 0, width: "100%", maxWidth: 430, alignSelf: "center" },
 };
 
 export default App;
