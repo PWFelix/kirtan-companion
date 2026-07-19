@@ -3,6 +3,7 @@ import { KirtanEngine } from "./engine/KirtanEngine.js";
 import { BEATS } from "./data/beats.js";
 import BeatEditor from "./BeatEditor.jsx";
 import BeatStrip from "./BeatStrip.jsx";
+import Splash from "./Splash.jsx";
 
 const MIN_BPM = 40, MAX_BPM = 200;
 const SAVED_KEY = "kirtan-custom-beats";
@@ -140,6 +141,7 @@ function App() {
   const isLandscape = useLandscape();
 
   const [view, setView] = useState("home"); // "home" | "beats" | "editor" | "settings"
+  const [entered, setEntered] = useState(false); // splash shown until Begin
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
 
   const [customBeats, setCustomBeats] = useState(loadSavedBeats);
@@ -265,6 +267,17 @@ function App() {
     setCustomBeats(updated);
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
     if (beatId === id) selectBeat(BEATS[0]);
+  }
+
+  // The Begin tap does double duty: it satisfies the browser's "no sound
+  // before a user gesture" rule (engine.unlock) on the way into the app.
+  async function handleBegin() {
+    await engine.unlock();
+    setEntered(true);
+  }
+
+  if (!entered) {
+    return <Splash onBegin={handleBegin} ready={ready} />;
   }
 
   // Persistent tab bar + the fixed (non-scrolling) screen frame shared by the
