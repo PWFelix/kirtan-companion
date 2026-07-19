@@ -8,6 +8,13 @@ import Wordmark from "./Wordmark.jsx";
 
 const MIN_BPM = 40, MAX_BPM = 200;
 const SAVED_KEY = "kirtan-custom-beats";
+const CATS_KEY = "kirtan-user-categories";
+const ACTIVE_CAT_KEY = "kirtan-active-category";
+
+function loadUserCategories() {
+  try { return JSON.parse(localStorage.getItem(CATS_KEY)) || []; }
+  catch { return []; }
+}
 
 // Landscape = rotated phones, propped tablets, and most laptop windows.
 // (Desktop monitors taller than 900px keep the centred portrait column.)
@@ -119,6 +126,19 @@ function InfoIcon() {
   );
 }
 
+// Membership check for the add-beats sheet — square, clay tick when in.
+function CheckDot({ checked }) {
+  return (
+    <span aria-hidden="true" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 8,
+      display: "grid", placeItems: "center", fontSize: 15, fontWeight: 800, lineHeight: 1,
+      border: `2px solid ${checked ? "var(--clay)" : "var(--rule)"}`,
+      background: checked ? "var(--clay)" : "transparent",
+      color: "var(--on-clay)" }}>
+      {checked ? "✓" : ""}
+    </span>
+  );
+}
+
 // Selection radio for the beat list — hollow ring, saffron dot when chosen.
 function RadioDot({ selected }) {
   return (
@@ -140,6 +160,18 @@ function App() {
   const [entered, setEntered] = useState(false); // splash shown until Begin
   const [detailBeat, setDetailBeat] = useState(null); // beat shown in the Beats-page info sheet
   const [pickerOpen, setPickerOpen] = useState(false); // Home quick-pick sheet
+
+  // ── Categories ──
+  // Two are always present: "builtin" and "custom". User categories are
+  // ordered lists of beat ids — each one is a kirtan progression. The
+  // ACTIVE category is the one the current beat was chosen from: Home's
+  // chevrons and quick-pick cycle within it.
+  const [categories, setCategories] = useState(loadUserCategories);
+  const [activeCat, setActiveCat] = useState(() => localStorage.getItem(ACTIVE_CAT_KEY) || "builtin");
+  const [browseTab, setBrowseTab] = useState("builtin"); // which tab the Beats page shows
+  const [createCatOpen, setCreateCatOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [addBeatsOpen, setAddBeatsOpen] = useState(false); // add-beats sheet for the browsed category
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
 
   const [customBeats, setCustomBeats] = useState(loadSavedBeats);
@@ -203,19 +235,84 @@ function App() {
     engine.start();
   }
 
-  function selectBeat(b) {
+  function saveCategories(updated) {
+    setCategories(updated);
+    try { localStorage.setItem(CATS_KEY, JSON.stringify(updated)); } catch { /* storage full/blocked */ }
+  }
+
+  /** The ordered beats of a category ("builtin" | "custom" | user cat id). */
+  function categoryBeats(catId) {
+    if (catId === "builtin") return BEATS;
+    if (catId === "custom") return customBeats;
+    const c = categories.find(c => c.id === catId);
+    if (!c) return allBeats;
+    return c.beatIds.map(id => allBeats.find(b => b.id === id)).filter(Boolean);
+  }
+  function catName(catId) {
+    if (catId === "builtin") return "Built in";
+    if (catId === "custom") return "Your beats";
+    return categories.find(c => c.id === catId)?.name ?? "Beats";
+  }
+
+  // Selecting a beat FROM a category makes that category the active
+  // cycling context for Home's chevrons and quick-pick.
+  function selectBeat(b, fromCat) {
     setBeatId(b.id);
     engine.setBeat(b);
     if (!tempoLocked) { setBpm(b.bpm); engine.setBpm(b.bpm); }
+    if (fromCat) {
+      setActiveCat(fromCat);
+      try { localStorage.setItem(ACTIVE_CAT_KEY, fromCat); } catch { /* non-fatal */ }
+    }
   }
 
-  // Home chevrons: step to the previous/next beat in list order (wraps).
-  // Switches the loop live if playing — this is the mid-kirtan "take it
-  // up a step" move.
+  // Home chevrons: step through the ACTIVE category in its order (wraps).
+  // Switches the loop live if playing — the mid-kirtan "next step in the
+  // progression" move.
   function cycleBeat(dir) {
-    const i = allBeats.findIndex(b => b.id === beatId);
-    const next = allBeats[(i + dir + allBeats.length) % allBeats.length];
+    let list = categoryBeats(activeCat);
+    if (list.length === 0) list = allBeats;
+    const i = list.findIndex(b => b.id === beatId);
+    const next = i === -1 ? list[0] : list[(i + dir + list.length) % list.length];
     selectBeat(next);
+  }
+
+  function createCategory() {
+    const name = newCatName.trim();
+    if (!name) return;
+    const cat = { id: "cat_" + Date.now(), name, beatIds: [] };
+    saveCategories([...categories, cat]);
+    setNewCatName("");
+    setCreateCatOpen(false);
+    setBrowseTab(cat.id);
+  }
+  function deleteCategory(catId) {
+    const c = categories.find(c => c.id === catId);
+    if (!c) return;
+    if (!window.confirm(`Delete the category “${c.name}”? (The beats themselves are kept.)`)) return;
+    saveCategories(categories.filter(c => c.id !== catId));
+    if (browseTab === catId) setBrowseTab("builtin");
+    if (activeCat === catId) {
+      setActiveCat("builtin");
+      try { localStorage.setItem(ACTIVE_CAT_KEY, "builtin"); } catch { /* non-fatal */ }
+    }
+  }
+  function toggleBeatInCategory(catId, id) {
+    saveCategories(categories.map(c => c.id !== catId ? c : {
+      ...c,
+      beatIds: c.beatIds.includes(id) ? c.beatIds.filter(x => x !== id) : [...c.beatIds, id],
+    }));
+  }
+  // Reorder within a progression: swap the beat one slot up/down.
+  function moveInCategory(catId, id, dir) {
+    saveCategories(categories.map(c => {
+      if (c.id !== catId) return c;
+      const ids = [...c.beatIds];
+      const i = ids.indexOf(id), j = i + dir;
+      if (i === -1 || j < 0 || j >= ids.length) return c;
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+      return { ...c, beatIds: ids };
+    }));
   }
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
@@ -257,7 +354,7 @@ function App() {
       try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
-    selectBeat(newBeat); // reflect the saved beat in the engine + main view (engine already stopped)
+    selectBeat(newBeat, "custom"); // reflect the saved beat in the engine + main view (engine already stopped)
   }
 
   // Open the editor blank (new beat).
@@ -288,7 +385,11 @@ function App() {
     const updated = customBeats.filter(b => b.id !== id);
     setCustomBeats(updated);
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
-    if (beatId === id) selectBeat(BEATS[0]);
+    // Drop the beat from any user categories referencing it.
+    if (categories.some(c => c.beatIds.includes(id))) {
+      saveCategories(categories.map(c => ({ ...c, beatIds: c.beatIds.filter(x => x !== id) })));
+    }
+    if (beatId === id) selectBeat(BEATS[0], "builtin");
   }
 
   // The Begin tap does double duty: it satisfies the browser's "no sound
@@ -332,19 +433,28 @@ function App() {
     // a row-button is invalid HTML and confuses screen readers. The name area
     // is the keyboard-reachable select control; the whole row stays tappable
     // via the div's onClick (inner buttons stop propagation).
+    const inUserCat = categories.some(c => c.id === browseTab);
     const renderRow = (b) => {
       const sel = b.id === beatId;
       return (
-        <div key={b.id} onClick={() => selectBeat(b)}
+        <div key={b.id} onClick={() => selectBeat(b, browseTab)}
           style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
           <div style={st.beatRowTop}>
-            <button onClick={() => selectBeat(b)} aria-pressed={sel} style={st.beatRowSelect}>
+            <button onClick={() => selectBeat(b, browseTab)} aria-pressed={sel} style={st.beatRowSelect}>
               <span style={st.beatRowName}>{b.name}</span>
               <span style={st.beatRowMeta}>{b.note} · {b.steps} cells</span>
             </button>
+            {inUserCat && (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); moveInCategory(browseTab, b.id, -1); }}
+                  aria-label={`Move ${b.name} earlier`} style={st.moveBtn}>↑</button>
+                <button onClick={(e) => { e.stopPropagation(); moveInCategory(browseTab, b.id, 1); }}
+                  aria-label={`Move ${b.name} later`} style={st.moveBtn}>↓</button>
+              </>
+            )}
             <button onClick={(e) => { e.stopPropagation(); setDetailBeat(b); }}
               aria-label={`About ${b.name}`} style={st.infoBtn}><InfoIcon /></button>
-            {isCustomBeat(b.id) && (
+            {!inUserCat && isCustomBeat(b.id) && (
               <button onClick={(e) => deleteCustomBeat(b.id, e)} aria-label={`Delete ${b.name}`}
                 style={st.deleteBtn}>×</button>
             )}
@@ -355,6 +465,9 @@ function App() {
       );
     };
 
+    const browsedCat = categories.find(c => c.id === browseTab);
+    const builtinGroups = [...new Set(BEATS.map(b => b.group))];
+
     return (
       <div className="kc-screen" style={screenFixed}>
         <header style={st.subHeader}>
@@ -362,14 +475,50 @@ function App() {
           <h1 style={st.subTitle}>Beats</h1>
           <span style={{ width: 44 }} aria-hidden="true" />
         </header>
+
+        {/* Category tabs: the two fixed ones, the user's own, and +. */}
+        <div style={st.catTabs}>
+          {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
+            <button key={id} onClick={() => setBrowseTab(id)}
+              style={{ ...st.catTab, ...(browseTab === id ? st.catTabActive : null) }}
+              aria-pressed={browseTab === id}>
+              {catName(id)}
+            </button>
+          ))}
+          <button onClick={() => setCreateCatOpen(true)} aria-label="New category"
+            style={{ ...st.catTab, flexShrink: 0 }}>+</button>
+        </div>
+
         <section style={st.beatList}>
-          <div style={st.sectionLabel}>Built in</div>
-          {BEATS.map(renderRow)}
-          <div style={{ ...st.sectionLabel, marginTop: "var(--space-4)" }}>Your beats</div>
-          {customBeats.length === 0 ? (
-            <p style={st.emptyHint}>Nothing here yet — beats you build or customize will appear here.</p>
-          ) : (
-            customBeats.map(renderRow)
+          {browseTab === "builtin" && builtinGroups.map(g => (
+            <div key={g} style={{ display: "contents" }}>
+              <div style={st.sectionLabel}>{g}</div>
+              {BEATS.filter(b => b.group === g).map(renderRow)}
+            </div>
+          ))}
+
+          {browseTab === "custom" && (
+            customBeats.length === 0
+              ? <p style={st.emptyHint}>Nothing here yet — beats you build or customize will appear here.</p>
+              : customBeats.map(renderRow)
+          )}
+
+          {browsedCat && (
+            <>
+              {categoryBeats(browsedCat.id).length === 0 && (
+                <p style={st.emptyHint}>
+                  An empty progression. Add beats in the order you want the kirtan
+                  to move through them — Home's ‹ › will follow that order.
+                </p>
+              )}
+              {categoryBeats(browsedCat.id).map(renderRow)}
+              <div style={st.catActions}>
+                <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>+ Add beats</button>
+                <button onClick={() => deleteCategory(browsedCat.id)} style={st.deleteCatBtn}>
+                  Delete category
+                </button>
+              </div>
+            </>
           )}
         </section>
         <button onClick={startBeat} disabled={!ready} style={{ ...st.startBtn, opacity: ready ? 1 : 0.5 }}>
@@ -405,6 +554,64 @@ function App() {
                   Start
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* New-category sheet — name it, create it, land in its tab. */}
+        {createCatOpen && (
+          <div style={st.sheetBackdrop} onClick={() => setCreateCatOpen(false)}>
+            <div style={st.sheet} role="dialog" aria-modal="true" aria-label="New category"
+              onClick={(e) => e.stopPropagation()}>
+              <div style={st.sheetHead}>
+                <h2 style={st.sheetName}>New category</h2>
+                <button onClick={() => setCreateCatOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
+              </div>
+              <p style={st.emptyHint}>
+                A category is a kirtan progression: an ordered set of beats that
+                Home's ‹ › will move through.
+              </p>
+              <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
+                <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") createCategory(); }}
+                  placeholder="e.g. Sunday feast kirtan" autoFocus style={st.catNameInput} />
+                <button onClick={createCategory} disabled={!newCatName.trim()}
+                  style={{ ...st.sheetStartBtn, flex: "0 0 auto", padding: "0 22px", opacity: newCatName.trim() ? 1 : 0.5 }}>
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add-beats sheet — toggle any beat in/out of the browsed
+            category; order of adding = order of the progression. */}
+        {addBeatsOpen && browsedCat && (
+          <div style={st.sheetBackdrop} onClick={() => setAddBeatsOpen(false)}>
+            <div style={st.sheet} role="dialog" aria-modal="true" aria-label={`Add beats to ${browsedCat.name}`}
+              onClick={(e) => e.stopPropagation()}>
+              <div style={st.sheetHead}>
+                <h2 style={st.sheetName}>Add to {browsedCat.name}</h2>
+                <button onClick={() => setAddBeatsOpen(false)} aria-label="Done" style={st.sheetClose}>×</button>
+              </div>
+              <div style={st.pickList}>
+                {allBeats.map(b => {
+                  const inCat = browsedCat.beatIds.includes(b.id);
+                  return (
+                    <button key={b.id} onClick={() => toggleBeatInCategory(browsedCat.id, b.id)}
+                      aria-pressed={inCat}
+                      style={{ ...st.pickRow, borderColor: inCat ? "var(--clay)" : "var(--rule)" }}>
+                      <div style={st.beatRowTop}>
+                        <span style={st.beatRowName}>{b.name}</span>
+                        <span style={{ ...st.beatRowMeta, flex: 1 }}>{b.note}</span>
+                        <CheckDot checked={inCat} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={() => setAddBeatsOpen(false)}
+                style={{ ...st.sheetStartBtn, marginTop: "var(--space-4)" }}>Done</button>
             </div>
           </div>
         )}
@@ -448,21 +655,23 @@ function App() {
     </svg>
   );
 
-  // Quick-pick sheet — shared by both Home orientations. Tap a row to
-  // switch (live, if playing) and dismiss.
+  // Quick-pick sheet — shared by both Home orientations. Lists the ACTIVE
+  // category (the current progression); tap a row to switch (live, if
+  // playing) and dismiss.
+  const pickerBeats = categoryBeats(activeCat).length ? categoryBeats(activeCat) : allBeats;
   const beatPicker = pickerOpen && (
     <div style={st.sheetBackdrop} onClick={() => setPickerOpen(false)}>
       <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Choose a beat"
         onClick={(e) => e.stopPropagation()}>
         <div style={st.sheetHead}>
-          <h2 style={st.sheetName}>Choose a beat</h2>
+          <h2 style={st.sheetName}>{catName(activeCat)}</h2>
           <button onClick={() => setPickerOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
         </div>
         <div style={st.pickList}>
-          {allBeats.map(b => {
+          {pickerBeats.map(b => {
             const sel = b.id === beatId;
             return (
-              <button key={b.id} onClick={() => { selectBeat(b); setPickerOpen(false); }}
+              <button key={b.id} onClick={() => { selectBeat(b, activeCat); setPickerOpen(false); }}
                 style={{ ...st.pickRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
                 <div style={st.beatRowTop}>
                   <span style={st.beatRowName}>{b.name}</span>
@@ -649,6 +858,14 @@ const st = {
   controlLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-3)" },
 
   // ── Beats page (library list) ──
+  catTabs: { flexShrink: 0, display: "flex", gap: "var(--space-2)", overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" },
+  catTab: { flexShrink: 0, minHeight: 40, padding: "0 16px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
+  catTabActive: { background: "var(--clay)", borderColor: "var(--clay)", color: "var(--on-clay)" },
+  catActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
+  addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
+  deleteCatBtn: { flexShrink: 0, minHeight: 46, padding: "0 14px", borderRadius: 14, border: "none", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 600, cursor: "pointer" },
+  moveBtn: { flexShrink: 0, width: 34, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 17, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 10 },
+  catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
   beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
   sectionLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--syahi-soft)" },
   emptyHint: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", lineHeight: 1.5 },
