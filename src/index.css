@@ -1,60 +1,45 @@
 /* ── Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Marcellus&family=Nunito+Sans:opsz,wght@6..12,400;6..12,500;6..12,600;6..12,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Hind+Madurai:wght@400;500;600;700&display=swap');
 
-/* ── Colour palette and design tokens ──
-   Two layers. The base palette (raw hues) is kept intact — BeatIndicator and
-   the beat data read these names directly. On top sits a SEMANTIC layer
-   (surface/ink/rule/accent + type + spacing) that the UI should prefer.
-   New shades are derived by holding hue+chroma and varying lightness only. */
+/* ── "The Instrument Itself" — design tokens ──
+   The app is built from the materials of a mridanga:
+     head  = the rawhide drumhead (warm ivory)     → surfaces
+     syahi = the black tuning paste at the centre  → ink, playhead, ACTIVE step
+     clay  = the fired shell (terracotta)          → actions
+     strap = the leather lacing (tan)              → accents, closed strokes
+   Everything is flat matte material colour: no gradients, no glass, no glow.
+   The one poetic inversion: the SOUNDING step turns syahi-black — on a real
+   head, the black circle is where the sound comes from. */
 :root {
-  /* ── Base palette (raw hues) ── */
-  --cream:    oklch(0.973 0.014 78);
-  --cream-2:  oklch(0.955 0.022 70);
-  --surface:  oklch(0.992 0.008 85);
-  --ink:      oklch(0.29 0.033 48);   /* near-espresso — ~12:1 on cream */
-  --muted:    oklch(0.51 0.032 55);   /* ≥4.5:1 on cream even at small sizes */
-  --faint:    oklch(0.70 0.028 62);
-  --saffron:  oklch(0.705 0.155 52);
-  --saffron-d:oklch(0.58 0.16 44);    /* dark enough to read as TEXT on cream */
-  --gold:     oklch(0.815 0.135 80);
-  --kumkum:   oklch(0.46 0.155 32);   /* deep madder red — actions; white text passes AA */
-  --cell:     oklch(0.905 0.026 72);
-  --line:     oklch(0.90 0.018 70);
-  --duggi:  oklch(0.58 0.13 38);
-  --nak:    oklch(0.80 0.11 70);
-  --kartal: oklch(0.70 0.06 90);
+  /* ── Materials ── */
+  --head:        oklch(0.94 0.02 90);    /* rawhide — page background */
+  --head-worn:   oklch(0.90 0.025 85);   /* played-in head — cards, tracks */
+  --head-sunken: oklch(0.86 0.03 82);    /* inset areas — grids, wells */
+  --syahi:       oklch(0.24 0.02 60);    /* ink / playhead / active step — ~12:1 on head */
+  --syahi-soft:  oklch(0.45 0.02 60);    /* secondary text — ≥4.5:1 on head */
+  --clay:        oklch(0.54 0.12 40);    /* actions — white text passes AA */
+  --clay-deep:   oklch(0.47 0.12 38);    /* pressed / emphasis */
+  --strap:       oklch(0.66 0.09 75);    /* leather tan — secondary accent */
+  --on-clay:     oklch(0.97 0.01 85);    /* warm white text on clay */
 
-  /* ── Semantic surfaces (lightness varies, hue/chroma held) ── */
-  --surface-paper:  var(--cream);   /* primary page background, lightest */
-  --surface-raised: var(--cream-2); /* grouped sections, slightly darker */
-  --surface-sunken: var(--cell);    /* inset areas (tracks, grids), darker */
+  /* ── Lane colours (one per instrument row on the strip) ──
+     Adding an instrument = adding one token here + a LANES entry. */
+  --lane-dayan:  var(--clay);
+  --lane-bayan:  oklch(0.42 0.08 45);    /* deeper umber of the clay family */
+  --lane-kartal: oklch(0.72 0.11 90);    /* bell brass — future */
+  --lane-melody: oklch(0.55 0.08 200);   /* harmonium reed teal — future */
 
-  /* ── Semantic ink ── */
-  --ink-primary:   var(--ink);      /* main text — deep burnt umber */
-  --ink-secondary: var(--muted);    /* secondary text — ~60% of primary */
-
-  /* ── Rule: a warm burnt-orange hairline, used in place of shadows ── */
-  --rule:          oklch(0.855 0.030 52);
+  /* ── Rule: warm hairline in place of shadows ── */
+  --rule:          oklch(0.82 0.03 80);
   --rule-hairline: 1px solid var(--rule);
 
-  /* ── Semantic accent ──
-     Saffron and kumkum each do ONE job:
-       saffron = the LIVE thing — the sounding step, playhead, playing state.
-                 Never text on cream (≈2:1 — fails contrast); fills/marks only.
-       kumkum  = ACTIONS — primary buttons, selected controls. Dark enough
-                 that --on-action text on it passes WCAG AA. */
-  --accent-saffron:     var(--saffron);          /* live/sounding marks only */
-  --accent-saffron-dim: oklch(0.785 0.075 54);   /* muted saffron — hover/inactive */
-  --accent-action:      var(--kumkum);           /* primary buttons, active nav */
-  --on-action:          oklch(0.985 0.01 80);    /* warm white text on kumkum */
-
   /* ── Type families ──
-     Marcellus has no bold and goes mushy at small sizes, so it is reserved
-     for generous display settings; small uppercase labels use the body
-     sans at semibold instead. */
-  --font-display: "Marcellus", serif;            /* beat names, screen titles, bols */
-  --font-body:    "Nunito Sans", system-ui, sans-serif;
-  --font-numeric: "Nunito Sans", system-ui, sans-serif; /* pair with tabular-nums */
+     Fraunces = display: beat names, screen titles, the big BPM numerals
+     (signage, slightly wonky, hand-printed feel). Hind Madurai = body:
+     labels, buttons, meta — an Indian Type Foundry Tamil-companion sans. */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body:    "Hind Madurai", system-ui, sans-serif;
+  --font-numeric: "Fraunces", Georgia, serif;
 
   /* ── Type scale ── */
   --text-display-lg: 1.625rem;  /* beat / screen title */
@@ -62,12 +47,41 @@
   --text-body-md:    0.95rem;   /* default body */
   --text-body-sm:    0.84rem;   /* captions */
   --text-body-xs:    0.75rem;   /* utility / meta — 12px floor for legibility */
-  --text-numeric-xl: 2.25rem;   /* BPM big number — glanceable at arm's length */
+  --text-numeric-xl: 2.5rem;    /* BPM signage — glanceable at arm's length */
   --text-numeric-md: 1rem;      /* counts */
 
   /* ── Spacing scale (4px base) ── */
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
   --space-5: 20px; --space-6: 24px; --space-7: 32px; --space-8: 40px;
+
+  /* ══ TRANSITIONAL BRIDGE — remove in the redesign's cleanup commit ══
+     The old screens (chakra, current editor, etc.) still reference the
+     previous token names. Aliasing them onto the materials keeps every
+     screen working — in the new palette — while each is rebuilt. */
+  --cream:    var(--head);
+  --cream-2:  var(--head-worn);
+  --surface:  var(--head);
+  --ink:      var(--syahi);
+  --muted:    var(--syahi-soft);
+  --faint:    oklch(0.62 0.02 65);
+  --saffron:  var(--clay);
+  --saffron-d:var(--clay-deep);
+  --gold:     var(--strap);
+  --kumkum:   var(--clay);
+  --cell:     var(--head-sunken);
+  --line:     var(--rule);
+  --duggi:  oklch(0.58 0.13 38);
+  --nak:    oklch(0.80 0.11 70);
+  --kartal: var(--lane-kartal);
+  --surface-paper:  var(--head);
+  --surface-raised: var(--head-worn);
+  --surface-sunken: var(--head-sunken);
+  --ink-primary:   var(--syahi);
+  --ink-secondary: var(--syahi-soft);
+  --accent-saffron:     var(--clay);
+  --accent-saffron-dim: var(--strap);
+  --accent-action:      var(--clay);
+  --on-action:          var(--on-clay);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
