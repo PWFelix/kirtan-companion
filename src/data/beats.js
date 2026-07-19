@@ -86,7 +86,10 @@ export const BEATS = [
 
   // ── Dadra taal sample (12 steps, felt as 4/4 with triplets) ──
   {
-    id: "dadra", name: "Dadra Taal", note: "Swing", bpm: 105, steps: 6, beatsPerBar: 2, cellsPerGroup: 3,
+    // steps MUST match the pattern arrays' length (12 = 4 pulses × 3
+    // triplet cells) — a stale "steps: 6" here once made the strip wrap
+    // into extra rows and the sequencer play only half the pattern.
+    id: "dadra", name: "Dadra Taal", note: "Swing", bpm: 105, steps: 12, beatsPerBar: 4, cellsPerGroup: 3,
     description: "A 6/8 dadra-taal pattern that lands as a triplet “gallop” against the usual four-beat kirtan, making everything swing. Lovely under swaying melodies and Vrindavan-mellows moods — use it as seasoning rather than the whole meal, or open a kirtan in dadra and switch to double time as it builds.",
     // 4 quarter-note pulses, each split into 3 eighth-triplets ("trip-let") —
     // gives the galloping feel without changing the bar count.

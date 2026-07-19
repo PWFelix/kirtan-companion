@@ -117,7 +117,11 @@ function BeatStrip({
               role="img"
               aria-label={`${lane.label} pattern`}
             >
-              {beat[lane.id].map((v, i) => (
+              {/* Exactly beat.steps cells, whatever the array length —
+                  extra data is ignored, missing data renders as rests.
+                  (The sequencer only plays beat.steps cells, so this is
+                  the honest rendering of any mismatched data.) */}
+              {Array.from({ length: beat.steps }, (_, i) => beat[lane.id][i] ?? null).map((v, i) => (
                 <div
                   key={i}
                   className="ks-cell"
