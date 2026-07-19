@@ -1,5 +1,5 @@
 /* ── Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Hind+Madurai:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Hind+Madurai:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@500&display=swap');
 
 /* ── "The Instrument Itself" — design tokens ──
    The app is built from the materials of a mridanga:
@@ -194,6 +194,62 @@ input[type="range"].kc-range::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   .kc-chakra .kc-marker { transition: fill 120ms ease; }
   .kc-chakra [data-active="true"] .kc-marker { transform: none; }
+}
+
+/* ── Wordmark — the live logo lockup (see Wordmark.jsx) ──
+   Sized entirely from --wm-size: 1em = the wordmark line. */
+.kc-wordmark {
+  font-size: var(--wm-size, 40px);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.06em;
+  line-height: 1;
+}
+.kc-wm-deva {
+  font-family: "Noto Sans Devanagari", sans-serif;
+  font-weight: 500;
+  font-size: 0.46em;
+  color: var(--strap);
+  letter-spacing: 0.04em;
+}
+.kc-wm-line {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--clay);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+/* The tilak stands in as the "i" of Companion — it sits on the text
+   baseline (inline SVGs do by default) at roughly cap height. */
+.kc-wm-tilak {
+  height: 0.74em; width: auto;
+  color: var(--strap);
+  margin: 0 0.015em;
+}
+
+/* ── Splash (.kc-splash-*) — wheel hero + entrance animation ── */
+.kc-splash-wheel {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 110vmin; aspect-ratio: 1;
+  background: var(--clay); opacity: 0.1;
+  -webkit-mask: url(/images/dharma-wheel.png) center / contain no-repeat;
+  mask: url(/images/dharma-wheel.png) center / contain no-repeat;
+  pointer-events: none;
+  animation: kc-wheel-in 1100ms ease-out both;
+}
+.kc-splash-rise1 { animation: kc-rise 550ms ease-out 250ms both; }
+.kc-splash-rise2 { animation: kc-rise 550ms ease-out 450ms both; }
+
+@keyframes kc-wheel-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.94) rotate(-8deg); }
+  to   { opacity: 0.1; transform: translate(-50%, -50%); }
+}
+@keyframes kc-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kc-splash-wheel, .kc-splash-rise1, .kc-splash-rise2 { animation: none; }
 }
 
 /* ── BeatStrip (.ks-*) — the straight-line visualizer ──

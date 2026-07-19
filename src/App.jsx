@@ -4,6 +4,7 @@ import { BEATS } from "./data/beats.js";
 import BeatEditor from "./BeatEditor.jsx";
 import BeatStrip from "./BeatStrip.jsx";
 import Splash from "./Splash.jsx";
+import Wordmark from "./Wordmark.jsx";
 
 const MIN_BPM = 40, MAX_BPM = 200;
 const SAVED_KEY = "kirtan-custom-beats";
@@ -439,14 +440,9 @@ function App() {
 
   return (
     <div className="kc-screen" style={screenFixed}>
-      {/* Small wordmark only — the full brand moment moves to the splash
-          page (upcoming commit), where the dharma wheel becomes the hero. */}
+      {/* Small live wordmark — same component as the splash hero. */}
       <header style={st.header}>
-        <img
-          src="/images/kirtan-companion-stacked1.svg"
-          alt="Kirtan Companion"
-          style={st.brandName}
-        />
+        <Wordmark style={{ "--wm-size": "clamp(18px, 3.6vh, 24px)" }} />
       </header>
 
       {/* Beat name + meta, with the edit shortcut alongside. */}
@@ -525,7 +521,6 @@ const st = {
   // nav sits at the exact same spot on every page and never shifts on switch.
   screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-5)" },
   header: { flexShrink: 0, display: "flex", justifyContent: "center" },
-  brandName: { display: "block", height: "clamp(30px, 6vh, 42px)", width: "auto" },
   beatHead: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   beatName: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   beatMeta: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", fontWeight: 500 },
