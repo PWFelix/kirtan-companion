@@ -21,16 +21,15 @@ function Splash({ onBegin, ready }) {
   return (
     <div className="kc-screen" style={sp.screen}>
       <div className="kc-splash-wheel" aria-hidden="true" />
-      {/* Wordmark centre-locked to the wheel's centre (both at 50%).
-          The entrance animation lives on an INNER element so its
-          transform never fights the positioning transform. */}
-      <div style={sp.markPos}>
+      {/* One block: wordmark with the Begin bar directly beneath. The
+          block is offset so the WORDMARK's centre (not the block's)
+          lands on the wheel's centre — the +40px compensates for half
+          of (button height + gap). Entrance animations live on INNER
+          elements so their transforms never fight the positioning. */}
+      <div style={sp.content}>
         <div className="kc-splash-rise1">
           <Wordmark style={{ "--wm-size": "clamp(30px, 8.5vw, 44px)" }} />
         </div>
-      </div>
-      {/* Begin bar: top edge on the two-thirds line. */}
-      <div style={sp.beginPos}>
         <button onClick={onBegin} className="kc-splash-rise2" style={sp.begin}>
           {ready ? "Begin" : "Begin · loading sounds…"}
         </button>
@@ -44,15 +43,11 @@ const sp = {
     position: "relative", overflow: "hidden",
     width: "100%", minHeight: "100dvh", margin: "0 auto",
   },
-  markPos: {
+  content: {
     position: "absolute", left: 0, right: 0, top: "50%",
-    transform: "translateY(-50%)",
-    display: "flex", justifyContent: "center",
-    padding: "0 var(--space-5)",
-  },
-  beginPos: {
-    position: "absolute", left: 0, right: 0, top: "66%",
-    display: "flex", justifyContent: "center",
+    transform: "translateY(calc(-50% + 40px))",
+    display: "flex", flexDirection: "column", alignItems: "center",
+    gap: "var(--space-6)",
     padding: "0 calc(var(--space-5) + env(safe-area-inset-right)) 0 calc(var(--space-5) + env(safe-area-inset-left))",
   },
   begin: {
