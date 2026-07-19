@@ -40,13 +40,13 @@ const sp = {
     display: "flex", flexDirection: "column", justifyContent: "center",
     padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-6) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))",
   },
-  // Centred lockup, just a touch above true centre.
+  // Centred lockup, sitting just below true centre.
   content: {
     position: "relative",
     width: "100%", maxWidth: 430, margin: "0 auto",
     display: "flex", flexDirection: "column", alignItems: "center",
     gap: "var(--space-7)",
-    transform: "translateY(-2vh)",
+    transform: "translateY(1.5vh)",
   },
   begin: {
     width: "100%", maxWidth: 300, minHeight: 56, borderRadius: 16,
