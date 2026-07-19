@@ -27,6 +27,7 @@ import * as Tone from "tone";
 import { EventEmitter } from "./EventEmitter.js";
 import { SoundPlayer } from "./SoundPlayer.js";
 import { Sequencer } from "./Sequencer.js";
+import { enableMediaPlayback } from "./audioUnlock.js";
 
 export class KirtanEngine extends EventEmitter {
   constructor() {
@@ -51,6 +52,23 @@ export class KirtanEngine extends EventEmitter {
 
   async unlock() {
     await Tone.start();
+
+    // iOS: route our Web Audio through the MEDIA channel so the silent
+    // switch doesn't mute us (see audioUnlock.js). Harmless elsewhere.
+    enableMediaPlayback();
+
+    // iOS also SUSPENDS the audio context when the page is backgrounded
+    // or a call comes in, and doesn't always resume it. Whenever the
+    // page comes back, nudge both the context and the keep-alive loop.
+    if (!this._resumeHandlerInstalled) {
+      this._resumeHandlerInstalled = true;
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "visible") return;
+        const ctx = Tone.getContext();
+        if (ctx.state !== "running") ctx.resume();
+        enableMediaPlayback();
+      });
+    }
   }
 
   setBeat(beat) {
