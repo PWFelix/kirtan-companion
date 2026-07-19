@@ -87,35 +87,58 @@ function BeatStrip({
         )}
 
         {lanes.map((lane) => (
-          <div
-            key={lane.id}
-            className={"ks-lane" + (mutedEnds[lane.id] ? " ks-lanemuted" : "")}
-            data-lane={lane.id}
-            style={{ "--ks-lanecolor": lane.color }}
-            role="img"
-            aria-label={`${lane.label} pattern`}
-          >
-            {beat[lane.id].map((v, i) => (
-              <div
-                key={i}
-                className="ks-cell"
-                data-i={i}
-                data-sam={i === 0}
-                data-active="false"
-                role={onCellTap ? "button" : undefined}
-                tabIndex={onCellTap ? 0 : undefined}
-              >
-                <span
-                  className={
-                    "ks-mark " +
-                    (v === "O" ? "ks-open" : v === "X" ? "ks-closed" : "ks-rest")
-                  }
-                />
-                {showBols && !mini && v && (
-                  <span className="ks-bol">{BOLS[lane.id]?.[v] ?? v}</span>
-                )}
+          <div key={lane.id} className="ks-laneblock">
+            {/* Label row ABOVE the lane (not a side column — that width is
+                needed to fit 8 cells on small phones). position:sticky
+                pins it while the strip scrolls underneath. */}
+            {!mini && (
+              <div className="ks-labelrow">
+                <button
+                  type="button"
+                  className="ks-lanelabel"
+                  data-mutelane={onToggleMute ? lane.id : undefined}
+                  disabled={!onToggleMute}
+                  aria-pressed={!!mutedEnds[lane.id]}
+                  aria-label={`${lane.label} drum, ${
+                    mutedEnds[lane.id]
+                      ? "muted, tap to unmute"
+                      : "playing, tap to mute"
+                  }`}
+                  style={{ "--ks-lanecolor": lane.color }}
+                >
+                  {lane.label}
+                </button>
               </div>
-            ))}
+            )}
+            <div
+              className={"ks-lane" + (mutedEnds[lane.id] ? " ks-lanemuted" : "")}
+              data-lane={lane.id}
+              style={{ "--ks-lanecolor": lane.color }}
+              role="img"
+              aria-label={`${lane.label} pattern`}
+            >
+              {beat[lane.id].map((v, i) => (
+                <div
+                  key={i}
+                  className="ks-cell"
+                  data-i={i}
+                  data-sam={i === 0}
+                  data-active="false"
+                  role={onCellTap ? "button" : undefined}
+                  tabIndex={onCellTap ? 0 : undefined}
+                >
+                  <span
+                    className={
+                      "ks-mark " +
+                      (v === "O" ? "ks-open" : v === "X" ? "ks-closed" : "ks-rest")
+                    }
+                  />
+                  {showBols && !mini && v && (
+                    <span className="ks-bol">{BOLS[lane.id]?.[v] ?? v}</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
 
@@ -227,28 +250,6 @@ function BeatStrip({
       onClick={handleClick}
       onKeyDown={handleKey}
     >
-      {!mini && (
-        <div className="ks-labelcol">
-          <div className="ks-labelspacer" aria-hidden="true" />
-          {lanes.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              className="ks-lanelabel"
-              data-mutelane={onToggleMute ? l.id : undefined}
-              disabled={!onToggleMute}
-              aria-pressed={!!mutedEnds[l.id]}
-              aria-label={`${l.label} drum, ${
-                mutedEnds[l.id] ? "muted, tap to unmute" : "playing, tap to mute"
-              }`}
-              style={{ "--ks-lanecolor": l.color }}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-      )}
-
       <div className="ks-scroller" ref={scrollerRef}>
         {structure}
       </div>

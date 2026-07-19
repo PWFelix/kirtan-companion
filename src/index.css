@@ -205,24 +205,25 @@ input[type="range"].kc-range::-moz-range-thumb {
    dot = rest, each in its lane's colour; the SOUNDING mark turns syahi
    (see the token header for why black = sound). */
 .ks-strip {
+  /* 8 cells must ALWAYS fit unscrolled on a small phone:
+     8 × 34px + 7 × 2px gap = 286px — inside even a 320px-wide viewport
+     after screen padding. Labels sit ABOVE the lanes (sticky), never in
+     a side column that would eat cell width. */
   --ks-cellh: 46px;
-  --ks-cellmin: 40px;
+  --ks-cellmin: 34px;
   display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
-  column-gap: var(--space-2);
+  grid-template-columns: 1fr;
   row-gap: 6px;
   width: 100%;
 }
 
-.ks-labelcol { display: flex; flex-direction: column; gap: var(--space-2); }
-.ks-labelspacer { height: 18px; }  /* keeps labels level with lanes (matches .ks-numbers) */
 .ks-lanelabel {
-  height: var(--ks-cellh);
-  padding: 0 2px;
+  position: sticky; left: 0;
+  display: inline-block;
+  padding: 4px 4px 3px 0;
   border: none; background: transparent; cursor: pointer;
-  font-family: var(--font-body); font-size: var(--text-body-xs);
-  font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  font-family: var(--font-body); font-size: 10px; line-height: 1;
+  font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--ks-lanecolor);
   transition: opacity 150ms ease;
 }
@@ -235,7 +236,6 @@ input[type="range"].kc-range::-moz-range-thumb {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;            /* the loop bar replaces the scrollbar */
   position: relative;
-  grid-column: 2;
 }
 .ks-scroller::-webkit-scrollbar { display: none; }
 
@@ -246,10 +246,12 @@ input[type="range"].kc-range::-moz-range-thumb {
   min-width: max-content;           /* long beats push wider → scroll */
 }
 
+.ks-laneblock { display: flex; flex-direction: column; gap: 2px; }
+
 .ks-numbers, .ks-lane {
   display: grid;
   grid-template-columns: repeat(var(--ks-steps), minmax(var(--ks-cellmin), 1fr));
-  gap: 3px;
+  gap: 2px;
 }
 
 .ks-numbers { height: 18px; align-items: end; }
@@ -305,7 +307,6 @@ input[type="range"].kc-range::-moz-range-thumb {
 
 /* Loop-position bar — appears only when the strip scrolls. */
 .ks-loopbar {
-  grid-column: 2;
   height: 4px; border-radius: 99px;
   background: var(--head-sunken);
   position: relative;
@@ -319,9 +320,10 @@ input[type="range"].kc-range::-moz-range-thumb {
 }
 
 /* Mini mode — display-only rows for the Beats page. */
-.ks-mini { --ks-cellh: 16px; --ks-cellmin: 9px; grid-template-columns: 1fr; row-gap: 3px; }
-.ks-mini .ks-scroller { grid-column: 1; overflow: hidden; }
+.ks-mini { --ks-cellh: 16px; --ks-cellmin: 9px; row-gap: 3px; }
+.ks-mini .ks-scroller { overflow: hidden; }
 .ks-mini .ks-track { gap: 3px; min-width: 0; }
+.ks-mini .ks-laneblock { gap: 0; }
 .ks-mini .ks-cell { background: transparent; border-radius: 0; }
 .ks-mini .ks-cell[data-sam="true"] { box-shadow: none; }
 .ks-mini .ks-open   { width: 8px; height: 8px; }
