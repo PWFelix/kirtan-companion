@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { KirtanEngine } from "./engine/KirtanEngine.js";
 import { BEATS } from "./data/beats.js";
 import BeatEditor from "./BeatEditor.jsx";
-import BeatIndicator from "./BeatIndicator.jsx";
+import BeatStrip from "./BeatStrip.jsx";
 
 const MIN_BPM = 40, MAX_BPM = 200;
 const SAVED_KEY = "kirtan-custom-beats";
@@ -97,6 +97,10 @@ function App() {
 
   const tapTimesRef = useRef([]);
   const beat = allBeats.find(b => b.id === beatId) || allBeats[0];
+
+  // Stable identity so BeatStrip's rAF effect doesn't re-subscribe on
+  // every render (the engine ref never changes).
+  const getPhase = useCallback(() => engine.getPhase(), [engine]);
 
   useEffect(() => {
     engine.loadSounds({
@@ -296,50 +300,46 @@ function App() {
 
   return (
     <div className="kc-screen" style={screenFixed}>
-      {/* Brand only — Settings lives in the bottom nav (one entry point).
-          The logo height flexes with viewport height so short phones give
-          the room back to the chakra below. The dharma wheel is a faint
-          watermark anchored to the logo's left edge: sized and positioned
-          relative to the logo itself, it scales with it and never clips
-          differently across screen widths. */}
+      {/* Small wordmark only — the full brand moment moves to the splash
+          page (upcoming commit), where the dharma wheel becomes the hero. */}
       <header style={st.header}>
-        <div style={st.brand}>
-          <img src="/images/dharma-wheel.png" alt="" aria-hidden="true" style={st.brandChakra} />
-          <img
-            src="/images/kirtan-companion-stacked1.svg"
-            alt="Kirtan Companion"
-            style={st.brandName}
-          />
-        </div>
+        <img
+          src="/images/kirtan-companion-stacked1.svg"
+          alt="Kirtan Companion"
+          style={st.brandName}
+        />
       </header>
 
-      <main style={st.stage}>
-        <div style={st.chakraWrap}>
-          <BeatIndicator
-            beat={beat}
-            step={step}
-            playing={playing}
-            playhead="line"
-            compact
-            mutedEnds={mutedEnds}
-            onToggleMute={toggleMute}
-            onPlayPause={togglePlay}
-            bpm={bpm}
-          />
+      {/* Beat name + meta, with the edit shortcut alongside. */}
+      <div style={st.beatHead}>
+        <div style={{ minWidth: 0 }}>
+          <h1 style={st.beatName}>{beat.name}</h1>
+          <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
         </div>
-        <div style={st.nowPlaying}>
-          <span style={st.nowPlayingName}>{beat.name}</span>
-          <button onClick={openEditBeat} style={st.editBtn}>
-            {isCustomBeat(beat.id) ? "Edit this beat" : "Customize"}
-          </button>
-        </div>
+        <button onClick={openEditBeat} style={st.editBtn}>
+          {isCustomBeat(beat.id) ? "Edit" : "Customize"}
+        </button>
+      </div>
+
+      {/* The strip — vertically centred in whatever space is left. */}
+      <main style={st.stripWrap}>
+        <BeatStrip
+          beat={beat}
+          step={step}
+          playing={playing}
+          getPhase={getPhase}
+          mutedEnds={mutedEnds}
+          onToggleMute={toggleMute}
+        />
       </main>
 
       <section style={st.controls}>
+        {/* BPM as signage: the number IS the label. Becomes tappable for
+            precise entry in an upcoming commit. */}
         <div>
-          <div style={st.tempoHead}>
-            <span style={st.controlLabel}>Tempo</span>
-            <span style={st.bpmReadout}><span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>BPM</span></span>
+          <div style={st.bpmRow}>
+            <span style={st.bpmNum}>{bpm}</span>
+            <span style={st.bpmUnit}>BPM</span>
           </div>
           <div style={st.tempoRow}>
             <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
@@ -348,26 +348,41 @@ function App() {
               aria-label="Tempo" />
             <button onClick={() => setTempoLocked(v => !v)}
               style={{ ...st.lockBtn,
-                background: tempoLocked ? "var(--accent-action)" : "transparent",
-                color: tempoLocked ? "var(--on-action)" : "var(--ink-secondary)" }}
+                background: tempoLocked ? "var(--clay)" : "transparent",
+                color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
               aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
               aria-pressed={tempoLocked}>
               {tempoLocked ? "Locked" : "Lock"}
             </button>
             <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
           </div>
-          <div style={st.scaleRow}><span>Slow</span><span>Fast</span></div>
         </div>
 
-        <div>
-          <div style={st.tempoHead}>
-            <span style={st.controlLabel}>Volume</span>
-            <span style={st.bpmReadout}><span style={st.volNum}>{Math.round(volPct)}</span><span style={st.bpmUnit}>%</span></span>
-          </div>
+        {/* Temporary compact volume — replaced by the mixer commit. */}
+        <div style={st.volRow}>
+          <span style={st.volLabel}>Volume</span>
           <input className="kc-range" type="range" min={0} max={100} value={volPct}
-            onChange={(e) => changeVolume(Number(e.target.value) / 100)} style={{ "--fill": volPct + "%" }} aria-label="Volume" />
+            onChange={(e) => changeVolume(Number(e.target.value) / 100)}
+            style={{ "--fill": volPct + "%", flex: 1 }} aria-label="Volume" />
         </div>
       </section>
+
+      {/* The floating clay play button — thumb-reach height, the one
+          unmistakable action on the screen. */}
+      <button onClick={togglePlay} disabled={!ready}
+        style={{ ...st.playBtn, opacity: ready ? 1 : 0.5 }}
+        aria-label={playing ? "Pause" : "Play"}>
+        {playing ? (
+          <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="5" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
+            <rect x="14" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
+          </svg>
+        ) : (
+          <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 4.5 20 12 8 19.5 Z" fill="currentColor" />
+          </svg>
+        )}
+      </button>
 
       {bottomNav}
     </div>
@@ -379,19 +394,21 @@ const st = {
   // nav sits at the exact same spot on every page and never shifts on switch.
   screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-5)" },
   header: { flexShrink: 0, display: "flex", justifyContent: "center" },
-  brand: { position: "relative", display: "inline-flex" },
-  brandChakra: { position: "absolute", left: 0, top: "50%", transform: "translate(-50%, -50%)", height: "200%", width: "auto", opacity: 0.12, pointerEvents: "none" },
-  brandName: { position: "relative", display: "block", height: "clamp(52px, 10vh, 80px)", width: "auto" },
+  brandName: { display: "block", height: "clamp(30px, 6vh, 42px)", width: "auto" },
+  beatHead: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
+  beatName: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  beatMeta: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", fontWeight: 500 },
+  stripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center" },
+  bpmRow: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 8, marginBottom: "var(--space-2)" },
+  volRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
+  volLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
+  playBtn: { flexShrink: 0, alignSelf: "center", width: 72, height: 72, borderRadius: "50%", border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "grid", placeItems: "center", cursor: "pointer" },
   subHeader: { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   subTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", letterSpacing: "0.01em", color: "var(--ink-primary)" },
   backBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
   subtitle: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
-  stage: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-4)", minHeight: 0, padding: "10px 0" },
-  chakraWrap: { flex: 1, minHeight: 0, width: "100%", maxWidth: 360, display: "flex", alignItems: "center", justifyContent: "center" },
-  nowPlaying: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-3)" },
-  nowPlayingName: { fontFamily: "var(--font-display)", fontSize: 18, color: "var(--ink-primary)", letterSpacing: "0.01em" },
-  editBtn: { minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em", display: "grid", placeItems: "center" },
-  controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-6)" },
+  editBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em", display: "grid", placeItems: "center" },
+  controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-5)" },
   controlLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-3)" },
 
   // ── Beats page (library-first list) ──
@@ -412,11 +429,8 @@ const st = {
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   tapBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
   lockBtn: { flexShrink: 0, minHeight: 44, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
-  bpmReadout: { display: "flex", alignItems: "baseline", gap: 5 },
-  bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
-  volNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.375rem", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
-  bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--ink-secondary)" },
-  scaleRow: { display: "flex", justifyContent: "space-between", fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", color: "var(--ink-secondary)", fontWeight: 600, marginTop: 2, letterSpacing: "0.04em" },
+  bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
+  bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
 };
 
 export default App;
