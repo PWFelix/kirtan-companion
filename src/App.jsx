@@ -108,18 +108,13 @@ function BottomNav({ view, onHome, onBeats, onEditor, onSettings }) {
   );
 }
 
-// Little waveform glyph built from a beat's dayan pattern — tall bar = open,
-// short bar = closed, faint stub = rest. Purely decorative (aria-hidden).
-function BeatGlyph({ pattern }) {
-  const bw = 3, gap = 2, h = 26;
-  const w = pattern.length * (bw + gap);
+function InfoIcon() {
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" style={{ flexShrink: 0 }}>
-      {pattern.map((c, i) => {
-        const bh = c === "O" ? 22 : c === "X" ? 13 : 5;
-        return <rect key={i} x={i * (bw + gap)} y={(h - bh) / 2} width={bw} height={bh} rx={1.5}
-          fill="var(--accent-saffron)" opacity={c ? 0.6 : 0.3} />;
-      })}
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 7.5h.01" />
     </svg>
   );
 }
@@ -143,6 +138,7 @@ function App() {
 
   const [view, setView] = useState("home"); // "home" | "beats" | "editor" | "settings"
   const [entered, setEntered] = useState(false); // splash shown until Begin
+  const [detailBeat, setDetailBeat] = useState(null); // beat shown in the Beats-page info sheet
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
 
   const [customBeats, setCustomBeats] = useState(loadSavedBeats);
@@ -191,6 +187,19 @@ function App() {
     if (!ready || playing) return;
     await engine.unlock();
     engine.setBpm(bpm); engine.setBeat(beat); engine.start();
+  }
+
+  // From the info sheet: select THAT beat and start it. Takes the beat as an
+  // argument because React state (beatId) won't have updated yet this tick.
+  async function startFromDetail(b) {
+    setDetailBeat(null);
+    selectBeat(b);
+    setView("home");
+    if (!ready || playing) return; // playing: selectBeat already switched the loop live
+    await engine.unlock();
+    engine.setBpm(tempoLocked ? bpm : b.bpm);
+    engine.setBeat(b);
+    engine.start();
   }
 
   function selectBeat(b) {
@@ -247,17 +256,19 @@ function App() {
     setEditorInitial(null);
     setView("editor");
   }
-  // Open the editor on the loaded beat. Custom beats edit in place (same id);
-  // built-ins fork into a fresh custom copy that the original never sees.
-  function openEditBeat() {
+  // Open the editor on a beat (defaults to the loaded one). Custom beats edit
+  // in place (same id); built-ins fork into a fresh custom copy that the
+  // original never sees.
+  function openEditBeat(target = beat) {
     engine.stop(); setPlaying(false);
-    const seed = isCustomBeat(beat.id)
-      ? beat
+    const seed = isCustomBeat(target.id)
+      ? target
       : {
-          ...beat,
-          id: "custom_" + beat.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
-          name: beat.name + " (custom)",
+          ...target,
+          id: "custom_" + target.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
+          name: target.name + " (custom)",
           note: "Custom",
+          description: undefined,
         };
     setEditorInitial(seed);
     setView("editor");
@@ -302,46 +313,91 @@ function App() {
     );
   }
 
-  // ── Beats view — library-first "Choose a beat" list ──
+  // ── Beats view — library list: built-ins and the user's beats in
+  //    separate sections. Row tap = select (the fast path); the ⓘ opens
+  //    an info sheet with the full strip, the description, and
+  //    Edit / Start. Rows preview the real pattern via a mini strip. ──
   if (view === "beats") {
+    // The row is a div, not a button: nesting the info/delete buttons inside
+    // a row-button is invalid HTML and confuses screen readers. The name area
+    // is the keyboard-reachable select control; the whole row stays tappable
+    // via the div's onClick (inner buttons stop propagation).
+    const renderRow = (b) => {
+      const sel = b.id === beatId;
+      return (
+        <div key={b.id} onClick={() => selectBeat(b)}
+          style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
+          <div style={st.beatRowTop}>
+            <button onClick={() => selectBeat(b)} aria-pressed={sel} style={st.beatRowSelect}>
+              <span style={st.beatRowName}>{b.name}</span>
+              <span style={st.beatRowMeta}>{b.note} · {b.steps} cells</span>
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setDetailBeat(b); }}
+              aria-label={`About ${b.name}`} style={st.infoBtn}><InfoIcon /></button>
+            {isCustomBeat(b.id) && (
+              <button onClick={(e) => deleteCustomBeat(b.id, e)} aria-label={`Delete ${b.name}`}
+                style={st.deleteBtn}>×</button>
+            )}
+            <RadioDot selected={sel} />
+          </div>
+          <BeatStrip beat={b} mini />
+        </div>
+      );
+    };
+
     return (
       <div className="kc-screen" style={screenFixed}>
         <header style={st.subHeader}>
           <span style={{ width: 44 }} aria-hidden="true" />
-          <h1 style={st.subTitle}>Choose a beat</h1>
+          <h1 style={st.subTitle}>Beats</h1>
           <span style={{ width: 44 }} aria-hidden="true" />
         </header>
         <section style={st.beatList}>
-          {allBeats.map(b => {
-            const sel = b.id === beatId;
-            const isCustom = b.note === "Custom";
-            // The row is a div, not a button: nesting the delete button inside
-            // a row-button is invalid HTML and confuses screen readers. The
-            // name area is the keyboard-reachable select control; the whole
-            // row stays tappable via the div's onClick (delete stops
-            // propagation so it never also selects).
-            return (
-              <div key={b.id} onClick={() => selectBeat(b)}
-                style={{ ...st.beatRow, borderColor: sel ? "var(--accent-action)" : "var(--rule)" }}>
-                <BeatGlyph pattern={b.dayan} />
-                <button onClick={() => selectBeat(b)} aria-pressed={sel} style={st.beatRowSelect}>
-                  <span style={st.beatRowName}>{b.name}</span>
-                  <span style={st.beatRowMeta}>{b.steps}-step · {b.note}</span>
-                </button>
-                {isCustom && (
-                  <button onClick={(e) => deleteCustomBeat(b.id, e)} aria-label={`Delete ${b.name}`}
-                    style={st.deleteBtn}>×</button>
-                )}
-                <RadioDot selected={sel} />
-              </div>
-            );
-          })}
+          <div style={st.sectionLabel}>Built in</div>
+          {BEATS.map(renderRow)}
+          <div style={{ ...st.sectionLabel, marginTop: "var(--space-4)" }}>Your beats</div>
+          {customBeats.length === 0 ? (
+            <p style={st.emptyHint}>Nothing here yet — beats you build or customize will appear here.</p>
+          ) : (
+            customBeats.map(renderRow)
+          )}
         </section>
         <button onClick={startBeat} disabled={!ready} style={{ ...st.startBtn, opacity: ready ? 1 : 0.5 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5 19 12 7 19 Z" fill="currentColor" /></svg>
           Start · {beat.name}
         </button>
         {bottomNav}
+
+        {/* Info sheet — slides over the list; backdrop tap or × closes. */}
+        {detailBeat && (
+          <div style={st.sheetBackdrop} onClick={() => setDetailBeat(null)}>
+            <div style={st.sheet} role="dialog" aria-modal="true" aria-label={detailBeat.name}
+              onClick={(e) => e.stopPropagation()}>
+              <div style={st.sheetHead}>
+                <h2 style={st.sheetName}>{detailBeat.name}</h2>
+                <button onClick={() => setDetailBeat(null)} aria-label="Close" style={st.sheetClose}>×</button>
+              </div>
+              <span style={st.beatRowMeta}>
+                {detailBeat.note} · {detailBeat.steps} cells · suggested {detailBeat.bpm} BPM
+              </span>
+              <div style={{ margin: "var(--space-4) 0" }}>
+                <BeatStrip beat={detailBeat} />
+              </div>
+              <p style={st.sheetDesc}>
+                {detailBeat.description || "One of your own beats, built in the editor."}
+              </p>
+              <div style={st.sheetActions}>
+                <button onClick={() => { setDetailBeat(null); openEditBeat(detailBeat); }} style={st.sheetEditBtn}>
+                  {isCustomBeat(detailBeat.id) ? "Edit" : "Customize"}
+                </button>
+                <button onClick={() => startFromDetail(detailBeat)} disabled={!ready}
+                  style={{ ...st.sheetStartBtn, opacity: ready ? 1 : 0.5 }}>
+                  Start
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -403,7 +459,7 @@ function App() {
         </main>
 
         <div style={st.landRail}>
-          <button onClick={openEditBeat} style={st.landEditBtn}
+          <button onClick={() => openEditBeat()} style={st.landEditBtn}
             aria-label={isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat"}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -451,7 +507,7 @@ function App() {
           <h1 style={st.beatName}>{beat.name}</h1>
           <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
         </div>
-        <button onClick={openEditBeat} style={st.editBtn}>
+        <button onClick={() => openEditBeat()} style={st.editBtn}>
           {isCustomBeat(beat.id) ? "Edit" : "Customize"}
         </button>
       </div>
@@ -537,13 +593,28 @@ const st = {
   controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-5)" },
   controlLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-3)" },
 
-  // ── Beats page (library-first list) ──
+  // ── Beats page (library list) ──
   beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
-  beatRow: { display: "flex", alignItems: "center", gap: "var(--space-4)", padding: "14px 16px", borderRadius: 18, border: "var(--rule-hairline)", background: "var(--surface-raised)", cursor: "pointer", textAlign: "left", width: "100%" },
+  sectionLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--syahi-soft)" },
+  emptyHint: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", lineHeight: 1.5 },
+  beatRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "12px 14px", borderRadius: 16, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
+  beatRowTop: { display: "flex", alignItems: "center", gap: "var(--space-2)" },
   beatRowSelect: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, padding: 0, border: "none", background: "transparent", textAlign: "left", cursor: "pointer" },
-  deleteBtn: { flexShrink: 0, width: 40, height: 44, margin: "-8px -6px", border: "none", background: "transparent", color: "var(--ink-secondary)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 12 },
-  beatRowName: { fontFamily: "var(--font-display)", fontSize: 17, letterSpacing: "0.01em", color: "var(--ink-primary)" },
+  infoBtn: { flexShrink: 0, width: 40, height: 40, borderRadius: 12, border: "none", background: "transparent", color: "var(--syahi-soft)", display: "grid", placeItems: "center", cursor: "pointer" },
+  deleteBtn: { flexShrink: 0, width: 40, height: 40, border: "none", background: "transparent", color: "var(--ink-secondary)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 12 },
+  beatRowName: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, letterSpacing: "0.01em", color: "var(--ink-primary)" },
   beatRowMeta: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 500, color: "var(--ink-secondary)" },
+
+  // ── Beat info sheet ──
+  sheetBackdrop: { position: "fixed", inset: 0, background: "oklch(0.24 0.02 60 / 0.35)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 10 },
+  sheet: { width: "100%", maxWidth: 430, maxHeight: "85dvh", overflowY: "auto", background: "var(--head)", borderRadius: "20px 20px 0 0", padding: "var(--space-5) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column" },
+  sheetHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
+  sheetName: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)" },
+  sheetClose: { flexShrink: 0, width: 44, height: 44, margin: "-8px -8px 0 0", border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
+  sheetDesc: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", lineHeight: 1.55 },
+  sheetActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-5)" },
+  sheetEditBtn: { flex: 1, minHeight: 50, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
+  sheetStartBtn: { flex: 2, minHeight: 50, borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", cursor: "pointer" },
   startBtn: { flexShrink: 0, width: "100%", padding: "16px", borderRadius: 18, border: "none", background: "var(--accent-action)", color: "var(--on-action)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 800, letterSpacing: "0.02em", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 },
 
   // ── Bottom navigation — iOS-style pill wrapping the four buttons ──
