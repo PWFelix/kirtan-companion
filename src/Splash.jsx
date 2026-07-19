@@ -21,10 +21,16 @@ function Splash({ onBegin, ready }) {
   return (
     <div className="kc-screen" style={sp.screen}>
       <div className="kc-splash-wheel" aria-hidden="true" />
-      <div style={sp.content}>
+      {/* Wordmark centre-locked to the wheel's centre (both at 50%).
+          The entrance animation lives on an INNER element so its
+          transform never fights the positioning transform. */}
+      <div style={sp.markPos}>
         <div className="kc-splash-rise1">
           <Wordmark style={{ "--wm-size": "clamp(30px, 8.5vw, 44px)" }} />
         </div>
+      </div>
+      {/* Begin bar: top edge on the two-thirds line. */}
+      <div style={sp.beginPos}>
         <button onClick={onBegin} className="kc-splash-rise2" style={sp.begin}>
           {ready ? "Begin" : "Begin · loading sounds…"}
         </button>
@@ -37,16 +43,17 @@ const sp = {
   screen: {
     position: "relative", overflow: "hidden",
     width: "100%", minHeight: "100dvh", margin: "0 auto",
-    display: "flex", flexDirection: "column", justifyContent: "center",
-    padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-6) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))",
   },
-  // Centred lockup, sitting just below true centre.
-  content: {
-    position: "relative",
-    width: "100%", maxWidth: 430, margin: "0 auto",
-    display: "flex", flexDirection: "column", alignItems: "center",
-    gap: "var(--space-7)",
-    transform: "translateY(1.5vh)",
+  markPos: {
+    position: "absolute", left: 0, right: 0, top: "50%",
+    transform: "translateY(-50%)",
+    display: "flex", justifyContent: "center",
+    padding: "0 var(--space-5)",
+  },
+  beginPos: {
+    position: "absolute", left: 0, right: 0, top: "66%",
+    display: "flex", justifyContent: "center",
+    padding: "0 calc(var(--space-5) + env(safe-area-inset-right)) 0 calc(var(--space-5) + env(safe-area-inset-left))",
   },
   begin: {
     width: "100%", maxWidth: 300, minHeight: 56, borderRadius: 16,
