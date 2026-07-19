@@ -30,10 +30,11 @@ function loadSavedBeats() {
 }
 
 // ── Bottom navigation ───────────────────────────────────────────────────────
-// A persistent tab bar. Home and Settings are square icon buttons at the ends;
-// Beats and Editor are rectangular labelled buttons in the middle. The active
-// destination is filled saffron. Switching pages does NOT stop playback (except
-// the editor, which takes over the engine) so you can browse while a beat plays.
+// A persistent tab bar of FOUR EQUAL cells (icon + small label). Equal widths
+// matter: mixed sizes made the wide middle buttons swallow near-miss taps
+// aimed at the small end buttons. The active destination is filled clay.
+// Switching pages does NOT stop playback (except the editor, which takes over
+// the engine) so you can browse while a beat plays.
 // Padlock for the tempo lock — open when free, closed when locked. An icon
 // (not the words Lock/Locked) so the button's size never changes with state,
 // which would resize the flexible slider beside it.
@@ -67,15 +68,40 @@ function CogIcon() {
   );
 }
 
+function BeatsIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <path d="M4 6v12M9 9v6M14 4v16M19 8v8" />
+    </svg>
+  );
+}
+function PencilIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  );
+}
+
 function BottomNav({ view, onHome, onBeats, onEditor, onSettings }) {
-  const cell = (v, base) => ({ ...base, ...(view === v ? st.navActive : null) });
+  const cell = (v) => ({ ...st.navCell, ...(view === v ? st.navActive : null) });
   const cur = (v) => (view === v ? "page" : undefined);
   return (
     <nav style={st.nav} aria-label="Primary">
-      <button onClick={onHome} aria-label="Home" aria-current={cur("home")} style={cell("home", st.navSquare)}><HomeIcon /></button>
-      <button onClick={onBeats} aria-current={cur("beats")} style={cell("beats", st.navRect)}>Beats</button>
-      <button onClick={onEditor} aria-current={cur("editor")} style={cell("editor", st.navRect)}>Editor</button>
-      <button onClick={onSettings} aria-label="Settings" aria-current={cur("settings")} style={cell("settings", st.navSquare)}><CogIcon /></button>
+      <button onClick={onHome} aria-current={cur("home")} style={cell("home")}>
+        <HomeIcon /><span style={st.navLabel}>Home</span>
+      </button>
+      <button onClick={onBeats} aria-current={cur("beats")} style={cell("beats")}>
+        <BeatsIcon /><span style={st.navLabel}>Beats</span>
+      </button>
+      <button onClick={onEditor} aria-current={cur("editor")} style={cell("editor")}>
+        <PencilIcon /><span style={st.navLabel}>Editor</span>
+      </button>
+      <button onClick={onSettings} aria-current={cur("settings")} style={cell("settings")}>
+        <CogIcon /><span style={st.navLabel}>Settings</span>
+      </button>
     </nav>
   );
 }
@@ -513,9 +539,9 @@ const st = {
   startBtn: { flexShrink: 0, width: "100%", padding: "16px", borderRadius: 18, border: "none", background: "var(--accent-action)", color: "var(--on-action)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 800, letterSpacing: "0.02em", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 },
 
   // ── Bottom navigation — iOS-style pill wrapping the four buttons ──
-  nav: { flexShrink: 0, marginTop: "auto", display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-1)", borderRadius: 999, border: "var(--rule-hairline)", background: "var(--surface-raised)" },
-  navSquare: { flexShrink: 0, width: 46, height: 44, borderRadius: 999, border: "none", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
-  navRect: { flex: 1, height: 44, borderRadius: 999, border: "none", background: "transparent", color: "var(--ink-secondary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
+  nav: { flexShrink: 0, marginTop: "auto", display: "flex", alignItems: "stretch", gap: "var(--space-1)", padding: "var(--space-1)", borderRadius: 999, border: "var(--rule-hairline)", background: "var(--surface-raised)" },
+  navCell: { flex: 1, minWidth: 0, minHeight: 52, borderRadius: 999, border: "none", background: "transparent", color: "var(--ink-secondary)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, cursor: "pointer", padding: "4px 0" },
+  navLabel: { fontFamily: "var(--font-body)", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", lineHeight: 1 },
   navActive: { background: "var(--accent-action)", color: "var(--on-action)" },
   tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
