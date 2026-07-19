@@ -367,21 +367,22 @@ function App() {
         </div>
       </section>
 
-      {/* The floating clay play button — thumb-reach height, the one
-          unmistakable action on the screen. */}
+      {/* The clay play bar — full width at thumb height: impossible to
+          miss, impossible to fumble. */}
       <button onClick={togglePlay} disabled={!ready}
         style={{ ...st.playBtn, opacity: ready ? 1 : 0.5 }}
         aria-label={playing ? "Pause" : "Play"}>
         {playing ? (
-          <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="5" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
             <rect x="14" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
           </svg>
         ) : (
-          <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M8 4.5 20 12 8 19.5 Z" fill="currentColor" />
           </svg>
         )}
+        {playing ? "Pause" : "Play"}
       </button>
 
       {bottomNav}
@@ -402,7 +403,7 @@ const st = {
   bpmRow: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 8, marginBottom: "var(--space-2)" },
   volRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   volLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
-  playBtn: { flexShrink: 0, alignSelf: "center", width: 72, height: 72, borderRadius: "50%", border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "grid", placeItems: "center", cursor: "pointer" },
+  playBtn: { flexShrink: 0, width: "100%", minHeight: 58, borderRadius: 16, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
   subHeader: { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   subTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", letterSpacing: "0.01em", color: "var(--ink-primary)" },
   backBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
