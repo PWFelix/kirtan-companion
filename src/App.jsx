@@ -522,8 +522,12 @@ const st = {
   landScreen: { width: "100%", maxWidth: 1100, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-4) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-3) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-3)" },
   landHead: { flexShrink: 0, display: "flex", alignItems: "baseline", gap: "var(--space-3)" },
   landName: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "1.375rem", color: "var(--syahi)", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  // Taller cells: the strip is the whole point of this orientation.
-  landStripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", "--ks-cellh": "clamp(46px, 16vh, 72px)" },
+  // Taller cells when there's room — but sized from the WRAPPER's height
+  // (container query units), not the viewport's, so the strip can never
+  // outgrow its slot and spill over the rail. 100cqh = wrapper height;
+  // ~96px covers the strip's fixed parts (numbers row, two lane labels,
+  // internal gaps); the remainder splits between the two lanes.
+  landStripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", containerType: "size", "--ks-cellh": "clamp(22px, calc((100cqh - 96px) / 2), 72px)" },
   landRail: { flexShrink: 0, display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--space-4)", alignItems: "stretch" },
   landRailLeft: { display: "flex", flexDirection: "column", gap: "var(--space-2)", minWidth: 0 },
   landBpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.625rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
