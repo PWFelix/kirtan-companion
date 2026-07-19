@@ -327,21 +327,15 @@ function App() {
     </svg>
   );
 
-  // ── Home, landscape: the propped-up layout. The strip gets the full
-  //    width and taller cells; everything else compresses into a
-  //    transport rail (tempo cluster left, play block right). ──
+  // ── Home, landscape: the propped-up layout. Phone-height landscape
+  //    leaves ~120-200px for everything besides the strip and nav, so
+  //    the ENTIRE transport collapses into one 44px rail: edit, name,
+  //    BPM + slider, Lock/Tap, Play. Volume sits out of landscape (the
+  //    mixer button will take its slot). The strip gets all remaining
+  //    height, cells sized from the slot via container units. ──
   if (isLandscape) {
     return (
       <div className="kc-screen" style={st.landScreen}>
-        <div style={st.landHead}>
-          <span style={st.landName}>{beat.name}</span>
-          <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
-          <span style={{ flex: 1 }} />
-          <button onClick={openEditBeat} style={st.editBtn}>
-            {isCustomBeat(beat.id) ? "Edit" : "Customize"}
-          </button>
-        </div>
-
         <main style={st.landStripWrap}>
           <BeatStrip
             beat={beat}
@@ -354,36 +348,33 @@ function App() {
         </main>
 
         <div style={st.landRail}>
-          <div style={st.landRailLeft}>
-            <div style={st.tempoRow}>
-              <span style={st.landBpmNum}>{bpm}</span>
-              <span style={st.bpmUnit}>BPM</span>
-              <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
-                onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
-                style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-                aria-label="Tempo" />
-              <button onClick={() => setTempoLocked(v => !v)}
-                style={{ ...st.lockBtn,
-                  background: tempoLocked ? "var(--clay)" : "transparent",
-                  color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
-                aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
-                aria-pressed={tempoLocked}>
-                {tempoLocked ? "Locked" : "Lock"}
-              </button>
-              <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
-            </div>
-            <div style={st.volRow}>
-              <span style={st.volLabel}>Volume</span>
-              <input className="kc-range" type="range" min={0} max={100} value={volPct}
-                onChange={(e) => changeVolume(Number(e.target.value) / 100)}
-                style={{ "--fill": volPct + "%", flex: 1 }} aria-label="Volume" />
-            </div>
-          </div>
+          <button onClick={openEditBeat} style={st.landEditBtn}
+            aria-label={isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat"}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            </svg>
+          </button>
+          <span style={st.landName}>{beat.name}</span>
+          <span style={st.landBpmNum}>{bpm}</span>
+          <span style={st.bpmUnit}>BPM</span>
+          <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
+            onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
+            style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
+            aria-label="Tempo" />
+          <button onClick={() => setTempoLocked(v => !v)}
+            style={{ ...st.lockBtn,
+              background: tempoLocked ? "var(--clay)" : "transparent",
+              color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
+            aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
+            aria-pressed={tempoLocked}>
+            {tempoLocked ? "Locked" : "Lock"}
+          </button>
+          <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
           <button onClick={togglePlay} disabled={!ready}
             style={{ ...st.landPlayBtn, opacity: ready ? 1 : 0.5 }}
             aria-label={playing ? "Pause" : "Play"}>
             {playIcon}
-            {playing ? "Pause" : "Play"}
           </button>
         </div>
 
@@ -519,19 +510,18 @@ const st = {
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
 
   // ── Home, landscape (the propped-up layout) ──
-  landScreen: { width: "100%", maxWidth: 1100, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-4) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-3) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-3)" },
-  landHead: { flexShrink: 0, display: "flex", alignItems: "baseline", gap: "var(--space-3)" },
-  landName: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "1.375rem", color: "var(--syahi)", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  // Taller cells when there's room — but sized from the WRAPPER's height
-  // (container query units), not the viewport's, so the strip can never
-  // outgrow its slot and spill over the rail. 100cqh = wrapper height;
-  // ~96px covers the strip's fixed parts (numbers row, two lane labels,
-  // internal gaps); the remainder splits between the two lanes.
-  landStripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", containerType: "size", "--ks-cellh": "clamp(22px, calc((100cqh - 96px) / 2), 72px)" },
-  landRail: { flexShrink: 0, display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--space-4)", alignItems: "stretch" },
-  landRailLeft: { display: "flex", flexDirection: "column", gap: "var(--space-2)", minWidth: 0 },
-  landBpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.625rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
-  landPlayBtn: { width: 150, borderRadius: 16, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
+  landScreen: { width: "100%", maxWidth: 1100, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-3) + env(safe-area-inset-top)) calc(var(--space-4) + env(safe-area-inset-right)) calc(var(--space-2) + env(safe-area-inset-bottom)) calc(var(--space-4) + env(safe-area-inset-left))", gap: "var(--space-3)" },
+  landName: { flexShrink: 1, minWidth: 60, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "1.125rem", color: "var(--syahi)", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  // Cells sized from the WRAPPER's height (container query units), not
+  // the viewport's, so the strip can never outgrow its slot and spill
+  // over the rail. 100cqh = wrapper height; ~96px covers the strip's
+  // fixed parts (numbers row, two lane labels, internal gaps); the
+  // remainder splits between the two lanes.
+  landStripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", containerType: "size", "--ks-cellh": "clamp(18px, calc((100cqh - 96px) / 2), 72px)" },
+  landRail: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 44 },
+  landEditBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", display: "grid", placeItems: "center", cursor: "pointer" },
+  landBpmNum: { flexShrink: 0, fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1, marginLeft: "var(--space-2)" },
+  landPlayBtn: { flexShrink: 0, minWidth: 92, height: 44, borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "grid", placeItems: "center", cursor: "pointer", marginLeft: "var(--space-2)" },
   landNavWrap: { flexShrink: 0, width: "100%", maxWidth: 430, alignSelf: "center" },
 };
 
