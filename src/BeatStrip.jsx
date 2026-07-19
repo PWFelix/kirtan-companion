@@ -167,29 +167,42 @@ function BeatStrip({
     });
   }, [step, playing, structure]);
 
-  // ── Playhead glide + auto-follow, one rAF loop while playing ──
+  // ── Playhead glide + page-turn follow, one rAF loop while playing ──
+  // When the strip overflows we do NOT scroll continuously: strip motion
+  // + line motion + cell lighting all moving at once is unreadable at
+  // tempo. Instead the viewport behaves like a page of written music —
+  // it holds still while the line sweeps across the visible cells, then
+  // turns to the next whole-cell "page" in a single motion.
   useEffect(() => {
     if (!playing || !getPhase || mini) return;
     let raf;
+    let lastPage = -1;
     const tick = () => {
       const line = lineRef.current;
       const scroller = scrollerRef.current;
       if (line && scroller) {
         const phase = getPhase() || 0;
         line.style.left = phase * 100 + "%";
-        // Keep the line in view when the strip overflows.
         const total = scroller.scrollWidth;
         const vis = scroller.clientWidth;
         if (total > vis + 1) {
-          const x = phase * total;
-          scroller.scrollLeft = Math.max(0, Math.min(total - vis, x - vis * 0.4));
+          const cellW = total / beat.steps; // avg incl. gap — fine for paging
+          const perPage = Math.max(1, Math.floor(vis / cellW));
+          const page = Math.floor((phase * beat.steps) / perPage);
+          if (page !== lastPage) {
+            lastPage = page;
+            scroller.scrollTo({
+              left: Math.min(total - vis, page * perPage * cellW),
+              behavior: "smooth",
+            });
+          }
         }
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, getPhase, mini]);
+  }, [playing, getPhase, mini, beat.steps]);
 
   // ── Loop-position bar: only visible when the strip actually scrolls ──
   useEffect(() => {
