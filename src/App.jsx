@@ -139,6 +139,7 @@ function App() {
   const [view, setView] = useState("home"); // "home" | "beats" | "editor" | "settings"
   const [entered, setEntered] = useState(false); // splash shown until Begin
   const [detailBeat, setDetailBeat] = useState(null); // beat shown in the Beats-page info sheet
+  const [pickerOpen, setPickerOpen] = useState(false); // Home quick-pick sheet
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
 
   const [customBeats, setCustomBeats] = useState(loadSavedBeats);
@@ -206,6 +207,15 @@ function App() {
     setBeatId(b.id);
     engine.setBeat(b);
     if (!tempoLocked) { setBpm(b.bpm); engine.setBpm(b.bpm); }
+  }
+
+  // Home chevrons: step to the previous/next beat in list order (wraps).
+  // Switches the loop live if playing — this is the mid-kirtan "take it
+  // up a step" move.
+  function cycleBeat(dir) {
+    const i = allBeats.findIndex(b => b.id === beatId);
+    const next = allBeats[(i + dir + allBeats.length) % allBeats.length];
+    selectBeat(next);
   }
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
@@ -438,6 +448,36 @@ function App() {
     </svg>
   );
 
+  // Quick-pick sheet — shared by both Home orientations. Tap a row to
+  // switch (live, if playing) and dismiss.
+  const beatPicker = pickerOpen && (
+    <div style={st.sheetBackdrop} onClick={() => setPickerOpen(false)}>
+      <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Choose a beat"
+        onClick={(e) => e.stopPropagation()}>
+        <div style={st.sheetHead}>
+          <h2 style={st.sheetName}>Choose a beat</h2>
+          <button onClick={() => setPickerOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
+        </div>
+        <div style={st.pickList}>
+          {allBeats.map(b => {
+            const sel = b.id === beatId;
+            return (
+              <button key={b.id} onClick={() => { selectBeat(b); setPickerOpen(false); }}
+                style={{ ...st.pickRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
+                <div style={st.beatRowTop}>
+                  <span style={st.beatRowName}>{b.name}</span>
+                  <span style={{ ...st.beatRowMeta, flex: 1 }}>{b.note}</span>
+                  <RadioDot selected={sel} />
+                </div>
+                <BeatStrip beat={b} mini />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
   // ── Home, landscape: the propped-up layout. Phone-height landscape
   //    leaves ~120-200px for everything besides the strip and nav, so
   //    the ENTIRE transport collapses into one 44px rail: edit, name,
@@ -461,12 +501,14 @@ function App() {
         <div style={st.landRail}>
           <button onClick={() => openEditBeat()} style={st.landEditBtn}
             aria-label={isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat"}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-            </svg>
+            <PencilIcon />
           </button>
-          <span style={st.landName}>{beat.name}</span>
+          <button onClick={() => cycleBeat(-1)} aria-label="Previous beat" style={st.chevBtnSm}>‹</button>
+          <button onClick={() => setPickerOpen(true)} style={st.landNameBtn}
+            aria-haspopup="dialog" aria-expanded={pickerOpen}>
+            {beat.name} <span style={st.nameCaret}>▾</span>
+          </button>
+          <button onClick={() => cycleBeat(1)} aria-label="Next beat" style={st.chevBtnSm}>›</button>
           <span style={st.landBpmNum}>{bpm}</span>
           <span style={st.bpmUnit}>BPM</span>
           <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
@@ -490,6 +532,7 @@ function App() {
         </div>
 
         <div style={st.landNavWrap}>{bottomNav}</div>
+        {beatPicker}
       </div>
     );
   }
@@ -501,14 +544,19 @@ function App() {
         <Wordmark style={{ "--wm-size": "clamp(18px, 3.6vh, 24px)" }} />
       </header>
 
-      {/* Beat name + meta, with the edit shortcut alongside. */}
+      {/* Beat switcher: ‹ › step through beats; tapping the name opens
+          the quick-pick sheet. Pencil edits the loaded beat. */}
       <div style={st.beatHead}>
-        <div style={{ minWidth: 0 }}>
-          <h1 style={st.beatName}>{beat.name}</h1>
+        <button onClick={() => cycleBeat(-1)} aria-label="Previous beat" style={st.chevBtn}>‹</button>
+        <button onClick={() => setPickerOpen(true)} style={st.nameBtn}
+          aria-haspopup="dialog" aria-expanded={pickerOpen}>
+          <h1 style={st.beatName}>{beat.name} <span style={st.nameCaret}>▾</span></h1>
           <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
-        </div>
-        <button onClick={() => openEditBeat()} style={st.editBtn}>
-          {isCustomBeat(beat.id) ? "Edit" : "Customize"}
+        </button>
+        <button onClick={() => cycleBeat(1)} aria-label="Next beat" style={st.chevBtn}>›</button>
+        <button onClick={() => openEditBeat()} style={st.landEditBtn}
+          aria-label={isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat"}>
+          <PencilIcon />
         </button>
       </div>
 
@@ -568,6 +616,7 @@ function App() {
       </button>
 
       {bottomNav}
+      {beatPicker}
     </div>
   );
 }
@@ -577,9 +626,16 @@ const st = {
   // nav sits at the exact same spot on every page and never shifts on switch.
   screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-5)" },
   header: { flexShrink: 0, display: "flex", justifyContent: "center" },
-  beatHead: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
-  beatName: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  beatHead: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
+  beatName: { margin: 0, maxWidth: "100%", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   beatMeta: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", fontWeight: 500 },
+  nameBtn: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: 0, border: "none", background: "transparent", cursor: "pointer" },
+  nameCaret: { fontSize: "0.55em", color: "var(--syahi-soft)", verticalAlign: "middle" },
+  chevBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
+  chevBtnSm: { flexShrink: 0, width: 32, height: 44, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 24, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
+  landNameBtn: { flexShrink: 1, minWidth: 56, padding: 0, border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "1.125rem", color: "var(--syahi)", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  pickList: { display: "flex", flexDirection: "column", gap: "var(--space-2)", marginTop: "var(--space-3)" },
+  pickRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "10px 12px", borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
   stripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center" },
   bpmRow: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 8, marginBottom: "var(--space-2)" },
   volRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
@@ -589,7 +645,6 @@ const st = {
   subTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", letterSpacing: "0.01em", color: "var(--ink-primary)" },
   backBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
   subtitle: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
-  editBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em", display: "grid", placeItems: "center" },
   controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-5)" },
   controlLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-3)" },
 
