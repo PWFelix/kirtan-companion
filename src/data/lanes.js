@@ -11,13 +11,19 @@
  * (see SoundPlayer's routing convention).
  *
  * Order matters: lanes render top-to-bottom in this order.
+ *
+ * `primary` lanes are a beat's rhythmic identity (the mridanga). MINI
+ * strips (beat lists, quick-pick) render primary lanes only — at 8px
+ * marks, four stacked lanes are noise, and a melody line is unreadable.
+ * Non-primary tracks will show as small instrument chips beside the
+ * mini instead; the full strip and the info sheet render every lane.
  */
 
 export const LANES = [
-  { id: "dayan", label: "Dayan", color: "var(--lane-dayan)" },
-  { id: "bayan", label: "Bayan", color: "var(--lane-bayan)" },
+  { id: "dayan", label: "Dayan", color: "var(--lane-dayan)", primary: true },
+  { id: "bayan", label: "Bayan", color: "var(--lane-bayan)", primary: true },
 
   // ── Ready for when these instruments are added ──
-  // { id: "kartal", label: "Kartal", color: "var(--lane-kartal)" },
-  // { id: "melody", label: "Melody", color: "var(--lane-melody)" },
+  // { id: "kartal", label: "Kartal", color: "var(--lane-kartal)", primary: false },
+  // { id: "melody", label: "Melody", color: "var(--lane-melody)", primary: false },
 ];

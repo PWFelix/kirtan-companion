@@ -57,7 +57,11 @@ function BeatStrip({
   const loopBarRef = useRef(null);
   const loopWinRef = useRef(null);
 
-  const lanes = LANES.filter((l) => Array.isArray(beat[l.id]));
+  // Mini strips show only PRIMARY lanes (the beat's rhythmic identity);
+  // see lanes.js for the reasoning. Full strips render everything.
+  const lanes = LANES.filter(
+    (l) => Array.isArray(beat[l.id]) && (!mini || l.primary !== false)
+  );
   const cpg =
     beat.cellsPerGroup ??
     Math.max(1, Math.round(beat.steps / (beat.beatsPerBar ?? 4)));

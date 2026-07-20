@@ -219,6 +219,7 @@ function App() {
   const [entered, setEntered] = useState(false); // splash shown until Begin
   const [detailBeat, setDetailBeat] = useState(null); // beat shown in the Beats-page info sheet
   const [pickerOpen, setPickerOpen] = useState(false); // Home quick-pick sheet
+  const [pickerTab, setPickerTab] = useState("builtin"); // category shown in the quick-pick
   const [mixerOpen, setMixerOpen] = useState(false);   // mixer sheet
   const [endVolumes, setEndVolumes] = useState({});    // per-lane faders, default 1
 
@@ -720,23 +721,40 @@ function App() {
     </svg>
   );
 
-  // Quick-pick sheet — shared by both Home orientations. Lists the ACTIVE
-  // category (the current progression); tap a row to switch (live, if
-  // playing) and dismiss.
-  const pickerBeats = categoryBeats(activeCat).length ? categoryBeats(activeCat) : allBeats;
+  // Quick-pick sheet — shared by both Home orientations. Opens on the
+  // ACTIVE category but carries its own tab row, so the user can hop to
+  // another progression without visiting the Beats page. Picking a beat
+  // makes its tab the active cycling context and dismisses.
+  function openPicker() {
+    setPickerTab(activeCat);
+    setPickerOpen(true);
+  }
+  const pickerBeats = categoryBeats(pickerTab);
   const beatPicker = pickerOpen && (
     <div style={st.sheetBackdrop} onClick={() => setPickerOpen(false)}>
       <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Choose a beat"
         onClick={(e) => e.stopPropagation()}>
         <div style={st.sheetHead}>
-          <h2 style={st.sheetName}>{catName(activeCat)}</h2>
+          <h2 style={st.sheetName}>Choose a beat</h2>
           <button onClick={() => setPickerOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
         </div>
+        <ScrollFadeRow rowStyle={st.catTabs}>
+          {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
+            <button key={id} onClick={() => setPickerTab(id)}
+              style={{ ...st.catTab, ...(pickerTab === id ? st.catTabActive : null) }}
+              aria-pressed={pickerTab === id}>
+              {catName(id)}
+            </button>
+          ))}
+        </ScrollFadeRow>
         <div style={st.pickList}>
+          {pickerBeats.length === 0 && (
+            <p style={st.emptyHint}>This category is empty — add beats to it on the Beats page.</p>
+          )}
           {pickerBeats.map(b => {
             const sel = b.id === beatId;
             return (
-              <button key={b.id} onClick={() => { selectBeat(b, activeCat); setPickerOpen(false); }}
+              <button key={b.id} onClick={() => { selectBeat(b, pickerTab); setPickerOpen(false); }}
                 style={{ ...st.pickRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
                 <div style={st.beatRowTop}>
                   <span style={st.beatRowName}>{b.name}</span>
@@ -824,7 +842,7 @@ function App() {
             <PencilIcon />
           </button>
           <button onClick={() => cycleBeat(-1)} aria-label="Previous beat" style={st.chevBtnSm}>‹</button>
-          <button onClick={() => setPickerOpen(true)} style={st.landNameBtn}
+          <button onClick={openPicker} style={st.landNameBtn}
             aria-haspopup="dialog" aria-expanded={pickerOpen}>
             {beat.name} <span style={st.nameCaret}>▾</span>
           </button>
@@ -873,7 +891,7 @@ function App() {
           the quick-pick sheet. Pencil edits the loaded beat. */}
       <div style={st.beatHead}>
         <button onClick={() => cycleBeat(-1)} aria-label="Previous beat" style={st.chevBtn}>‹</button>
-        <button onClick={() => setPickerOpen(true)} style={st.nameBtn}
+        <button onClick={openPicker} style={st.nameBtn}
           aria-haspopup="dialog" aria-expanded={pickerOpen}>
           <h1 style={st.beatName}>{beat.name} <span style={st.nameCaret}>▾</span></h1>
           <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
