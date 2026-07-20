@@ -12,6 +12,11 @@
  * which the Vaishnava tilak stands in as the "i" of "Companion" (same
  * trick as the original logo). Size everything with the --wm-size
  * variable (1em = the wordmark line height).
+ *
+ * With `expandFromInitials` (splash only) the letters after the K and
+ * the C are wrapped in collapsing groups (.kc-wm-grow) so the lockup
+ * opens as "KC" and unfurls to the full name — see the .kc-wm-anim
+ * rules in index.css for how and when.
  */
 
 function Tilak() {
@@ -24,12 +29,22 @@ function Tilak() {
   );
 }
 
-function Wordmark({ style }) {
+function Wordmark({ style, expandFromInitials = false }) {
   return (
-    <div className="kc-wordmark" style={style} role="img" aria-label="Kirtan Companion">
+    <div
+      className={"kc-wordmark" + (expandFromInitials ? " kc-wm-anim" : "")}
+      style={style} role="img" aria-label="Kirtan Companion"
+    >
       <div className="kc-wm-deva" aria-hidden="true">कीर्तन</div>
       <div className="kc-wm-line" aria-hidden="true">
-        Kirtan&nbsp;Compan<Tilak />on
+        {expandFromInitials ? (
+          <>
+            K<span className="kc-wm-grow"><span className="kc-wm-grow-in">irtan&nbsp;</span></span>
+            C<span className="kc-wm-grow"><span className="kc-wm-grow-in">ompan<Tilak />on</span></span>
+          </>
+        ) : (
+          <>Kirtan&nbsp;Compan<Tilak />on</>
+        )}
       </div>
     </div>
   );

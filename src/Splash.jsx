@@ -4,8 +4,9 @@
  * Browsers refuse to play sound until the user taps the page, so the
  * one mandatory tap becomes the brand moment: a huge faint clay dharma
  * wheel behind the centred live wordmark and a single Begin bar, with
- * a short entrance animation (wheel settles in, wordmark and button
- * rise; disabled under prefers-reduced-motion). The tap unlocks the
+ * a short entrance animation (wheel settles in, the wordmark rises as
+ * "KC" and unfurls to the full name, then the button rises; disabled
+ * under prefers-reduced-motion). The tap unlocks the
  * engine on its way in (see App.handleBegin). Shown once per page load.
  *
  * The wheel is NOT an <img>: it's a clay-filled div with the PNG's
@@ -28,7 +29,7 @@ function Splash({ onBegin, ready }) {
           elements so their transforms never fight the positioning. */}
       <div style={sp.content}>
         <div className="kc-splash-rise1">
-          <Wordmark style={{ "--wm-size": "clamp(30px, 8.5vw, 44px)" }} />
+          <Wordmark expandFromInitials style={{ "--wm-size": "clamp(30px, 8.5vw, 44px)" }} />
         </div>
         <button onClick={onBegin} className="kc-splash-rise2" style={sp.begin}>
           {ready ? "Begin" : "Begin · loading sounds…"}
