@@ -7,14 +7,17 @@
  * when the user turns bols on in Settings, and the future editor's pads
  * are labelled from here (including two-hand combos).
  *
- * NOTE: bol naming varies between traditions. These follow common ISKCON
- * mridanga usage but should be verified against Sita-pati das's "The Art
- * and Science of Harinam Sankirtan Yajna" (the source of beats.js).
+ * Names follow the stroke legend in Sita-pati das, "The Art and Science
+ * of Harinam Sankirtan Yajna" (p. 43 of the PDF in reference/):
+ *   Ta = top open, Te = top closed, Ge = bottom open, Khe = bottom closed,
+ *   Da = bottom open + top open (Dha when struck strong together),
+ *   Gi = bottom open + top closed.
+ * Combinations the book leaves unnamed are labelled by their parts.
  */
 
 export const BOLS = {
-  dayan: { O: "Ta", X: "Ti" },
-  bayan: { O: "Ge", X: "Ka" },
+  dayan: { O: "Ta", X: "Te" },
+  bayan: { O: "Ge", X: "Khe" },
 };
 
 /**
@@ -22,8 +25,8 @@ export const BOLS = {
  * names. Keyed "dayanValue+bayanValue". Used by the editor's combo pads.
  */
 export const COMBO_BOLS = {
-  "O+O": "Dha",
-  "X+O": "Dhi",
-  "O+X": "Tra",
-  "X+X": "Tri",
+  "O+O": "Da",       // book also lists "Dha" for a strong combined strike
+  "X+O": "Gi",
+  "O+X": "Ta·Khe",   // not named in the book — labelled by its parts
+  "X+X": "Te·Khe",   // not named in the book — labelled by its parts
 };
