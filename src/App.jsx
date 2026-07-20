@@ -393,36 +393,81 @@ function App() {
   const rowRefs = useRef([]);          // row elements of the browsed category
   const [dragIndex, setDragIndex] = useState(-1); // for the dragged row's styling
 
+  const LIST_GAP = 12; // matches st.beatList row gap
+
   function startDrag(e, catId, beatId, index) {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { catId, beatId, index };
+    dragRef.current = { catId, beatId, index, grabY: e.clientY };
     setDragIndex(index);
+    if (navigator.vibrate) navigator.vibrate(12); // tactile "picked up" (where supported)
   }
+
+  // FLIP: the displaced neighbour SLIDES into its new slot instead of
+  // teleporting — measure where it was, let React move it, then animate
+  // the difference away. Skipped under prefers-reduced-motion.
+  function flipRow(el) {
+    const from = el.getBoundingClientRect().top;
+    requestAnimationFrame(() => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const delta = from - el.getBoundingClientRect().top;
+      if (!delta) return;
+      el.style.transition = "none";
+      el.style.transform = `translateY(${delta}px)`;
+      void el.offsetHeight; // force reflow so the next line animates
+      el.style.transition = "transform 160ms ease";
+      el.style.transform = "";
+      setTimeout(() => { el.style.transition = ""; }, 170);
+    });
+  }
+
   function dragMove(e) {
     const d = dragRef.current;
     if (!d) return;
+    // The lifted row rides the finger: offset from the grab point,
+    // corrected after every swap so the motion stays continuous.
+    const el = rowRefs.current[d.index];
+    if (el) el.style.transform = `translateY(${e.clientY - d.grabY}px) scale(1.02)`;
+
     const prevEl = rowRefs.current[d.index - 1];
     const nextEl = rowRefs.current[d.index + 1];
     if (prevEl) {
       const r = prevEl.getBoundingClientRect();
       if (e.clientY < r.top + r.height / 2) {
+        flipRow(prevEl);
         moveInCategory(d.catId, d.beatId, -1);
+        d.grabY -= r.height + LIST_GAP;
         d.index -= 1; setDragIndex(d.index);
+        if (navigator.vibrate) navigator.vibrate(8); // tick per swap
         return;
       }
     }
     if (nextEl) {
       const r = nextEl.getBoundingClientRect();
       if (e.clientY > r.top + r.height / 2) {
+        flipRow(nextEl);
         moveInCategory(d.catId, d.beatId, 1);
+        d.grabY += r.height + LIST_GAP;
         d.index += 1; setDragIndex(d.index);
+        if (navigator.vibrate) navigator.vibrate(8);
       }
     }
   }
+
   function endDrag() {
+    const d = dragRef.current;
     dragRef.current = null;
-    setDragIndex(-1);
+    if (!d) { setDragIndex(-1); return; }
+    const el = rowRefs.current[d.index];
+    if (el && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      // Settle the lifted row into its slot, then drop the lift styling.
+      el.style.transition = "transform 160ms ease";
+      el.style.transform = "";
+      setTimeout(() => { el.style.transition = ""; setDragIndex(-1); }, 170);
+    } else {
+      if (el) el.style.transform = "";
+      setDragIndex(-1);
+    }
   }
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
@@ -556,7 +601,10 @@ function App() {
           ref={inUserCat ? (el) => { rowRefs.current[i] = el; } : undefined}
           style={{ ...st.beatRow,
             borderColor: dragging || sel ? "var(--clay)" : "var(--rule)",
-            background: dragging ? "var(--head-sunken)" : "var(--head-worn)" }}>
+            background: dragging ? "var(--head-sunken)" : "var(--head-worn)",
+            // Lift while held: above siblings, shadowed, grabbing cursor.
+            ...(dragging ? { position: "relative", zIndex: 5,
+              boxShadow: "0 8px 22px oklch(0.24 0.02 60 / 0.28)", cursor: "grabbing" } : null) }}>
           <div style={st.beatRowTop}>
             {inUserCat && (
               /* Drag handle: pointer-drag to reorder; arrow keys work too. */
