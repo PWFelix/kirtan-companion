@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local reference material (not for the repo or the shipped site)
+reference/
