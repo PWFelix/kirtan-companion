@@ -115,6 +115,43 @@ function BottomNav({ view, onHome, onBeats, onEditor, onSettings }) {
   );
 }
 
+// Horizontal scroller with gradient edge fades: content visibly "melts"
+// off whichever side has more to see, and the fade vanishes at that end —
+// the standard cue that a row scrolls. Used by the category tab bar.
+function ScrollFadeRow({ children, rowStyle }) {
+  const ref = useRef(null);
+  const [fades, setFades] = useState({ left: false, right: false });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const left = el.scrollLeft > 2;
+      const right = el.scrollLeft < el.scrollWidth - el.clientWidth - 2;
+      setFades(f => (f.left === left && f.right === right ? f : { left, right }));
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", update); ro.disconnect(); };
+    // children: re-measure when tabs are added/removed (content width
+    // changes don't fire the ResizeObserver, which watches el's own box).
+  }, [children]);
+
+  return (
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      <div ref={ref} style={rowStyle}>{children}</div>
+      <div aria-hidden="true" style={{ ...st.edgeFade, left: 0,
+        background: "linear-gradient(90deg, var(--head), transparent)",
+        opacity: fades.left ? 1 : 0 }} />
+      <div aria-hidden="true" style={{ ...st.edgeFade, right: 0,
+        background: "linear-gradient(270deg, var(--head), transparent)",
+        opacity: fades.right ? 1 : 0 }} />
+    </div>
+  );
+}
+
 function InfoIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -476,8 +513,9 @@ function App() {
           <span style={{ width: 44 }} aria-hidden="true" />
         </header>
 
-        {/* Category tabs: the two fixed ones, the user's own, and +. */}
-        <div style={st.catTabs}>
+        {/* Category tabs: the two fixed ones, the user's own, and +.
+            Edge fades signal when the row scrolls. */}
+        <ScrollFadeRow rowStyle={st.catTabs}>
           {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
             <button key={id} onClick={() => setBrowseTab(id)}
               style={{ ...st.catTab, ...(browseTab === id ? st.catTabActive : null) }}
@@ -487,7 +525,7 @@ function App() {
           ))}
           <button onClick={() => setCreateCatOpen(true)} aria-label="New category"
             style={{ ...st.catTab, flexShrink: 0 }}>+</button>
-        </div>
+        </ScrollFadeRow>
 
         <section style={st.beatList}>
           {browseTab === "builtin" && builtinGroups.map(g => (
@@ -858,7 +896,8 @@ const st = {
   controlLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-3)" },
 
   // ── Beats page (library list) ──
-  catTabs: { flexShrink: 0, display: "flex", gap: "var(--space-2)", overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" },
+  catTabs: { display: "flex", gap: "var(--space-2)", overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" },
+  edgeFade: { position: "absolute", top: 0, bottom: 2, width: 30, pointerEvents: "none", transition: "opacity 150ms ease" },
   catTab: { flexShrink: 0, minHeight: 40, padding: "0 16px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
   catTabActive: { background: "var(--clay)", borderColor: "var(--clay)", color: "var(--on-clay)" },
   catActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
