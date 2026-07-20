@@ -21,6 +21,7 @@
   --clay-deep:   oklch(0.47 0.12 38);    /* pressed / emphasis */
   --strap:       oklch(0.66 0.09 75);    /* leather tan — secondary accent */
   --on-clay:     oklch(0.97 0.01 85);    /* warm white text on clay */
+  --danger:      oklch(0.47 0.15 25);    /* destructive confirm — deeper red than clay */
 
   /* ── Lane colours (one per instrument row on the strip) ──
      Adding an instrument = adding one token here + a LANES entry. */
