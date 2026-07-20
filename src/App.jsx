@@ -385,88 +385,126 @@ function App() {
   }
 
   // ── Drag-to-reorder (user categories only) ──
-  // HTML5 drag events don't exist on touch, so this is pointer-based:
-  // grabbing a row's handle captures the pointer; crossing a neighbour
-  // row's vertical midpoint swaps one position (the list re-renders and
-  // the drag continues from the new slot). Each swap persists.
-  const dragRef = useRef(null);        // { catId, beatId, index } while dragging
+  // HTML5 drag events don't exist on touch, so this is pointer-based.
+  // The drag is driven by a per-frame rAF loop (not raw pointer events):
+  // pointer events only record the finger's Y; the loop applies the
+  // lifted row's transform, auto-scrolls near the list edges, and runs
+  // the swap checks. Swap checks use LAYOUT positions (offsetTop) —
+  // transforms and in-flight FLIP animations can't affect those, which
+  // is what previously made swaps oscillate and rows jam mid-air.
+  const dragRef = useRef(null);        // { catId, beatId, index, grabY, lastY, raf }
   const rowRefs = useRef([]);          // row elements of the browsed category
-  const [dragIndex, setDragIndex] = useState(-1); // for the dragged row's styling
+  const listRef = useRef(null);        // the scrolling beat list
+  const updateDragRef = useRef(null);  // latest updateDrag (the rAF loop must not go stale)
+  const [dragBeatId, setDragBeatId] = useState(null); // lifted row's styling
 
   const LIST_GAP = 12; // matches st.beatList row gap
+  const reducedMotion = () =>
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function startDrag(e, catId, beatId, index) {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { catId, beatId, index, grabY: e.clientY };
-    setDragIndex(index);
+    dragRef.current = { catId, beatId, index, grabY: e.clientY, lastY: e.clientY, raf: 0 };
+    setDragBeatId(beatId);
     if (navigator.vibrate) navigator.vibrate(12); // tactile "picked up" (where supported)
-  }
-
-  // FLIP: the displaced neighbour SLIDES into its new slot instead of
-  // teleporting — measure where it was, let React move it, then animate
-  // the difference away. Skipped under prefers-reduced-motion.
-  function flipRow(el) {
-    const from = el.getBoundingClientRect().top;
-    requestAnimationFrame(() => {
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const delta = from - el.getBoundingClientRect().top;
-      if (!delta) return;
-      el.style.transition = "none";
-      el.style.transform = `translateY(${delta}px)`;
-      void el.offsetHeight; // force reflow so the next line animates
-      el.style.transition = "transform 160ms ease";
-      el.style.transform = "";
-      setTimeout(() => { el.style.transition = ""; }, 170);
-    });
+    const tick = () => {
+      const d = dragRef.current;
+      if (!d) return;
+      updateDragRef.current?.();
+      d.raf = requestAnimationFrame(tick);
+    };
+    dragRef.current.raf = requestAnimationFrame(tick);
   }
 
   function dragMove(e) {
     const d = dragRef.current;
-    if (!d) return;
-    // The lifted row rides the finger: offset from the grab point,
-    // corrected after every swap so the motion stays continuous.
-    const el = rowRefs.current[d.index];
-    if (el) el.style.transform = `translateY(${e.clientY - d.grabY}px) scale(1.02)`;
+    if (d) d.lastY = e.clientY; // the rAF loop does the rest
+  }
 
+  // FLIP: the displaced neighbour SLIDES into its new slot instead of
+  // teleporting — measure its visual position, let React move it, then
+  // animate the difference away. Skipped under prefers-reduced-motion.
+  function flipRow(el) {
+    const from = el.getBoundingClientRect().top;
+    requestAnimationFrame(() => {
+      if (reducedMotion()) return;
+      el.style.transition = "none";
+      el.style.transform = "";
+      const delta = from - el.getBoundingClientRect().top;
+      if (!delta) { el.style.transition = ""; return; }
+      el.style.transform = `translateY(${delta}px)`;
+      void el.offsetHeight; // force reflow so the next line animates
+      el.style.transition = "transform 160ms ease";
+      el.style.transform = "";
+      clearTimeout(el._kcFlipTimer);
+      el._kcFlipTimer = setTimeout(() => { el.style.transition = ""; }, 170);
+    });
+  }
+
+  // One frame of drag: auto-scroll, ride the finger, at most one swap.
+  function updateDrag() {
+    const d = dragRef.current;
+    const listEl = listRef.current;
+    if (!d || !listEl) return;
+    const lr = listEl.getBoundingClientRect();
+
+    // Auto-scroll when the finger nears the list's edges (speed grows
+    // toward the edge). grabY shifts with the scroll so the lifted row
+    // stays under the finger.
+    const EDGE = 56, MAX_SPEED = 14;
+    let dy = 0;
+    if (d.lastY < lr.top + EDGE) dy = -Math.ceil(((lr.top + EDGE - d.lastY) / EDGE) * MAX_SPEED);
+    else if (d.lastY > lr.bottom - EDGE) dy = Math.ceil(((d.lastY - (lr.bottom - EDGE)) / EDGE) * MAX_SPEED);
+    if (dy) {
+      const before = listEl.scrollTop;
+      listEl.scrollTop += dy;
+      d.grabY -= listEl.scrollTop - before;
+    }
+
+    // The lifted row rides the finger (re-applied every frame, so the
+    // one-frame reset after a re-render is invisible).
+    const el = rowRefs.current[d.index];
+    if (el) el.style.transform = `translateY(${d.lastY - d.grabY}px) scale(1.02)`;
+
+    // Swap checks against layout positions: viewport y of a row's mid =
+    // list top − scroll + offsetTop + half height. offsetTop ignores
+    // transforms, so animating neighbours can't retrigger swaps.
+    const rowMid = (rEl) => lr.top - listEl.scrollTop + rEl.offsetTop + rEl.offsetHeight / 2;
     const prevEl = rowRefs.current[d.index - 1];
     const nextEl = rowRefs.current[d.index + 1];
-    if (prevEl) {
-      const r = prevEl.getBoundingClientRect();
-      if (e.clientY < r.top + r.height / 2) {
-        flipRow(prevEl);
-        moveInCategory(d.catId, d.beatId, -1);
-        d.grabY -= r.height + LIST_GAP;
-        d.index -= 1; setDragIndex(d.index);
-        if (navigator.vibrate) navigator.vibrate(8); // tick per swap
-        return;
-      }
-    }
-    if (nextEl) {
-      const r = nextEl.getBoundingClientRect();
-      if (e.clientY > r.top + r.height / 2) {
-        flipRow(nextEl);
-        moveInCategory(d.catId, d.beatId, 1);
-        d.grabY += r.height + LIST_GAP;
-        d.index += 1; setDragIndex(d.index);
-        if (navigator.vibrate) navigator.vibrate(8);
-      }
+    if (prevEl && d.lastY < rowMid(prevEl)) {
+      flipRow(prevEl);
+      moveInCategory(d.catId, d.beatId, -1);
+      d.grabY -= prevEl.offsetHeight + LIST_GAP;
+      d.index -= 1;
+      if (navigator.vibrate) navigator.vibrate(8); // tick per swap
+    } else if (nextEl && d.lastY > rowMid(nextEl)) {
+      flipRow(nextEl);
+      moveInCategory(d.catId, d.beatId, 1);
+      d.grabY += nextEl.offsetHeight + LIST_GAP;
+      d.index += 1;
+      if (navigator.vibrate) navigator.vibrate(8);
     }
   }
+  // Re-point the loop at this render's updateDrag (it closes over the
+  // CURRENT categories — a stale closure would silently drop swaps).
+  useEffect(() => { updateDragRef.current = updateDrag; });
 
   function endDrag() {
     const d = dragRef.current;
     dragRef.current = null;
-    if (!d) { setDragIndex(-1); return; }
+    if (!d) { setDragBeatId(null); return; }
+    cancelAnimationFrame(d.raf);
     const el = rowRefs.current[d.index];
-    if (el && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (el && !reducedMotion()) {
       // Settle the lifted row into its slot, then drop the lift styling.
       el.style.transition = "transform 160ms ease";
       el.style.transform = "";
-      setTimeout(() => { el.style.transition = ""; setDragIndex(-1); }, 170);
+      setTimeout(() => { el.style.transition = ""; setDragBeatId(null); }, 170);
     } else {
       if (el) el.style.transform = "";
-      setDragIndex(-1);
+      setDragBeatId(null);
     }
   }
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
@@ -595,7 +633,7 @@ function App() {
     const inUserCat = categories.some(c => c.id === browseTab);
     const renderRow = (b, i) => {
       const sel = b.id === beatId;
-      const dragging = inUserCat && dragIndex === i;
+      const dragging = inUserCat && dragBeatId === b.id;
       return (
         <div key={b.id} onClick={() => selectBeat(b, browseTab)}
           ref={inUserCat ? (el) => { rowRefs.current[i] = el; } : undefined}
@@ -684,7 +722,7 @@ function App() {
             style={{ ...st.catTab, flexShrink: 0 }}>+</button>
         </ScrollFadeRow>
 
-        <section style={st.beatList}>
+        <section style={st.beatList} ref={listRef}>
           {browseTab === "builtin" && builtinGroups.map(g => (
             <div key={g} style={{ display: "contents" }}>
               <div style={st.sectionLabel}>{g}</div>
@@ -1156,7 +1194,9 @@ const st = {
   // dragging (otherwise the page scrolls instead of reordering).
   dragHandle: { flexShrink: 0, width: 36, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 19, cursor: "grab", display: "grid", placeItems: "center", borderRadius: 10, touchAction: "none" },
   catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
-  beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
+  // position:relative → rows' offsetTop is measured from the list itself,
+  // which the drag's layout-based swap checks depend on.
+  beatList: { position: "relative", flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
   sectionLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--syahi-soft)" },
   emptyHint: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", lineHeight: 1.5 },
   beatRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "12px 14px", borderRadius: 16, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
