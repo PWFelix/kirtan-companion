@@ -371,8 +371,7 @@ function App() {
     }));
   }
   // Reorder within a progression: swap the beat one slot up/down.
-  // Used by the drag handler (one swap per midpoint crossed) and by
-  // arrow keys on a focused drag handle.
+  // Driven by the ↑↓ buttons that appear on the selected row.
   function moveInCategory(catId, id, dir) {
     saveCategories(categories.map(c => {
       if (c.id !== catId) return c;
@@ -384,136 +383,6 @@ function App() {
     }));
   }
 
-  // ── Drag-to-reorder (user categories only) ──
-  // HTML5 drag events don't exist on touch, so this is pointer-based.
-  // The drag is driven by a per-frame rAF loop (not raw pointer events):
-  // pointer events only record the finger's Y; the loop applies the
-  // lifted row's transform, auto-scrolls near the list edges, and runs
-  // the swap checks. Swap checks use LAYOUT positions (offsetTop) —
-  // transforms and in-flight FLIP animations can't affect those, which
-  // is what previously made swaps oscillate and rows jam mid-air.
-  // Rows are tracked BY BEAT ID, never by index: between a swap and
-  // React committing the reordered DOM, index-based lookups point at the
-  // wrong rows (which lifted the wrong element and mis-read neighbour
-  // positions — the source of jams when reversing over a fresh swap).
-  const dragRef = useRef(null);           // { catId, beatId, grabY, lastY, raf }
-  const rowRefs = useRef(new Map());      // beatId -> row element (browsed category)
-  const listRef = useRef(null);           // the scrolling beat list
-  const updateDragRef = useRef(null);     // latest updateDrag (the rAF loop must not go stale)
-  const [dragBeatId, setDragBeatId] = useState(null); // lifted row's styling
-
-  const LIST_GAP = 12; // matches st.beatList row gap
-  const reducedMotion = () =>
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  function startDrag(e, catId, beatId) {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { catId, beatId, grabY: e.clientY, lastY: e.clientY, raf: 0 };
-    setDragBeatId(beatId);
-    if (navigator.vibrate) navigator.vibrate(12); // tactile "picked up" (where supported)
-    const tick = () => {
-      const d = dragRef.current;
-      if (!d) return;
-      updateDragRef.current?.();
-      d.raf = requestAnimationFrame(tick);
-    };
-    dragRef.current.raf = requestAnimationFrame(tick);
-  }
-
-  function dragMove(e) {
-    const d = dragRef.current;
-    if (d) d.lastY = e.clientY; // the rAF loop does the rest
-  }
-
-  // FLIP: the displaced neighbour SLIDES into its new slot instead of
-  // teleporting — measure its visual position, let React move it, then
-  // animate the difference away. Skipped under prefers-reduced-motion.
-  function flipRow(el) {
-    const from = el.getBoundingClientRect().top;
-    requestAnimationFrame(() => {
-      if (reducedMotion()) return;
-      el.style.transition = "none";
-      el.style.transform = "";
-      const delta = from - el.getBoundingClientRect().top;
-      if (!delta) { el.style.transition = ""; return; }
-      el.style.transform = `translateY(${delta}px)`;
-      void el.offsetHeight; // force reflow so the next line animates
-      el.style.transition = "transform 160ms ease";
-      el.style.transform = "";
-      clearTimeout(el._kcFlipTimer);
-      el._kcFlipTimer = setTimeout(() => { el.style.transition = ""; }, 170);
-    });
-  }
-
-  // One frame of drag: auto-scroll, ride the finger, at most one swap.
-  // Neighbours are derived from the STATE order each frame (fresh via
-  // updateDragRef), and elements looked up by id — so a not-yet-committed
-  // reorder can never misdirect the transform or the swap checks.
-  function updateDrag() {
-    const d = dragRef.current;
-    const listEl = listRef.current;
-    if (!d || !listEl) return;
-    const order = categoryBeats(d.catId).map(b => b.id);
-    const idx = order.indexOf(d.beatId);
-    if (idx === -1) return;
-    const lr = listEl.getBoundingClientRect();
-
-    // Auto-scroll when the finger nears the list's edges (speed grows
-    // toward the edge). grabY shifts with the scroll so the lifted row
-    // stays under the finger.
-    const EDGE = 56, MAX_SPEED = 14;
-    let dy = 0;
-    if (d.lastY < lr.top + EDGE) dy = -Math.ceil(((lr.top + EDGE - d.lastY) / EDGE) * MAX_SPEED);
-    else if (d.lastY > lr.bottom - EDGE) dy = Math.ceil(((d.lastY - (lr.bottom - EDGE)) / EDGE) * MAX_SPEED);
-    if (dy) {
-      const before = listEl.scrollTop;
-      listEl.scrollTop += dy;
-      d.grabY -= listEl.scrollTop - before;
-    }
-
-    // The lifted row rides the finger.
-    const el = rowRefs.current.get(d.beatId);
-    if (el) el.style.transform = `translateY(${d.lastY - d.grabY}px) scale(1.02)`;
-
-    // Swap checks against layout positions: viewport y of a row's mid =
-    // list top − scroll + offsetTop + half height. offsetTop ignores
-    // transforms, so animating neighbours can't retrigger swaps.
-    const rowMid = (rEl) => lr.top - listEl.scrollTop + rEl.offsetTop + rEl.offsetHeight / 2;
-    const prevEl = idx > 0 ? rowRefs.current.get(order[idx - 1]) : null;
-    const nextEl = idx < order.length - 1 ? rowRefs.current.get(order[idx + 1]) : null;
-    if (prevEl && d.lastY < rowMid(prevEl)) {
-      flipRow(prevEl);
-      moveInCategory(d.catId, d.beatId, -1);
-      d.grabY -= prevEl.offsetHeight + LIST_GAP;
-      if (navigator.vibrate) navigator.vibrate(8); // tick per swap
-    } else if (nextEl && d.lastY > rowMid(nextEl)) {
-      flipRow(nextEl);
-      moveInCategory(d.catId, d.beatId, 1);
-      d.grabY += nextEl.offsetHeight + LIST_GAP;
-      if (navigator.vibrate) navigator.vibrate(8);
-    }
-  }
-  // Re-point the loop at this render's updateDrag (it closes over the
-  // CURRENT categories — a stale closure would silently drop swaps).
-  useEffect(() => { updateDragRef.current = updateDrag; });
-
-  function endDrag() {
-    const d = dragRef.current;
-    dragRef.current = null;
-    if (!d) { setDragBeatId(null); return; }
-    cancelAnimationFrame(d.raf);
-    const el = rowRefs.current.get(d.beatId);
-    if (el && !reducedMotion()) {
-      // Settle the lifted row into its slot, then drop the lift styling.
-      el.style.transition = "transform 160ms ease";
-      el.style.transform = "";
-      setTimeout(() => { el.style.transition = ""; setDragBeatId(null); }, 170);
-    } else {
-      if (el) el.style.transform = "";
-      setDragBeatId(null);
-    }
-  }
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
   function changeEndVolume(end, value) {
@@ -638,40 +507,30 @@ function App() {
     // is the keyboard-reachable select control; the whole row stays tappable
     // via the div's onClick (inner buttons stop propagation).
     const inUserCat = categories.some(c => c.id === browseTab);
-    const renderRow = (b) => {
+    const catLen = inUserCat ? categoryBeats(browseTab).length : 0;
+    const renderRow = (b, i) => {
       const sel = b.id === beatId;
-      const dragging = inUserCat && dragBeatId === b.id;
       return (
         <div key={b.id} onClick={() => selectBeat(b, browseTab)}
-          ref={inUserCat
-            ? (el) => { if (el) rowRefs.current.set(b.id, el); else rowRefs.current.delete(b.id); }
-            : undefined}
-          style={{ ...st.beatRow,
-            borderColor: dragging || sel ? "var(--clay)" : "var(--rule)",
-            background: dragging ? "var(--head-sunken)" : "var(--head-worn)",
-            // Lift while held: above siblings, shadowed, grabbing cursor.
-            ...(dragging ? { position: "relative", zIndex: 5,
-              boxShadow: "0 8px 22px oklch(0.24 0.02 60 / 0.28)", cursor: "grabbing" } : null) }}>
+          style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
           <div style={st.beatRowTop}>
-            {inUserCat && (
-              /* Drag handle: pointer-drag to reorder; arrow keys work too. */
-              <button
-                onPointerDown={(e) => startDrag(e, browseTab, b.id)}
-                onPointerMove={dragMove}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowUp") { e.preventDefault(); moveInCategory(browseTab, b.id, -1); }
-                  if (e.key === "ArrowDown") { e.preventDefault(); moveInCategory(browseTab, b.id, 1); }
-                }}
-                aria-label={`Reorder ${b.name} — drag, or use arrow keys`}
-                style={st.dragHandle}>≡</button>
-            )}
             <button onClick={() => selectBeat(b, browseTab)} aria-pressed={sel} style={st.beatRowSelect}>
               <span style={st.beatRowName}>{b.name}</span>
               <span style={st.beatRowMeta}>{b.note} · {b.steps} cells</span>
             </button>
+            {/* Reorder arrows appear on the SELECTED row of a progression —
+                the row (and its arrows) travel with each move, so the new
+                position is self-evident. Ends disable their direction. */}
+            {inUserCat && sel && (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); moveInCategory(browseTab, b.id, -1); }}
+                  disabled={i === 0} aria-label={`Move ${b.name} earlier`}
+                  style={{ ...st.moveBtn, opacity: i === 0 ? 0.3 : 1 }}>↑</button>
+                <button onClick={(e) => { e.stopPropagation(); moveInCategory(browseTab, b.id, 1); }}
+                  disabled={i === catLen - 1} aria-label={`Move ${b.name} later`}
+                  style={{ ...st.moveBtn, opacity: i === catLen - 1 ? 0.3 : 1 }}>↓</button>
+              </>
+            )}
             {inUserCat && (
               <>
                 <button onClick={(e) => {
@@ -731,7 +590,7 @@ function App() {
             style={{ ...st.catTab, flexShrink: 0 }}>+</button>
         </ScrollFadeRow>
 
-        <section style={st.beatList} ref={listRef}>
+        <section style={st.beatList}>
           {browseTab === "builtin" && builtinGroups.map(g => (
             <div key={g} style={{ display: "contents" }}>
               <div style={st.sectionLabel}>{g}</div>
@@ -1199,13 +1058,9 @@ const st = {
   catActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
   addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
   deleteCatBtn: { flexShrink: 0, minHeight: 46, padding: "0 14px", borderRadius: 14, border: "none", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 600, cursor: "pointer" },
-  // touchAction none: the handle owns vertical pointer movement while
-  // dragging (otherwise the page scrolls instead of reordering).
-  dragHandle: { flexShrink: 0, width: 36, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 19, cursor: "grab", display: "grid", placeItems: "center", borderRadius: 10, touchAction: "none" },
+  moveBtn: { flexShrink: 0, width: 38, height: 40, border: "none", background: "transparent", color: "var(--clay)", fontSize: 18, fontWeight: 700, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 10 },
   catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
-  // position:relative → rows' offsetTop is measured from the list itself,
-  // which the drag's layout-based swap checks depend on.
-  beatList: { position: "relative", flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
+  beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
   sectionLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--syahi-soft)" },
   emptyHint: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", lineHeight: 1.5 },
   beatRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "12px 14px", borderRadius: 16, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
