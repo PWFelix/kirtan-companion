@@ -47,11 +47,34 @@ export class SoundPlayer {
     // Master volume — everything passes through here last.
     this._masterGain = new Tone.Gain(1).toDestination();
 
-    // Per-end volumes, feeding into master. Muting an end = gain 0.
+    // Per-end channels, feeding into master. Each end's FINAL gain is
+    //   volume × makeup × (muted ? 0 : 1)
+    // (see _applyEnd) — volume and mute are separate facts, so unmuting
+    // restores the user's volume instead of blindly ramping to 1.
     this._endGains = {
       dayan: new Tone.Gain(1).connect(this._masterGain),
       bayan: new Tone.Gain(1).connect(this._masterGain),
     };
+
+    // Phone speakers reproduce the bayan's bass far more weakly than the
+    // dayan's ring, so the bayan carries fixed MAKEUP gain: the mixer's
+    // "100%" means "balanced on a phone", not "raw sample level".
+    this._endMakeup = { dayan: 1, bayan: 1.25 };
+
+    this._endState = {
+      dayan: { volume: 1, muted: false },
+      bayan: { volume: 1, muted: false },
+    };
+    Object.keys(this._endState).forEach((end) => this._applyEnd(end));
+  }
+
+  /** Recompute one end's gain from its volume/mute state + makeup. */
+  _applyEnd(end) {
+    const gain = this._endGains[end];
+    const s = this._endState[end];
+    if (!gain || !s) return;
+    const target = s.muted ? 0 : s.volume * (this._endMakeup[end] ?? 1);
+    gain.gain.rampTo(target, 0.05);
   }
 
   async load(manifest) {
@@ -126,8 +149,21 @@ export class SoundPlayer {
    * @param {boolean} muted
    */
   setEndMuted(end, muted) {
-    const gain = this._endGains[end];
-    if (!gain) return;
-    gain.gain.rampTo(muted ? 0 : 1, 0.05);
+    const s = this._endState[end];
+    if (!s) return;
+    s.muted = muted;
+    this._applyEnd(end);
+  }
+
+  /**
+   * Per-end volume (the mixer's track faders).
+   * @param {"dayan"|"bayan"} end
+   * @param {number} value 0..1 (1 = balanced level incl. makeup gain)
+   */
+  setEndVolume(end, value) {
+    const s = this._endState[end];
+    if (!s) return;
+    s.volume = Math.max(0, Math.min(1, value));
+    this._applyEnd(end);
   }
 }

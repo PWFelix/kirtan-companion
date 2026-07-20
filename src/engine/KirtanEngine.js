@@ -13,6 +13,7 @@
  *   setBeat(beat)         - choose which beat to play
  *   setBpm(bpm)           - set the tempo
  *   setVolume(value)      - set master volume (0..1)
+ *   setEndVolume(end, v)  - per-end volume 0..1 (mixer track faders)
  *   setEndMuted(end, b)   - mute/unmute a drum end
  *   start()               - begin playing
  *   stop()                - stop playing
@@ -90,6 +91,15 @@ export class KirtanEngine extends EventEmitter {
    */
   setEndMuted(end, muted) {
     this._soundPlayer.setEndMuted(end, muted);
+  }
+
+  /**
+   * Per-end volume — the mixer's track faders.
+   * @param {"dayan"|"bayan"} end
+   * @param {number} value 0..1
+   */
+  setEndVolume(end, value) {
+    this._soundPlayer.setEndVolume(end, value);
   }
 
   start() {
