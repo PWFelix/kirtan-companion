@@ -371,6 +371,8 @@ function App() {
     }));
   }
   // Reorder within a progression: swap the beat one slot up/down.
+  // Used by the drag handler (one swap per midpoint crossed) and by
+  // arrow keys on a focused drag handle.
   function moveInCategory(catId, id, dir) {
     saveCategories(categories.map(c => {
       if (c.id !== catId) return c;
@@ -380,6 +382,47 @@ function App() {
       [ids[i], ids[j]] = [ids[j], ids[i]];
       return { ...c, beatIds: ids };
     }));
+  }
+
+  // ── Drag-to-reorder (user categories only) ──
+  // HTML5 drag events don't exist on touch, so this is pointer-based:
+  // grabbing a row's handle captures the pointer; crossing a neighbour
+  // row's vertical midpoint swaps one position (the list re-renders and
+  // the drag continues from the new slot). Each swap persists.
+  const dragRef = useRef(null);        // { catId, beatId, index } while dragging
+  const rowRefs = useRef([]);          // row elements of the browsed category
+  const [dragIndex, setDragIndex] = useState(-1); // for the dragged row's styling
+
+  function startDrag(e, catId, beatId, index) {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { catId, beatId, index };
+    setDragIndex(index);
+  }
+  function dragMove(e) {
+    const d = dragRef.current;
+    if (!d) return;
+    const prevEl = rowRefs.current[d.index - 1];
+    const nextEl = rowRefs.current[d.index + 1];
+    if (prevEl) {
+      const r = prevEl.getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2) {
+        moveInCategory(d.catId, d.beatId, -1);
+        d.index -= 1; setDragIndex(d.index);
+        return;
+      }
+    }
+    if (nextEl) {
+      const r = nextEl.getBoundingClientRect();
+      if (e.clientY > r.top + r.height / 2) {
+        moveInCategory(d.catId, d.beatId, 1);
+        d.index += 1; setDragIndex(d.index);
+      }
+    }
+  }
+  function endDrag() {
+    dragRef.current = null;
+    setDragIndex(-1);
   }
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
@@ -505,22 +548,37 @@ function App() {
     // is the keyboard-reachable select control; the whole row stays tappable
     // via the div's onClick (inner buttons stop propagation).
     const inUserCat = categories.some(c => c.id === browseTab);
-    const renderRow = (b) => {
+    const renderRow = (b, i) => {
       const sel = b.id === beatId;
+      const dragging = inUserCat && dragIndex === i;
       return (
         <div key={b.id} onClick={() => selectBeat(b, browseTab)}
-          style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
+          ref={inUserCat ? (el) => { rowRefs.current[i] = el; } : undefined}
+          style={{ ...st.beatRow,
+            borderColor: dragging || sel ? "var(--clay)" : "var(--rule)",
+            background: dragging ? "var(--head-sunken)" : "var(--head-worn)" }}>
           <div style={st.beatRowTop}>
+            {inUserCat && (
+              /* Drag handle: pointer-drag to reorder; arrow keys work too. */
+              <button
+                onPointerDown={(e) => startDrag(e, browseTab, b.id, i)}
+                onPointerMove={dragMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowUp") { e.preventDefault(); moveInCategory(browseTab, b.id, -1); }
+                  if (e.key === "ArrowDown") { e.preventDefault(); moveInCategory(browseTab, b.id, 1); }
+                }}
+                aria-label={`Reorder ${b.name} — drag, or use arrow keys`}
+                style={st.dragHandle}>≡</button>
+            )}
             <button onClick={() => selectBeat(b, browseTab)} aria-pressed={sel} style={st.beatRowSelect}>
               <span style={st.beatRowName}>{b.name}</span>
               <span style={st.beatRowMeta}>{b.note} · {b.steps} cells</span>
             </button>
             {inUserCat && (
               <>
-                <button onClick={(e) => { e.stopPropagation(); moveInCategory(browseTab, b.id, -1); }}
-                  aria-label={`Move ${b.name} earlier`} style={st.moveBtn}>↑</button>
-                <button onClick={(e) => { e.stopPropagation(); moveInCategory(browseTab, b.id, 1); }}
-                  aria-label={`Move ${b.name} later`} style={st.moveBtn}>↓</button>
                 <button onClick={(e) => {
                     e.stopPropagation();
                     askConfirm(
@@ -1046,7 +1104,9 @@ const st = {
   catActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
   addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
   deleteCatBtn: { flexShrink: 0, minHeight: 46, padding: "0 14px", borderRadius: 14, border: "none", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 600, cursor: "pointer" },
-  moveBtn: { flexShrink: 0, width: 34, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 17, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 10 },
+  // touchAction none: the handle owns vertical pointer movement while
+  // dragging (otherwise the page scrolls instead of reordering).
+  dragHandle: { flexShrink: 0, width: 36, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 19, cursor: "grab", display: "grid", placeItems: "center", borderRadius: 10, touchAction: "none" },
   catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
   beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
   sectionLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--syahi-soft)" },
