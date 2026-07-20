@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { KirtanEngine } from "./engine/KirtanEngine.js";
 import { BEATS } from "./data/beats.js";
+import { LANES } from "./data/lanes.js";
 import BeatEditor from "./BeatEditor.jsx";
 import BeatStrip from "./BeatStrip.jsx";
 import Splash from "./Splash.jsx";
@@ -163,6 +164,27 @@ function InfoIcon() {
   );
 }
 
+function MixerIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <path d="M5 21v-6M5 11V3M12 21v-10M12 7V3M19 21v-4M19 13V3" />
+      <path d="M2 14h6M9 10h6M16 16h6" />
+    </svg>
+  );
+}
+function SpeakerIcon({ muted }) {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 5 6 9H3v6h3l5 4z" />
+      {muted
+        ? <path d="m16 9 6 6M22 9l-6 6" />
+        : <path d="M15.5 8.5a5 5 0 0 1 0 7" />}
+    </svg>
+  );
+}
+
 // Membership check for the add-beats sheet — square, clay tick when in.
 function CheckDot({ checked }) {
   return (
@@ -197,6 +219,8 @@ function App() {
   const [entered, setEntered] = useState(false); // splash shown until Begin
   const [detailBeat, setDetailBeat] = useState(null); // beat shown in the Beats-page info sheet
   const [pickerOpen, setPickerOpen] = useState(false); // Home quick-pick sheet
+  const [mixerOpen, setMixerOpen] = useState(false);   // mixer sheet
+  const [endVolumes, setEndVolumes] = useState({});    // per-lane faders, default 1
 
   // ── Categories ──
   // Two are always present: "builtin" and "custom". User categories are
@@ -353,6 +377,10 @@ function App() {
   }
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
+  function changeEndVolume(end, value) {
+    setEndVolumes(prev => ({ ...prev, [end]: value }));
+    engine.setEndVolume(end, value);
+  }
 
   function toggleMute(end) {
     setMutedEnds(prev => {
@@ -680,7 +708,6 @@ function App() {
 
   // ── Home view ──
   const fillPct = ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)) * 100;
-  const volPct  = volume * 100;
 
   const playIcon = playing ? (
     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
@@ -721,6 +748,52 @@ function App() {
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+
+  // Mixer sheet — master fader plus one fader + mute per lane. Shared by
+  // both Home orientations (and it's where muting properly lives; the
+  // strip's small lane labels remain a shortcut).
+  const mixerSheet = mixerOpen && (
+    <div style={st.sheetBackdrop} onClick={() => setMixerOpen(false)}>
+      <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Mixer"
+        onClick={(e) => e.stopPropagation()}>
+        <div style={st.sheetHead}>
+          <h2 style={st.sheetName}>Mixer</h2>
+          <button onClick={() => setMixerOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
+        </div>
+        <div style={st.mixRows}>
+          <div style={st.mixRow}>
+            <span style={st.mixLabel}>Master</span>
+            <input className="kc-range" type="range" min={0} max={100} value={Math.round(volume * 100)}
+              onChange={(e) => changeVolume(Number(e.target.value) / 100)}
+              style={{ "--fill": volume * 100 + "%", flex: 1 }} aria-label="Master volume" />
+            <span style={{ width: 44 }} aria-hidden="true" />
+          </div>
+          {LANES.map(l => {
+            const v = endVolumes[l.id] ?? 1;
+            const muted = !!mutedEnds[l.id];
+            return (
+              <div key={l.id} style={st.mixRow}>
+                <span style={{ ...st.mixLabel, color: l.color }}>{l.label}</span>
+                <input className="kc-range" type="range" min={0} max={100} value={Math.round(v * 100)}
+                  onChange={(e) => changeEndVolume(l.id, Number(e.target.value) / 100)}
+                  style={{ "--fill": v * 100 + "%", flex: 1, opacity: muted ? 0.35 : 1 }}
+                  aria-label={`${l.label} volume`} />
+                <button onClick={() => toggleMute(l.id)} aria-pressed={muted}
+                  aria-label={muted ? `Unmute ${l.label}` : `Mute ${l.label}`}
+                  style={{ ...st.muteBtn, background: muted ? "var(--head-sunken)" : "transparent",
+                    color: muted ? "var(--clay)" : "var(--syahi-soft)" }}>
+                  <SpeakerIcon muted={muted} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <p style={{ ...st.emptyHint, marginTop: "var(--space-4)" }}>
+          100% is balanced for phone speakers — the bass end is already boosted.
+        </p>
       </div>
     </div>
   );
@@ -771,6 +844,10 @@ function App() {
             <LockIcon locked={tempoLocked} />
           </button>
           <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
+          <button onClick={() => setMixerOpen(true)} style={st.landEditBtn} aria-label="Mixer"
+            aria-haspopup="dialog" aria-expanded={mixerOpen}>
+            <MixerIcon />
+          </button>
           <button onClick={togglePlay} disabled={!ready}
             style={{ ...st.landPlayBtn, opacity: ready ? 1 : 0.5 }}
             aria-label={playing ? "Pause" : "Play"}>
@@ -780,6 +857,7 @@ function App() {
 
         <div style={st.landNavWrap}>{bottomNav}</div>
         {beatPicker}
+        {mixerSheet}
       </div>
     );
   }
@@ -844,13 +922,11 @@ function App() {
           </div>
         </div>
 
-        {/* Temporary compact volume — replaced by the mixer commit. */}
-        <div style={st.volRow}>
-          <span style={st.volLabel}>Volume</span>
-          <input className="kc-range" type="range" min={0} max={100} value={volPct}
-            onChange={(e) => changeVolume(Number(e.target.value) / 100)}
-            style={{ "--fill": volPct + "%", flex: 1 }} aria-label="Volume" />
-        </div>
+        {/* Loudness lives in the mixer: master + per-drum faders. */}
+        <button onClick={() => setMixerOpen(true)} style={st.mixerBtn}
+          aria-haspopup="dialog" aria-expanded={mixerOpen}>
+          <MixerIcon /> Mixer
+        </button>
       </section>
 
       {/* The clay play bar — full width at thumb height: impossible to
@@ -864,6 +940,7 @@ function App() {
 
       {bottomNav}
       {beatPicker}
+      {mixerSheet}
     </div>
   );
 }
@@ -885,8 +962,11 @@ const st = {
   pickRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "10px 12px", borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
   stripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center" },
   bpmRow: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 8, marginBottom: "var(--space-2)" },
-  volRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  volLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
+  mixerBtn: { width: "100%", minHeight: 46, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 },
+  mixRows: { display: "flex", flexDirection: "column", gap: "var(--space-4)", marginTop: "var(--space-4)" },
+  mixRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
+  mixLabel: { flexShrink: 0, width: 64, fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
+  muteBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
   playBtn: { flexShrink: 0, width: "100%", minHeight: 58, borderRadius: 16, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
   subHeader: { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   subTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", letterSpacing: "0.01em", color: "var(--ink-primary)" },
