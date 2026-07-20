@@ -392,20 +392,24 @@ function App() {
   // the swap checks. Swap checks use LAYOUT positions (offsetTop) —
   // transforms and in-flight FLIP animations can't affect those, which
   // is what previously made swaps oscillate and rows jam mid-air.
-  const dragRef = useRef(null);        // { catId, beatId, index, grabY, lastY, raf }
-  const rowRefs = useRef([]);          // row elements of the browsed category
-  const listRef = useRef(null);        // the scrolling beat list
-  const updateDragRef = useRef(null);  // latest updateDrag (the rAF loop must not go stale)
+  // Rows are tracked BY BEAT ID, never by index: between a swap and
+  // React committing the reordered DOM, index-based lookups point at the
+  // wrong rows (which lifted the wrong element and mis-read neighbour
+  // positions — the source of jams when reversing over a fresh swap).
+  const dragRef = useRef(null);           // { catId, beatId, grabY, lastY, raf }
+  const rowRefs = useRef(new Map());      // beatId -> row element (browsed category)
+  const listRef = useRef(null);           // the scrolling beat list
+  const updateDragRef = useRef(null);     // latest updateDrag (the rAF loop must not go stale)
   const [dragBeatId, setDragBeatId] = useState(null); // lifted row's styling
 
   const LIST_GAP = 12; // matches st.beatList row gap
   const reducedMotion = () =>
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  function startDrag(e, catId, beatId, index) {
+  function startDrag(e, catId, beatId) {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { catId, beatId, index, grabY: e.clientY, lastY: e.clientY, raf: 0 };
+    dragRef.current = { catId, beatId, grabY: e.clientY, lastY: e.clientY, raf: 0 };
     setDragBeatId(beatId);
     if (navigator.vibrate) navigator.vibrate(12); // tactile "picked up" (where supported)
     const tick = () => {
@@ -443,10 +447,16 @@ function App() {
   }
 
   // One frame of drag: auto-scroll, ride the finger, at most one swap.
+  // Neighbours are derived from the STATE order each frame (fresh via
+  // updateDragRef), and elements looked up by id — so a not-yet-committed
+  // reorder can never misdirect the transform or the swap checks.
   function updateDrag() {
     const d = dragRef.current;
     const listEl = listRef.current;
     if (!d || !listEl) return;
+    const order = categoryBeats(d.catId).map(b => b.id);
+    const idx = order.indexOf(d.beatId);
+    if (idx === -1) return;
     const lr = listEl.getBoundingClientRect();
 
     // Auto-scroll when the finger nears the list's edges (speed grows
@@ -462,28 +472,25 @@ function App() {
       d.grabY -= listEl.scrollTop - before;
     }
 
-    // The lifted row rides the finger (re-applied every frame, so the
-    // one-frame reset after a re-render is invisible).
-    const el = rowRefs.current[d.index];
+    // The lifted row rides the finger.
+    const el = rowRefs.current.get(d.beatId);
     if (el) el.style.transform = `translateY(${d.lastY - d.grabY}px) scale(1.02)`;
 
     // Swap checks against layout positions: viewport y of a row's mid =
     // list top − scroll + offsetTop + half height. offsetTop ignores
     // transforms, so animating neighbours can't retrigger swaps.
     const rowMid = (rEl) => lr.top - listEl.scrollTop + rEl.offsetTop + rEl.offsetHeight / 2;
-    const prevEl = rowRefs.current[d.index - 1];
-    const nextEl = rowRefs.current[d.index + 1];
+    const prevEl = idx > 0 ? rowRefs.current.get(order[idx - 1]) : null;
+    const nextEl = idx < order.length - 1 ? rowRefs.current.get(order[idx + 1]) : null;
     if (prevEl && d.lastY < rowMid(prevEl)) {
       flipRow(prevEl);
       moveInCategory(d.catId, d.beatId, -1);
       d.grabY -= prevEl.offsetHeight + LIST_GAP;
-      d.index -= 1;
       if (navigator.vibrate) navigator.vibrate(8); // tick per swap
     } else if (nextEl && d.lastY > rowMid(nextEl)) {
       flipRow(nextEl);
       moveInCategory(d.catId, d.beatId, 1);
       d.grabY += nextEl.offsetHeight + LIST_GAP;
-      d.index += 1;
       if (navigator.vibrate) navigator.vibrate(8);
     }
   }
@@ -496,7 +503,7 @@ function App() {
     dragRef.current = null;
     if (!d) { setDragBeatId(null); return; }
     cancelAnimationFrame(d.raf);
-    const el = rowRefs.current[d.index];
+    const el = rowRefs.current.get(d.beatId);
     if (el && !reducedMotion()) {
       // Settle the lifted row into its slot, then drop the lift styling.
       el.style.transition = "transform 160ms ease";
@@ -631,12 +638,14 @@ function App() {
     // is the keyboard-reachable select control; the whole row stays tappable
     // via the div's onClick (inner buttons stop propagation).
     const inUserCat = categories.some(c => c.id === browseTab);
-    const renderRow = (b, i) => {
+    const renderRow = (b) => {
       const sel = b.id === beatId;
       const dragging = inUserCat && dragBeatId === b.id;
       return (
         <div key={b.id} onClick={() => selectBeat(b, browseTab)}
-          ref={inUserCat ? (el) => { rowRefs.current[i] = el; } : undefined}
+          ref={inUserCat
+            ? (el) => { if (el) rowRefs.current.set(b.id, el); else rowRefs.current.delete(b.id); }
+            : undefined}
           style={{ ...st.beatRow,
             borderColor: dragging || sel ? "var(--clay)" : "var(--rule)",
             background: dragging ? "var(--head-sunken)" : "var(--head-worn)",
@@ -647,7 +656,7 @@ function App() {
             {inUserCat && (
               /* Drag handle: pointer-drag to reorder; arrow keys work too. */
               <button
-                onPointerDown={(e) => startDrag(e, browseTab, b.id, i)}
+                onPointerDown={(e) => startDrag(e, browseTab, b.id)}
                 onPointerMove={dragMove}
                 onPointerUp={endDrag}
                 onPointerCancel={endDrag}
