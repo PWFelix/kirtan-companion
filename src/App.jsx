@@ -1,4 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext, verticalListSortingStrategy, arrayMove,
+  useSortable, sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { KirtanEngine } from "./engine/KirtanEngine.js";
 import { BEATS } from "./data/beats.js";
 import { LANES } from "./data/lanes.js";
@@ -163,6 +171,34 @@ function InfoIcon() {
     </svg>
   );
 }
+function GripIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01" />
+    </svg>
+  );
+}
+
+// Sortable row wrapper (dnd-kit). MODULE-LEVEL so React keeps its identity
+// across App re-renders — a component defined inside App would remount every
+// render and break the drag mid-gesture (the trap the hand-rolled version
+// kept falling into). It owns only the drag mechanics and hands them back
+// through a render-prop; the row's content stays a closure in the Beats view.
+function SortableRow({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    ...(isDragging
+      ? { zIndex: 5, position: "relative", boxShadow: "0 8px 22px oklch(0.24 0.02 60 / 0.28)" }
+      : null),
+  };
+  // Handle props (attributes + listeners) go ONLY on the grip button, so the
+  // rest of the row stays tappable-to-select and its inner buttons work.
+  return children({ setNodeRef, style, isDragging, handleProps: { ...attributes, ...listeners } });
+}
 
 function MixerIcon() {
   return (
@@ -214,6 +250,13 @@ function App() {
   if (engineRef.current === null) engineRef.current = new KirtanEngine();
   const engine = engineRef.current;
   const isLandscape = useLandscape();
+
+  // Drag sensors: pointer (mouse + touch) with a small activation distance so
+  // a tap on the grip still registers as a tap, plus keyboard for a11y.
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const [view, setView] = useState("home"); // "home" | "beats" | "editor" | "settings"
   const [entered, setEntered] = useState(false); // splash shown until Begin
@@ -370,16 +413,15 @@ function App() {
       beatIds: c.beatIds.includes(id) ? c.beatIds.filter(x => x !== id) : [...c.beatIds, id],
     }));
   }
-  // Reorder within a progression: swap the beat one slot up/down.
-  // Driven by the ↑↓ buttons that appear on the selected row.
-  function moveInCategory(catId, id, dir) {
+  // Reorder a progression from a dnd-kit drag end (arrayMove keeps it pure).
+  function reorderCategory(catId, activeId, overId) {
+    if (activeId === overId) return;
     saveCategories(categories.map(c => {
       if (c.id !== catId) return c;
-      const ids = [...c.beatIds];
-      const i = ids.indexOf(id), j = i + dir;
-      if (i === -1 || j < 0 || j >= ids.length) return c;
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-      return { ...c, beatIds: ids };
+      const from = c.beatIds.indexOf(activeId);
+      const to = c.beatIds.indexOf(overId);
+      if (from === -1 || to === -1) return c;
+      return { ...c, beatIds: arrayMove(c.beatIds, from, to) };
     }));
   }
 
@@ -507,43 +549,34 @@ function App() {
     // is the keyboard-reachable select control; the whole row stays tappable
     // via the div's onClick (inner buttons stop propagation).
     const inUserCat = categories.some(c => c.id === browseTab);
-    const catLen = inUserCat ? categoryBeats(browseTab).length : 0;
-    const renderRow = (b, i) => {
+
+    // The row body, given the sortable bits (empty object for non-sortable
+    // tabs). `handleProps`, when present, is spread onto the grip button.
+    const rowBody = (b, { setNodeRef, style, handleProps } = {}) => {
       const sel = b.id === beatId;
       return (
-        <div key={b.id} onClick={() => selectBeat(b, browseTab)}
-          style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
+        <div ref={setNodeRef} onClick={() => selectBeat(b, browseTab)}
+          style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)", ...style }}>
           <div style={st.beatRowTop}>
+            {handleProps && (
+              <button {...handleProps} onClick={(e) => e.stopPropagation()}
+                aria-label={`Reorder ${b.name}`} style={st.dragHandle}><GripIcon /></button>
+            )}
             <button onClick={() => selectBeat(b, browseTab)} aria-pressed={sel} style={st.beatRowSelect}>
               <span style={st.beatRowName}>{b.name}</span>
               <span style={st.beatRowMeta}>{b.note} · {b.steps} cells</span>
             </button>
-            {/* Reorder arrows appear on the SELECTED row of a progression —
-                the row (and its arrows) travel with each move, so the new
-                position is self-evident. Ends disable their direction. */}
-            {inUserCat && sel && (
-              <>
-                <button onClick={(e) => { e.stopPropagation(); moveInCategory(browseTab, b.id, -1); }}
-                  disabled={i === 0} aria-label={`Move ${b.name} earlier`}
-                  style={{ ...st.moveBtn, opacity: i === 0 ? 0.3 : 1 }}>↑</button>
-                <button onClick={(e) => { e.stopPropagation(); moveInCategory(browseTab, b.id, 1); }}
-                  disabled={i === catLen - 1} aria-label={`Move ${b.name} later`}
-                  style={{ ...st.moveBtn, opacity: i === catLen - 1 ? 0.3 : 1 }}>↓</button>
-              </>
-            )}
             {inUserCat && (
-              <>
-                <button onClick={(e) => {
-                    e.stopPropagation();
-                    askConfirm(
-                      `Remove “${b.name}” from “${catName(browseTab)}”? The beat itself is kept.`,
-                      "Remove",
-                      () => toggleBeatInCategory(browseTab, b.id)
-                    );
-                  }}
-                  aria-label={`Remove ${b.name} from ${catName(browseTab)}`}
-                  style={st.deleteBtn}>−</button>
-              </>
+              <button onClick={(e) => {
+                  e.stopPropagation();
+                  askConfirm(
+                    `Remove “${b.name}” from “${catName(browseTab)}”? The beat itself is kept.`,
+                    "Remove",
+                    () => toggleBeatInCategory(browseTab, b.id)
+                  );
+                }}
+                aria-label={`Remove ${b.name} from ${catName(browseTab)}`}
+                style={st.deleteBtn}>−</button>
             )}
             <button onClick={(e) => { e.stopPropagation(); setDetailBeat(b); }}
               aria-label={`About ${b.name}`} style={st.infoBtn}><InfoIcon /></button>
@@ -564,6 +597,14 @@ function App() {
         </div>
       );
     };
+    // Non-sortable tabs (built-in, custom) render the body directly.
+    const renderRow = (b) => <div key={b.id} style={{ display: "contents" }}>{rowBody(b)}</div>;
+    // User-category rows are draggable to reorder the progression.
+    const renderSortableRow = (b) => (
+      <SortableRow key={b.id} id={b.id}>
+        {(bits) => rowBody(b, bits)}
+      </SortableRow>
+    );
 
     const browsedCat = categories.find(c => c.id === browseTab);
     const builtinGroups = [...new Set(BEATS.map(b => b.group))];
@@ -609,10 +650,19 @@ function App() {
               {categoryBeats(browsedCat.id).length === 0 && (
                 <p style={st.emptyHint}>
                   An empty progression. Add beats in the order you want the kirtan
-                  to move through them — Home's ‹ › will follow that order.
+                  to move through them — Home's ‹ › will follow that order. Drag the
+                  grip handle to reorder.
                 </p>
               )}
-              {categoryBeats(browsedCat.id).map(renderRow)}
+              <DndContext sensors={dragSensors} collisionDetection={closestCenter}
+                onDragEnd={({ active, over }) => {
+                  if (over) reorderCategory(browsedCat.id, active.id, over.id);
+                }}>
+                <SortableContext items={categoryBeats(browsedCat.id).map(b => b.id)}
+                  strategy={verticalListSortingStrategy}>
+                  {categoryBeats(browsedCat.id).map(renderSortableRow)}
+                </SortableContext>
+              </DndContext>
               <div style={st.catActions}>
                 <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>+ Add beats</button>
                 <button onClick={() => askConfirm(
@@ -1058,7 +1108,9 @@ const st = {
   catActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
   addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
   deleteCatBtn: { flexShrink: 0, minHeight: 46, padding: "0 14px", borderRadius: 14, border: "none", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 600, cursor: "pointer" },
-  moveBtn: { flexShrink: 0, width: 38, height: 40, border: "none", background: "transparent", color: "var(--clay)", fontSize: 18, fontWeight: 700, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 10 },
+  // touchAction none: the grip owns the gesture so dragging it reorders
+  // instead of scrolling the list.
+  dragHandle: { flexShrink: 0, width: 38, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", cursor: "grab", display: "grid", placeItems: "center", borderRadius: 10, touchAction: "none" },
   catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
   beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
   sectionLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--syahi-soft)" },
