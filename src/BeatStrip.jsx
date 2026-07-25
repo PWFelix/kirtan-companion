@@ -151,14 +151,17 @@ function BeatStrip({
         ))}
 
         {/* The gliding playhead — positioned by phase as a % of track width,
-            so no pixel measurements are needed. */}
-        <div className="ks-playhead" ref={lineRef} hidden={!playing} />
+            so no pixel measurements are needed. Its visibility is toggled
+            imperatively (see the effect below), NOT via `playing` here, so
+            play/pause doesn't rebuild the whole track. */}
+        <div className="ks-playhead" ref={lineRef} hidden />
       </div>
     );
-    // mutedEnds/showBols/mini change rarely; rebuilding then is fine.
-    // `step` is deliberately NOT a dependency (see header).
+    // `playing` is deliberately NOT a dep — it only drives imperative attrs
+    // (playhead hidden, cell lighting), so rebuilding the DOM on play/pause
+    // would be wasteful. `step` is likewise imperative. (see header)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beat, cpg, mutedEnds, showBols, mini, onCellTap, playing]);
+  }, [beat, cpg, mutedEnds, showBols, mini, onCellTap]);
 
   // ── Active-cell lighting: flip data-active imperatively per step ──
   useEffect(() => {
@@ -174,6 +177,22 @@ function BeatStrip({
       });
     });
   }, [step, playing, structure]);
+
+  // ── Playhead visibility + reset on stop ──
+  // Toggle the line imperatively (so play/pause doesn't rebuild the track),
+  // and when stopped, rewind BOTH the line and the horizontal scroll to the
+  // start — otherwise a long beat paused mid-page-turn stays parked on that
+  // page, and the next Start would play its first bar with the playhead
+  // scrolled out of view.
+  useEffect(() => {
+    const line = lineRef.current;
+    const scroller = scrollerRef.current;
+    if (line) line.hidden = !playing;
+    if (!playing) {
+      if (line) line.style.left = "0%";
+      if (scroller) scroller.scrollLeft = 0;
+    }
+  }, [playing, structure]);
 
   // ── Playhead glide + page-turn follow, one rAF loop while playing ──
   // When the strip overflows we do NOT scroll continuously: strip motion
