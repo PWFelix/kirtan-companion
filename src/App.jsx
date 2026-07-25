@@ -307,6 +307,8 @@ function App() {
   const [mixerOpen, setMixerOpen] = useState(false);   // mixer sheet
   const [endVolumes, setEndVolumes] = useState({});    // per-lane faders, default 1
   const [bpmEntryOpen, setBpmEntryOpen] = useState(false); // precise BPM sheet
+  const [bpmDraft, setBpmDraft] = useState("");            // raw text in the entry field
+  const bpmFocusRef = useRef(false);                        // is the field being typed in
 
   // ── Categories ──
   // Two are always present: "builtin" and "custom". User categories are
@@ -467,7 +469,39 @@ function App() {
     }));
   }
 
+  const clampBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
   function changeBpm(value) { setBpm(value); engine.setBpm(value); }
+
+  // Step BPM by ±1. Reads/writes bpmRef so rapid taps STACK even before a
+  // re-render (plain `bpm + delta` reuses a stale value, so fast clicks did
+  // nothing / bounced).
+  const bpmRef = useRef(bpm);
+  useEffect(() => { bpmRef.current = bpm; }, [bpm]);
+  function nudgeBpm(delta) {
+    const v = clampBpm(bpmRef.current + delta);
+    bpmRef.current = v; // optimistic: next rapid tap reads this, not stale bpm
+    changeBpm(v);
+  }
+
+  // Precise-entry field: edits live in a DRAFT string (never clamped mid-type,
+  // so backspace works and "80" isn't briefly applied as "8"). In-range drafts
+  // commit after a short pause; out-of-range/partial drafts commit-clamp only
+  // on blur or close.
+  useEffect(() => {
+    if (bpmEntryOpen && !bpmFocusRef.current) setBpmDraft(String(bpm));
+  }, [bpm, bpmEntryOpen]);
+  useEffect(() => {
+    if (!bpmEntryOpen) return;
+    const v = parseInt(bpmDraft, 10);
+    if (!Number.isFinite(v) || v < MIN_BPM || v > MAX_BPM) return;
+    const t = setTimeout(() => { if (v !== bpm) changeBpm(v); }, 450);
+    return () => clearTimeout(t);
+  }, [bpmDraft, bpmEntryOpen, bpm]);
+  function commitBpmDraft() {
+    const v = parseInt(bpmDraft, 10);
+    if (Number.isFinite(v)) changeBpm(clampBpm(v));
+    else setBpmDraft(String(bpm));
+  }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
   function changeEndVolume(end, value) {
     setEndVolumes(prev => ({ ...prev, [end]: value }));
@@ -940,16 +974,12 @@ function App() {
           <button onClick={() => setBpmEntryOpen(false)} aria-label="Done" style={st.sheetClose}>×</button>
         </div>
         <div style={st.bpmEntryTop}>
-          <button onClick={() => changeBpm(Math.max(MIN_BPM, bpm - 1))}
-            disabled={bpm <= MIN_BPM} aria-label="Slower" style={st.bpmStep}>−</button>
-          <input type="number" inputMode="numeric" min={MIN_BPM} max={MAX_BPM} value={bpm}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (Number.isFinite(v)) changeBpm(Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(v))));
-            }}
+          <input type="text" inputMode="numeric" value={bpmDraft}
+            onFocus={() => { bpmFocusRef.current = true; }}
+            onBlur={() => { bpmFocusRef.current = false; commitBpmDraft(); }}
+            onChange={(e) => setBpmDraft(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
             aria-label="Tempo in BPM" style={st.bpmInput} />
-          <button onClick={() => changeBpm(Math.min(MAX_BPM, bpm + 1))}
-            disabled={bpm >= MAX_BPM} aria-label="Faster" style={st.bpmStep}>+</button>
         </div>
         <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>BPM</span>
         <div style={st.wheelWrap}>
@@ -1034,10 +1064,11 @@ function App() {
             {beat.name} <span style={st.nameCaret}>▾</span>
           </button>
           <button onClick={() => cycleBeat(1)} aria-label="Next beat" style={st.chevBtnSm}>›</button>
-          <button onClick={() => setBpmEntryOpen(true)} style={st.bpmBtn}
+          <button onClick={() => setBpmEntryOpen(true)} style={{ ...st.bpmBtn, ...st.landBpmBtn }}
             aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set`}>
             <span style={st.landBpmNum}>{bpm}</span>
             <span style={st.bpmUnit}>BPM</span>
+            <span style={st.bpmCaret} aria-hidden="true">▾</span>
           </button>
           <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
             onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
@@ -1110,11 +1141,18 @@ function App() {
         {/* BPM as signage: the number IS the label. Becomes tappable for
             precise entry in an upcoming commit. */}
         <div>
-          <button onClick={() => setBpmEntryOpen(true)} style={{ ...st.bpmRow, ...st.bpmBtn }}
-            aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set precisely`}>
-            <span style={st.bpmNum}>{bpm}</span>
-            <span style={st.bpmUnit}>BPM</span>
-          </button>
+          <div style={st.bpmRow}>
+            <button onClick={() => nudgeBpm(-1)} disabled={bpm <= MIN_BPM}
+              aria-label="Slower" style={{ ...st.bpmStep, opacity: bpm <= MIN_BPM ? 0.3 : 1 }}>−</button>
+            <button onClick={() => setBpmEntryOpen(true)} style={st.bpmBtn}
+              aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set precisely`}>
+              <span style={st.bpmNum}>{bpm}</span>
+              <span style={st.bpmUnit}>BPM</span>
+              <span style={st.bpmCaret} aria-hidden="true">▾</span>
+            </button>
+            <button onClick={() => nudgeBpm(1)} disabled={bpm >= MAX_BPM}
+              aria-label="Faster" style={{ ...st.bpmStep, opacity: bpm >= MAX_BPM ? 0.3 : 1 }}>+</button>
+          </div>
           <div style={st.tempoRow}>
             <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
               onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
@@ -1172,7 +1210,7 @@ const st = {
   pickList: { display: "flex", flexDirection: "column", gap: "var(--space-2)", marginTop: "var(--space-3)" },
   pickRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "10px 12px", borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
   stripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center" },
-  bpmRow: { display: "flex", alignItems: "baseline", justifyContent: "center", gap: 8, marginBottom: "var(--space-2)" },
+  bpmRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-4)", marginBottom: "var(--space-2)" },
   mixerBtn: { width: "100%", minHeight: 46, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 },
   mixRows: { display: "flex", flexDirection: "column", gap: "var(--space-4)", marginTop: "var(--space-4)" },
   mixRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
@@ -1231,7 +1269,9 @@ const st = {
   lockBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
-  bpmBtn: { border: "none", background: "transparent", cursor: "pointer", padding: 0 },
+  bpmBtn: { display: "flex", alignItems: "baseline", gap: 6, border: "none", background: "transparent", cursor: "pointer", padding: "4px 6px" },
+  landBpmBtn: { alignItems: "center" },
+  bpmCaret: { fontSize: "0.7rem", color: "var(--syahi-soft)", alignSelf: "center" },
   bpmEntryTop: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", marginTop: "var(--space-4)" },
   bpmStep: { flexShrink: 0, width: 48, height: 48, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
   bpmInput: { width: 120, textAlign: "center", border: "none", background: "transparent", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "2.75rem", fontWeight: 600, color: "var(--syahi)", outline: "none", padding: 0, MozAppearance: "textfield" },

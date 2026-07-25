@@ -287,6 +287,7 @@ input[type="range"].kc-range::-moz-range-thumb {
 .kc-wheel {
   position: relative;
   overflow-y: auto;
+  overflow-x: hidden;              /* selected item scales up — never scroll sideways */
   scroll-snap-type: y mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
