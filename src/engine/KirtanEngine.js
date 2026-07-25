@@ -102,6 +102,15 @@ export class KirtanEngine extends EventEmitter {
     this._soundPlayer.setEndVolume(end, value);
   }
 
+  /**
+   * Play one stroke sample immediately — for the editor's pads, which
+   * sound as you tap them. Name is the manifest key, e.g. "dayan_open".
+   * No-op if audio isn't unlocked yet (silently fails, like play()).
+   */
+  playStroke(name) {
+    this._soundPlayer.play(name);
+  }
+
   start() {
     this._sequencer.start();
     this.emit("started");

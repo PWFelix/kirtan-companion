@@ -1,42 +1,34 @@
 import { useState, useRef, useEffect } from "react";
+import BeatStrip from "./BeatStrip.jsx";
 import { generateGuidedLabels } from "./data/stepLabels.js";
+import { BOLS, COMBO_BOLS } from "./data/bols.js";
 
 /**
- * BeatEditor
- * ----------
- * Builds a custom beat of arbitrary length.
- * Tap a cell to cycle: empty -> "O" open -> "X" closed -> empty.
- * "+ Add group" / "− Remove group" grow or shrink the beat one musical unit
- * (`cellsPerGroup` cells) at a time, preserving the cells that remain.
- * Live preview drives the engine. Save hands the beat up to App.
+ * BeatEditor — three fixed zones, no scrolling, phone-first
+ * --------------------------------------------------------
+ * 1. OVERVIEW  — a mini BeatStrip of the WHOLE beat with a frame showing
+ *    which page the zoom is on. Doubles as the live visualiser in preview.
+ * 2. ZOOM      — one page of cells, magnified, both mridanga lanes aligned
+ *    in a column. The CURSOR is a column; tapping a cell moves it.
+ * 3. PADS      — one pad per enterable stroke (single hands + named two-hand
+ *    combos + Rest), generated from data/bols.js. Tapping a pad WRITES the
+ *    whole cursor column, SOUNDS the sample(s), and advances the cursor.
+ *    A mistake is: tap the right cell, tap the right pad. No cycling ever.
  *
- * TEMPO IS SUBDIVISION-LOCKED, not bar-locked: `cellsPerGroup` is fixed for
- * the beat, and we keep the invariant `beatsPerBar = steps / cellsPerGroup`.
- * Because the sequencer's per-step interval is PPQ / cellsPerGroup ticks, each
- * cell's real-time duration is CONSTANT — adding a group just makes the loop
- * one pulse longer without changing the tempo. (See beats.js for the maths.)
- *
- * Optional `initialBeat` pre-fills the grid/tempo/name for editing an
- * existing beat. When provided we keep its id (so App overwrites the
- * matching saved entry); when absent the editor mints a fresh id (new beat).
- * Arrays are cloned on seed so a built-in's data is never mutated in place.
+ * Tempo is subdivision-locked (see the old header / beats.js): the invariant
+ * beatsPerBar = steps / cellsPerGroup holds, so adding a group lengthens the
+ * loop without changing the tempo. Feel / length / tempo / preview / save all
+ * carry over from the previous editor unchanged; only the grid UI is new.
  */
 
-const CYCLE = [null, "O", "X"];
-const nextValue = (c) => CYCLE[(CYCLE.indexOf(c) + 1) % CYCLE.length];
 const emptyGrid = (n) => Array(n).fill(null);
 
-// The "feel" of a beat = its subdivision = cellsPerGroup (cells per numbered
-// pulse). These are the three traditional kirtan feels the labels support.
 const FEELS = [
   { cpg: 2, label: "Standard" },  // eighth notes  — "1 + 2 +"
   { cpg: 3, label: "Triplets" },  // dadra swing   — "1 trip let"
   { cpg: 4, label: "Double" },    // sixteenths    — "1 e + a"
 ];
 
-// New beats default to a 4-beat Standard bar (the classic 8-cell beat, matching
-// the old editor default). Editing an existing beat inherits its group size
-// (falling back to its derived subdivision for older beats that predate it).
 const DEFAULT_CELLS_PER_GROUP = 2;
 const DEFAULT_BEATS = 4;
 const NEW_BEAT_CELLS = DEFAULT_BEATS * DEFAULT_CELLS_PER_GROUP; // 8
@@ -44,8 +36,39 @@ const deriveGroup = (b) =>
   b == null ? DEFAULT_CELLS_PER_GROUP
             : b.cellsPerGroup ?? Math.max(1, Math.round(b.steps / (b.beatsPerBar ?? 4)));
 
+// The pad palette for the mridanga column. Each pad writes (dayan, bayan)
+// together. Order: dayan singles, bayan singles, named combos, rest.
+const PADS = [
+  { key: "ta",  label: BOLS.dayan.O,      dayan: "O",  bayan: null },
+  { key: "te",  label: BOLS.dayan.X,      dayan: "X",  bayan: null },
+  { key: "ge",  label: BOLS.bayan.O,      dayan: null, bayan: "O"  },
+  { key: "khe", label: BOLS.bayan.X,      dayan: null, bayan: "X"  },
+  { key: "da",  label: COMBO_BOLS["O+O"], dayan: "O",  bayan: "O"  },
+  { key: "gi",  label: COMBO_BOLS["X+O"], dayan: "X",  bayan: "O"  },
+  { key: "tk",  label: COMBO_BOLS["O+X"], dayan: "O",  bayan: "X"  },
+  { key: "tek", label: COMBO_BOLS["X+X"], dayan: "X",  bayan: "X"  },
+  { key: "rest", label: "Rest",           dayan: null, bayan: null, rest: true },
+];
+
+const soundName = (end, v) => (v === "O" ? `${end}_open` : v === "X" ? `${end}_closed` : null);
+
+// A little top/bottom mark pair showing what a pad (or cell) writes:
+// filled = open, ring = closed, faint dot = silent. Top = dayan, bottom = bayan.
+function StrokeMark({ dayan, bayan, size = 12 }) {
+  const dot = (v, color) => {
+    if (v === "O") return { width: size, height: size, borderRadius: "50%", background: color };
+    if (v === "X") return { width: size, height: size, borderRadius: "50%", border: `2.5px solid ${color}` };
+    return { width: 4, height: 4, borderRadius: "50%", background: "var(--rule)" };
+  };
+  return (
+    <span aria-hidden="true" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+      <span style={dot(dayan, "var(--lane-dayan)")} />
+      <span style={dot(bayan, "var(--lane-bayan)")} />
+    </span>
+  );
+}
+
 function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
-  // Group size (feel) is changeable via the Feel selector below.
   const [cellsPerGroup, setCellsPerGroup] = useState(() => deriveGroup(initialBeat));
   const [steps, setSteps] = useState(initialBeat?.steps ?? NEW_BEAT_CELLS);
   const [dayan, setDayan] = useState(initialBeat ? [...initialBeat.dayan] : emptyGrid(NEW_BEAT_CELLS));
@@ -54,20 +77,45 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
   const [name, setName]   = useState(initialBeat?.name ?? "");
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
+  const [cursor, setCursor] = useState(0); // the column the pads write to
 
-  // The invariant that keeps the tempo subdivision-locked (see header).
   const beatsPerBar = steps / cellsPerGroup;
-
   const labels = generateGuidedLabels(steps, cellsPerGroup);
 
-  const beatRef = useRef(null);
-  beatRef.current = { id: "preview", name: name || "Preview", note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup, dayan, bayan };
+  // How many cells the zoom shows at once: a whole number of groups, ~6 cells,
+  // so cells stay >=48px tappable on a phone. The visible page is the one
+  // containing the cursor.
+  const zoomCells = Math.min(steps, Math.max(cellsPerGroup, Math.floor(6 / cellsPerGroup) * cellsPerGroup));
+  const pageCount = Math.ceil(steps / zoomCells);
+  const page = Math.floor(cursor / zoomCells);
+  const windowStart = page * zoomCells;
+  const windowEnd = Math.min(windowStart + zoomCells, steps);
+
+  // Fresh each render (BeatStrip reads this const directly); a ref kept in
+  // sync via an effect lets handlers/effects reach the latest without a
+  // render-time ref write.
+  const previewBeat = { id: "preview", name: name || "Preview", note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup, dayan, bayan };
+  const beatRef = useRef(previewBeat);
+  useEffect(() => { beatRef.current = previewBeat; });
+
+  // Undo history of {dayan, bayan, cursor} snapshots (pad writes and clears).
+  const undoRef = useRef([]);
+  const [canUndo, setCanUndo] = useState(false);
+  function pushUndo() {
+    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], cursor });
+    if (undoRef.current.length > 60) undoRef.current.shift();
+    setCanUndo(true);
+  }
+  function undo() {
+    const prev = undoRef.current.pop();
+    if (!prev) return;
+    setDayan(prev.dayan); setBayan(prev.bayan); setCursor(prev.cursor);
+    setCanUndo(undoRef.current.length > 0);
+  }
 
   useEffect(() => {
     const onStep = (s) => setStep(s);
     engine.on("step", onStep);
-    // Stop preview audio on unmount too — leaving via the bottom nav (not just
-    // Back/Cancel) must not leave the engine playing the preview loop.
     return () => { engine.off("step", onStep); engine.stop(); };
   }, [engine]);
 
@@ -77,42 +125,50 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
     engine.setBpm(bpm);
   }, [previewing, dayan, bayan, bpm, steps, engine]);
 
-  // Grow by one group: append `cellsPerGroup` empty cells to both ends. The
-  // existing cells keep their state (no re-flow). Preview can stay running —
-  // the live effect below hands the engine the longer beat, and because
-  // beatsPerBar grows in step the tempo is unchanged (only the loop is longer).
+  const getPhase = () => engine.getPhase();
+
   function addGroup() {
     const pad = Array(cellsPerGroup).fill(null);
     setDayan(p => [...p, ...pad]);
     setBayan(p => [...p, ...pad]);
     setSteps(s => s + cellsPerGroup);
+    undoRef.current = []; setCanUndo(false); // length change is a clean slate for undo
   }
-  // Shrink by one group: drop the last `cellsPerGroup` cells. Never below one
-  // group (the button is disabled at that point).
   function removeGroup() {
     if (steps <= cellsPerGroup) return;
     setDayan(p => p.slice(0, -cellsPerGroup));
     setBayan(p => p.slice(0, -cellsPerGroup));
     setSteps(s => s - cellsPerGroup);
+    setCursor(c => Math.min(c, steps - cellsPerGroup - 1));
+    undoRef.current = []; setCanUndo(false);
   }
 
-  // Change the feel (subdivision) while keeping the SAME number of numbered
-  // beats — so a 4-beat bar stays 4 beats, just re-divided (8↔12↔16 cells,
-  // exactly the old toggle's counts). The subdivision remap is ambiguous, so
-  // the grid resets to empty, like the previous step-count toggle did.
   function changeFeel(nextCpg) {
     if (nextCpg === cellsPerGroup) return;
     if (previewing) { engine.stop(); setPreviewing(false); }
-    const beats = steps / cellsPerGroup;      // preserve beat count
+    const beats = steps / cellsPerGroup;
     const nextSteps = beats * nextCpg;
     setCellsPerGroup(nextCpg);
     setSteps(nextSteps);
     setDayan(emptyGrid(nextSteps));
     setBayan(emptyGrid(nextSteps));
+    setCursor(0);
+    undoRef.current = []; setCanUndo(false);
   }
 
-  function tapDayan(i) { setDayan(p => { const c = [...p]; c[i] = nextValue(c[i]); return c; }); }
-  function tapBayan(i) { setBayan(p => { const c = [...p]; c[i] = nextValue(c[i]); return c; }); }
+  // Tap a pad: record undo, write the whole cursor column, sound it, advance.
+  function tapPad(pad) {
+    pushUndo();
+    setDayan(p => { const c = [...p]; c[cursor] = pad.dayan; return c; });
+    setBayan(p => { const c = [...p]; c[cursor] = pad.bayan; return c; });
+    if (!previewing) {
+      const dn = soundName("dayan", pad.dayan);
+      const bn = soundName("bayan", pad.bayan);
+      if (dn) engine.playStroke(dn);
+      if (bn) engine.playStroke(bn);
+    }
+    setCursor(c => (c + 1) % steps); // wrap at the end of the loop
+  }
 
   async function togglePreview() {
     await engine.unlock();
@@ -125,159 +181,127 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
     const hasAnyHit = dayan.some(c => c !== null) || bayan.some(c => c !== null);
     if (!hasAnyHit) { alert("Add at least one stroke before saving."); return; }
     const finalName = name.trim() || "Custom Beat";
-    // Editing keeps the original id so App overwrites the saved entry;
-    // a new beat (or a fork of a built-in) carries its own fresh id.
     const id = initialBeat?.id ?? ("custom_" + finalName.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now());
     onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup, dayan, bayan });
     onClose();
   }
 
-  function clearGrid() { setDayan(emptyGrid(steps)); setBayan(emptyGrid(steps)); }
-
-  // Long beats wrap into stacked blocks so cells stay tappable on a phone.
-  // Each block holds a whole number of GROUPS (never splitting a pulse), up to
-  // ~16 cells wide — the density the single-row layout already handled. Every
-  // block renders its cells into a fixed `perRow`-column grid, so a short final
-  // block left-aligns at the SAME cell width as the full ones (no ragged sizes).
-  const perRow = Math.max(cellsPerGroup, Math.floor(16 / cellsPerGroup) * cellsPerGroup);
-  const blocks = [];
-  for (let start = 0; start < steps; start += perRow) {
-    blocks.push([start, Math.min(start + perRow, steps)]);
+  function clearGrid() {
+    pushUndo();
+    setDayan(emptyGrid(steps)); setBayan(emptyGrid(steps)); setCursor(0);
   }
 
-  // Sizing is keyed to the widest a row can get (perRow), not total length.
-  const cellGap  = perRow >= 16 ? 3 : perRow >= 12 ? 5 : 6;
-  const cellFont = perRow >= 16 ? 11 : 14;
-  const numFont  = perRow >= 16 ? 9 : 11;
-  const gridCols = { gridTemplateColumns: `repeat(${perRow}, 1fr)`, gap: cellGap };
-
-  function renderRow(values, tapFn, label, start, end) {
-    return (
-      <div style={st.row}>
-        <span className="kc-rowLabel" style={st.rowLabel}>{label}</span>
-        <div className="kc-cellrow" style={{ ...st.cells, ...gridCols }}>
-          {values.slice(start, end).map((v, j) => {
-            const i = start + j;
-            const active = previewing && i === step;
-            const bg = v === "O" ? "var(--saffron)" : v === "X" ? "var(--gold)" : "var(--surface-paper)";
-            return (
-              <button key={i} onClick={() => tapFn(i)} className="kc-cell"
-                aria-label={`${label} step ${i + 1}: ${v === "O" ? "open" : v === "X" ? "closed" : "empty"}`}
-                style={{
-                  ...st.cell,
-                  fontSize: cellFont,
-                  background: bg,
-                  borderColor: active ? "var(--accent-saffron)" : "var(--rule)",
-                  borderWidth: active ? 2 : 1,
-                  color: v ? "var(--ink-primary)" : "var(--ink-secondary)",
-                  // First cell of each group is a scroll-snap point on the
-                  // narrow-screen block scroller (inert without a snap
-                  // container, so desktop is unaffected).
-                  scrollSnapAlign: i % cellsPerGroup === 0 ? "start" : undefined,
-                }}>
-                {v || ""}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
+  const fillPct = ((bpm - 40) / 160) * 100;
 
   return (
     <div className="kc-screen" style={st.screen}>
       <header style={st.header}>
         <button onClick={() => { if (previewing) engine.stop(); onClose(); }} style={st.backBtn}>‹ Back</button>
         <h1 style={st.title}>{initialBeat ? "Edit beat" : "New beat"}</h1>
-        <div style={{ width: 56 }} />
+        <button onClick={handleSave} style={st.saveBtn}>Save</button>
       </header>
 
-      {/* Everything between the pinned header and the pinned nav scrolls. */}
-      <div style={st.scrollArea}>
-      {/* Feel: the subdivision. Changing it re-divides the same number of
-          beats and clears the grid. */}
-      <div>
-        <div style={st.feelLabel}>Feel</div>
+      {/* ── OVERVIEW: whole beat + a frame over the current page ── */}
+      <div style={st.overviewWrap}>
+        <BeatStrip beat={previewBeat} step={step} playing={previewing} getPhase={getPhase} mini />
+        {pageCount > 1 && (
+          <div aria-hidden="true" style={{ ...st.overviewFrame,
+            left: (windowStart / steps) * 100 + "%",
+            width: (zoomCells / steps) * 100 + "%" }} />
+        )}
+      </div>
+
+      {/* ── ZOOM: one magnified page; the cursor is a column ── */}
+      <div style={st.zoom}>
+        <div style={st.zoomHead}>
+          <button onClick={() => setCursor(Math.max(0, windowStart - zoomCells))}
+            disabled={page === 0} aria-label="Previous page"
+            style={{ ...st.pageBtn, opacity: page === 0 ? 0.3 : 1 }}>‹</button>
+          <span style={st.zoomLabel}>{windowStart + 1}–{windowEnd} of {steps}</span>
+          <button onClick={() => setCursor(Math.min(steps - 1, windowStart + zoomCells))}
+            disabled={page >= pageCount - 1} aria-label="Next page"
+            style={{ ...st.pageBtn, opacity: page >= pageCount - 1 ? 0.3 : 1 }}>›</button>
+        </div>
+        <div style={{ ...st.zoomGrid, gridTemplateColumns: `repeat(${windowEnd - windowStart}, 1fr)` }}>
+          {labels.slice(windowStart, windowEnd).map((l, j) => (
+            <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
+          ))}
+          {[["dayan", dayan], ["bayan", bayan]].map(([end, arr]) =>
+            arr.slice(windowStart, windowEnd).map((v, j) => {
+              const i = windowStart + j;
+              const isCursor = i === cursor;
+              const lit = previewing && i === step;
+              return (
+                <button key={end + i} onClick={() => setCursor(i)}
+                  aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
+                  style={{ ...st.zoomCell,
+                    borderColor: isCursor ? "var(--clay)" : "var(--rule)",
+                    borderWidth: isCursor ? 2 : 1,
+                    background: lit ? "var(--head-sunken)" : "var(--head)" }}>
+                  <StrokeMark dayan={end === "dayan" ? v : null} bayan={end === "bayan" ? v : null} size={16} />
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* ── PADS: tap to write the cursor column, sound it, advance ── */}
+      <div style={st.pads}>
+        {PADS.map(pad => (
+          <button key={pad.key} onClick={() => tapPad(pad)}
+            aria-label={pad.rest ? "Rest (silence this beat)" : `${pad.label}`}
+            style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
+            <span style={st.padLabel}>{pad.label}</span>
+            {!pad.rest && <StrokeMark dayan={pad.dayan} bayan={pad.bayan} size={9} />}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Controls: undo, feel, length, tempo, preview ── */}
+      <div style={st.controls}>
+        <div style={st.controlRow}>
+          <button onClick={undo} disabled={!canUndo}
+            style={{ ...st.utilBtn, opacity: canUndo ? 1 : 0.4 }}>↶ Undo</button>
+          <button onClick={clearGrid} style={st.utilBtn}>Clear</button>
+          <button onClick={togglePreview}
+            style={{ ...st.utilBtn, ...(previewing ? st.previewOn : null) }}>
+            {previewing ? "■ Stop" : "▶ Preview"}
+          </button>
+        </div>
+
         <div style={st.feelRow}>
           {FEELS.map(f => {
             const sel = f.cpg === cellsPerGroup;
             return (
               <button key={f.cpg} onClick={() => changeFeel(f.cpg)} aria-pressed={sel}
                 style={{ ...st.feelBtn,
-                  background: sel ? "var(--accent-action)" : "transparent",
-                  borderColor: sel ? "var(--accent-action)" : "var(--rule)",
-                  color: sel ? "var(--on-action)" : "var(--ink-secondary)" }}>
+                  background: sel ? "var(--clay)" : "transparent",
+                  borderColor: sel ? "var(--clay)" : "var(--rule)",
+                  color: sel ? "var(--on-clay)" : "var(--syahi-soft)" }}>
                 {f.label}
               </button>
             );
           })}
         </div>
-      </div>
 
-      {/* Length control: add/remove one group (beat) at a time */}
-      <div style={st.lengthRow}>
-        <button onClick={removeGroup} disabled={steps <= cellsPerGroup}
-          style={{ ...st.groupBtn, opacity: steps <= cellsPerGroup ? 0.4 : 1, cursor: steps <= cellsPerGroup ? "not-allowed" : "pointer" }}
-          aria-label="Remove group">− Group</button>
-        <div style={st.lengthReadout}>
-          <span style={st.lengthNum}>{steps}</span>
-          <span style={st.lengthLabel}>cells · {steps / cellsPerGroup} beats</span>
+        <div style={st.lengthRow}>
+          <button onClick={removeGroup} disabled={steps <= cellsPerGroup}
+            style={{ ...st.groupBtn, opacity: steps <= cellsPerGroup ? 0.4 : 1 }}
+            aria-label="Remove a group">−</button>
+          <span style={st.lengthLabel}>{steps} cells · {steps / cellsPerGroup} beats</span>
+          <button onClick={addGroup} style={st.groupBtn} aria-label="Add a group">+</button>
         </div>
-        <button onClick={addGroup} style={st.groupBtn} aria-label="Add group">+ Group</button>
-      </div>
 
-      <p style={st.hint}>
-        Tap a cell: empty → <b style={{ color: "var(--saffron-d)" }}>open</b> → <b style={{ color: "var(--gold)" }}>closed</b>
-      </p>
-
-      {/* Grid — one block per ~16-cell row of whole groups */}
-      <div style={st.grid}>
-        {blocks.map(([start, end]) => (
-          <div key={start} className="kc-block" style={st.block}>
-            <div style={st.stepNums}>
-              <span className="kc-rowLabel" style={st.rowLabel} />
-              <div className="kc-cellrow" style={{ ...st.cells, ...gridCols, alignItems: "center" }}>
-                {labels.slice(start, end).map((l, j) => {
-                  const strong = l !== "·"; // numbered downbeats read heavier than subdivisions
-                  // Bump the middle-dot up a few px so the subdivision reads more clearly.
-                  return (
-                    <span key={start + j} style={{ ...st.stepNum, lineHeight: 1, fontSize: strong ? numFont : numFont + 6, fontWeight: strong ? 700 : 400, opacity: strong ? 0.85 : 0.45 }}>
-                      {l}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-            {renderRow(dayan, tapDayan, "Top", start, end)}
-            {renderRow(bayan, tapBayan, "Bottom", start, end)}
-          </div>
-        ))}
-      </div>
-
-      {/* Tempo */}
-      <div>
-        <div style={st.tempoHead}>
-          <span style={st.controlLabel}>Tempo</span>
-          <span style={st.bpmReadout}><span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>BPM</span></span>
+        <div style={st.tempoRow}>
+          <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>BPM</span>
+          <input className="kc-range" type="range" min={40} max={200} value={bpm}
+            onChange={(e) => setBpm(Number(e.target.value))}
+            style={{ "--fill": fillPct + "%", flex: 1 }} aria-label="Tempo" />
         </div>
-        <input className="kc-range" type="range" min={40} max={200} value={bpm}
-          onChange={(e) => setBpm(Number(e.target.value))} style={{ "--fill": ((bpm - 40) / 160) * 100 + "%" }} />
-      </div>
 
-      {/* Actions */}
-      <div style={st.actions}>
-        <button onClick={togglePreview} style={{ ...st.actionBtn, ...st.previewBtn }}>{previewing ? "Stop" : "Preview"}</button>
-        <button onClick={clearGrid} style={{ ...st.actionBtn, ...st.clearBtn }}>Clear</button>
-      </div>
-
-      {/* Save */}
-      <div style={st.saveRow}>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name your beat" style={st.nameInput} />
-        <button onClick={handleSave} style={st.saveBtn}>Save</button>
-      </div>
-
-      {/* Cancel — closes without saving; never touches localStorage */}
-      <button onClick={() => { if (previewing) engine.stop(); onClose(); }} style={st.cancelBtn}>Cancel</button>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="Name your beat" style={st.nameInput} />
       </div>
 
       {nav}
@@ -286,44 +310,41 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
 }
 
 const st = {
-  // NOTE: padding kept identical to App's st.screen so the shared bottom nav
-  // sits at the exact same spot here as on the other pages (no shift on switch).
-  screen: { width: "100%", maxWidth: 430, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-4)" },
-  // The scrolling body between the pinned header and the pinned bottom nav.
-  scrollArea: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)" },
-  header: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" },
-  backBtn: { border: "none", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 700, cursor: "pointer", padding: 4, width: 56, textAlign: "left" },
-  title: { fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", margin: 0, color: "var(--ink-primary)" },
-  feelLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-2)" },
-  feelRow: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 },
-  feelBtn: { minHeight: 44, padding: "0 6px", borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", transition: "all 150ms ease" },
-  lengthRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 16, border: "var(--rule-hairline)", background: "var(--surface-raised)" },
-  groupBtn: { flexShrink: 0, minWidth: 84, minHeight: 44, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
-  lengthReadout: { display: "flex", flexDirection: "column", alignItems: "center", gap: 1, lineHeight: 1 },
-  lengthNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
-  lengthLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, color: "var(--ink-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" },
-  hint: { textAlign: "center", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", margin: 0 },
-  grid: { display: "flex", flexDirection: "column", gap: 18, background: "var(--surface-raised)", borderRadius: 18, padding: 14, border: "var(--rule-hairline)" },
-  block: { display: "flex", flexDirection: "column", gap: 10 },
-  stepNums: { display: "flex", alignItems: "center", gap: 10 },
-  stepNum: { textAlign: "center", fontFamily: "var(--font-body)", color: "var(--ink-secondary)", minWidth: 0 },
-  row: { display: "flex", alignItems: "center", gap: 10 },
-  rowLabel: { width: 48, flexShrink: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, color: "var(--ink-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" },
-  cells: { display: "grid", flex: 1, minWidth: 0 },
-  cell: { aspectRatio: "1", borderRadius: 8, border: "1px solid var(--rule)", cursor: "pointer", fontFamily: "var(--font-display)", fontWeight: 700, transition: "background 100ms ease, border-color 120ms ease, border-width 120ms ease", display: "grid", placeItems: "center", padding: 0, minWidth: 0 },
-  tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
-  controlLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-2)" },
-  bpmReadout: { display: "flex", alignItems: "baseline", gap: 5 },
-  bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 700, color: "var(--ink-primary)", lineHeight: 1 },
-  bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--ink-secondary)" },
-  actions: { display: "flex", gap: 10 },
-  actionBtn: { flex: 1, padding: "13px", borderRadius: 14, fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", border: "var(--rule-hairline)" },
-  previewBtn: { background: "var(--accent-action)", color: "var(--on-action)", borderColor: "var(--accent-action)" },
-  clearBtn: { background: "transparent", color: "var(--ink-primary)" },
-  saveRow: { display: "flex", gap: 10, marginTop: 2 },
-  nameInput: { flex: 1, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
-  saveBtn: { padding: "12px 24px", borderRadius: 14, border: "1px solid var(--accent-action)", background: "var(--accent-action)", color: "var(--on-action)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
-  cancelBtn: { marginTop: -6, minHeight: 44, padding: "0 11px", borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", letterSpacing: "0.03em" },
+  screen: { width: "100%", maxWidth: 430, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-5) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-4)" },
+  header: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
+  backBtn: { border: "none", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 700, cursor: "pointer", padding: 4, minHeight: 44 },
+  title: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", margin: 0, color: "var(--syahi)" },
+  saveBtn: { minHeight: 44, padding: "0 20px", borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
+
+  overviewWrap: { position: "relative", flexShrink: 0, padding: "6px 2px" },
+  overviewFrame: { position: "absolute", top: 0, bottom: 0, borderRadius: 8, border: "2px solid var(--clay)", background: "oklch(0.54 0.12 40 / 0.08)", pointerEvents: "none" },
+
+  zoom: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" },
+  zoomHead: { display: "flex", alignItems: "center", justifyContent: "space-between" },
+  pageBtn: { width: 44, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 24, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 10 },
+  zoomLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, color: "var(--syahi-soft)", letterSpacing: "0.03em" },
+  zoomGrid: { display: "grid", gap: 6, alignItems: "center" },
+  zoomNum: { textAlign: "center", fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)", lineHeight: 1 },
+  zoomCell: { height: 56, borderRadius: 10, border: "1px solid var(--rule)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, transition: "border-color 120ms ease, background 120ms ease" },
+
+  pads: { flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-2)" },
+  pad: { minHeight: 58, borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 },
+  padRest: { background: "transparent" },
+  padLabel: { fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
+
+  controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-3)" },
+  controlRow: { display: "flex", gap: "var(--space-2)" },
+  utilBtn: { flex: 1, minHeight: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  previewOn: { background: "var(--clay)", color: "var(--on-clay)", borderColor: "var(--clay)" },
+  feelRow: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-2)" },
+  feelBtn: { minHeight: 42, borderRadius: 12, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  lengthRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "6px 12px", borderRadius: 14, border: "var(--rule-hairline)" },
+  groupBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontSize: 24, fontWeight: 700, cursor: "pointer", display: "grid", placeItems: "center" },
+  lengthLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, color: "var(--syahi-soft)" },
+  tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
+  bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
+  bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
+  nameInput: { padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--head)", outline: "none" },
 };
 
 export default BeatEditor;
