@@ -554,16 +554,22 @@ function App() {
     selectBeat(newBeat, "custom"); // reflect the saved beat in the engine + main view (engine already stopped)
   }
 
-  // Open the editor blank (new beat).
+  // Where the editor's Back button returns to, or null when it was opened
+  // from the nav tab (then there's no Back — the nav bar navigates).
+  const [editorReturn, setEditorReturn] = useState(null);
+
+  // Open the editor blank (new beat) — from the nav tab, so no Back.
   function openNewBeat() {
     engine.stop(); setPlaying(false);
     setEditorInitial(null);
+    setEditorReturn(null);
     setView("editor");
   }
-  // Open the editor on a beat (defaults to the loaded one). Custom beats edit
-  // in place (same id); built-ins fork into a fresh custom copy that the
-  // original never sees.
-  function openEditBeat(target = beat) {
+  // Open the editor on a beat (defaults to the loaded one). `returnTo` is the
+  // view Back should return to (a drill-in from Home/Beats); null = no Back.
+  // Custom beats edit in place (same id); built-ins fork into a fresh custom
+  // copy that the original never sees.
+  function openEditBeat(target = beat, returnTo = null) {
     engine.stop(); setPlaying(false);
     const seed = isCustomBeat(target.id)
       ? target
@@ -575,6 +581,7 @@ function App() {
           description: undefined,
         };
     setEditorInitial(seed);
+    setEditorReturn(returnTo);
     setView("editor");
   }
   // Pure action — callers wrap it in askConfirm.
@@ -617,6 +624,7 @@ function App() {
   if (view === "editor") {
     return (
       <BeatEditor engine={engine} initialBeat={editorInitial} onSave={handleSaveBeat} nav={bottomNav}
+        onBack={editorReturn ? () => { engine.stop(); setPlaying(false); setEditorInitial(null); setView(editorReturn); } : undefined}
         onClose={() => { engine.stop(); setPlaying(false); setEditorInitial(null); setView("home"); }} />
     );
   }
@@ -791,7 +799,7 @@ function App() {
                 {detailBeat.description || "One of your own beats, built in the editor."}
               </p>
               <div style={st.sheetActions}>
-                <button onClick={() => { setDetailBeat(null); openEditBeat(detailBeat); }} style={st.sheetEditBtn}>
+                <button onClick={() => { setDetailBeat(null); openEditBeat(detailBeat, "beats"); }} style={st.sheetEditBtn}>
                   {isCustomBeat(detailBeat.id) ? "Edit" : "Customize"}
                 </button>
                 <button onClick={() => startFromDetail(detailBeat)} disabled={!ready}
@@ -1067,7 +1075,7 @@ function App() {
         </main>
 
         <div style={st.landRail}>
-          <button onClick={() => openEditBeat()} style={st.landEditBtn}
+          <button onClick={() => openEditBeat(beat, "home")} style={st.landEditBtn}
             aria-label={isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat"}>
             <PencilIcon />
           </button>
@@ -1132,7 +1140,7 @@ function App() {
           <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
         </button>
         <button onClick={() => cycleBeat(1)} aria-label="Next beat" style={st.chevBtn}>›</button>
-        <button onClick={() => openEditBeat()} style={st.landEditBtn}
+        <button onClick={() => openEditBeat(beat, "home")} style={st.landEditBtn}
           aria-label={isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat"}>
           <PencilIcon />
         </button>

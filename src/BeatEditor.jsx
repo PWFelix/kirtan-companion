@@ -68,7 +68,7 @@ function StrokeMark({ dayan, bayan, size = 12 }) {
   );
 }
 
-function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
+function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [cellsPerGroup, setCellsPerGroup] = useState(() => deriveGroup(initialBeat));
   const [steps, setSteps] = useState(initialBeat?.steps ?? NEW_BEAT_CELLS);
   const [dayan, setDayan] = useState(initialBeat ? [...initialBeat.dayan] : emptyGrid(NEW_BEAT_CELLS));
@@ -78,6 +78,8 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
   const [cursor, setCursor] = useState(0); // the column the pads write to
+  const overviewRef = useRef(null);
+  const scrubbingRef = useRef(false);
 
   const beatsPerBar = steps / cellsPerGroup;
   const labels = generateGuidedLabels(steps, cellsPerGroup);
@@ -193,16 +195,33 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
 
   const fillPct = ((bpm - 40) / 160) * 100;
 
+  // Drag anywhere on the overview to scrub the cursor (and thus the zoom
+  // page) to the cell under the finger.
+  function scrubTo(clientX) {
+    const el = overviewRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    setCursor(Math.min(steps - 1, Math.floor(frac * steps)));
+  }
+
   return (
     <div className="kc-screen" style={st.screen}>
       <header style={st.header}>
-        <button onClick={() => { if (previewing) engine.stop(); onClose(); }} style={st.backBtn}>‹ Back</button>
-        <h1 style={st.title}>{initialBeat ? "Edit beat" : "New beat"}</h1>
-        <button onClick={handleSave} style={st.saveBtn}>Save</button>
+        {onBack && (
+          <button onClick={onBack} style={st.backBtn} aria-label="Back">‹</button>
+        )}
+        {/* The name IS the title: click to rename. Placeholder for a new beat. */}
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="Name your beat" aria-label="Beat name" style={st.titleInput} />
       </header>
 
-      {/* ── OVERVIEW: whole beat + a frame over the current page ── */}
-      <div style={st.overviewWrap}>
+      {/* ── OVERVIEW: whole beat + a draggable frame over the current page ── */}
+      <div ref={overviewRef} style={st.overviewWrap}
+        onPointerDown={(e) => { scrubbingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); scrubTo(e.clientX); }}
+        onPointerMove={(e) => { if (scrubbingRef.current) scrubTo(e.clientX); }}
+        onPointerUp={() => { scrubbingRef.current = false; }}
+        onPointerCancel={() => { scrubbingRef.current = false; }}>
         <BeatStrip beat={previewBeat} step={step} playing={previewing} getPhase={getPhase} mini />
         {pageCount > 1 && (
           <div aria-hidden="true" style={{ ...st.overviewFrame,
@@ -299,9 +318,11 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
             onChange={(e) => setBpm(Number(e.target.value))}
             style={{ "--fill": fillPct + "%", flex: 1 }} aria-label="Tempo" />
         </div>
+      </div>
 
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-          placeholder="Name your beat" style={st.nameInput} />
+      {/* Save — bottom-right. */}
+      <div style={st.footer}>
+        <button onClick={handleSave} style={st.saveBtn}>Save beat</button>
       </div>
 
       {nav}
@@ -311,12 +332,13 @@ function BeatEditor({ engine, onSave, onClose, initialBeat, nav }) {
 
 const st = {
   screen: { width: "100%", maxWidth: 430, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-5) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-4)" },
-  header: { flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
-  backBtn: { border: "none", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 700, cursor: "pointer", padding: 4, minHeight: 44 },
-  title: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", margin: 0, color: "var(--syahi)" },
-  saveBtn: { minHeight: 44, padding: "0 20px", borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
+  header: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
+  backBtn: { flexShrink: 0, width: 40, height: 44, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 28, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
+  titleInput: { flex: 1, minWidth: 0, border: "none", borderBottom: "1px dashed var(--rule)", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", padding: "2px 0", outline: "none" },
+  footer: { flexShrink: 0, display: "flex", justifyContent: "flex-end" },
+  saveBtn: { minHeight: 48, padding: "0 28px", borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
 
-  overviewWrap: { position: "relative", flexShrink: 0, padding: "6px 2px" },
+  overviewWrap: { position: "relative", flexShrink: 0, padding: "6px 2px", cursor: "grab", touchAction: "none" },
   overviewFrame: { position: "absolute", top: 0, bottom: 0, borderRadius: 8, border: "2px solid var(--clay)", background: "oklch(0.54 0.12 40 / 0.08)", pointerEvents: "none" },
 
   zoom: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" },
@@ -344,7 +366,6 @@ const st = {
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
-  nameInput: { padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--head)", outline: "none" },
 };
 
 export default BeatEditor;
