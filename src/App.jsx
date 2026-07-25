@@ -502,6 +502,12 @@ function App() {
     if (Number.isFinite(v)) changeBpm(clampBpm(v));
     else setBpmDraft(String(bpm));
   }
+  // The ✓ (and backdrop) confirm: apply whatever's typed, then close.
+  function closeBpmEntry() {
+    bpmFocusRef.current = false;
+    commitBpmDraft();
+    setBpmEntryOpen(false);
+  }
   function changeVolume(value) { setVolume(value); engine.setVolume(value); }
   function changeEndVolume(end, value) {
     setEndVolumes(prev => ({ ...prev, [end]: value }));
@@ -966,18 +972,25 @@ function App() {
   // Precise BPM entry: type the number (desktop) or scroll the wheel (touch);
   // both drive changeBpm live. Disabled while tempo is locked.
   const bpmEntry = bpmEntryOpen && (
-    <div style={st.sheetBackdrop} onClick={() => setBpmEntryOpen(false)}>
+    <div style={st.sheetBackdrop} onClick={closeBpmEntry}>
       <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Set tempo"
         onClick={(e) => e.stopPropagation()}>
         <div style={st.sheetHead}>
           <h2 style={st.sheetName}>Tempo</h2>
-          <button onClick={() => setBpmEntryOpen(false)} aria-label="Done" style={st.sheetClose}>×</button>
+          <button onClick={closeBpmEntry} aria-label="Confirm tempo" style={st.sheetConfirm}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 12.5 9.5 18 20 6.5" />
+            </svg>
+          </button>
         </div>
         <div style={st.bpmEntryTop}>
-          <input type="text" inputMode="numeric" value={bpmDraft}
-            onFocus={() => { bpmFocusRef.current = true; }}
+          {/* select-all on focus so the first keystroke replaces the value
+              (open at 140, type 8 → "8", type 0 → "80"); capped at 3 digits. */}
+          <input type="text" inputMode="numeric" maxLength={3} value={bpmDraft}
+            onFocus={(e) => { bpmFocusRef.current = true; e.target.select(); }}
             onBlur={() => { bpmFocusRef.current = false; commitBpmDraft(); }}
-            onChange={(e) => setBpmDraft(e.target.value.replace(/[^0-9]/g, ""))}
+            onChange={(e) => setBpmDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
             aria-label="Tempo in BPM" style={st.bpmInput} />
         </div>
@@ -1250,6 +1263,7 @@ const st = {
   sheetHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   sheetName: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)" },
   sheetClose: { flexShrink: 0, width: 44, height: 44, margin: "-8px -8px 0 0", border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
+  sheetConfirm: { flexShrink: 0, width: 44, height: 44, margin: "-6px -6px 0 0", borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", cursor: "pointer", display: "grid", placeItems: "center" },
   sheetDesc: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", lineHeight: 1.55 },
   confirmMsg: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", lineHeight: 1.55 },
   confirmDangerBtn: { flex: 1, minHeight: 50, borderRadius: 14, border: "none", background: "var(--danger)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
@@ -1267,7 +1281,9 @@ const st = {
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   tapBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
   lockBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
-  bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
+  // Fixed width (3 tabular digits) so 2- vs 3-digit values don't change the
+  // button's size and jitter the flanking steppers.
+  bpmNum: { display: "inline-block", minWidth: "3ch", textAlign: "center", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
   bpmBtn: { display: "flex", alignItems: "baseline", gap: 6, border: "none", background: "transparent", cursor: "pointer", padding: "4px 6px" },
   landBpmBtn: { alignItems: "center" },
@@ -1289,7 +1305,7 @@ const st = {
   landStripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", containerType: "size", "--ks-cellh": "clamp(18px, calc((100cqh - 96px) / 2), 72px)" },
   landRail: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 44 },
   landEditBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", display: "grid", placeItems: "center", cursor: "pointer" },
-  landBpmNum: { flexShrink: 0, fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1, marginLeft: "var(--space-2)" },
+  landBpmNum: { flexShrink: 0, display: "inline-block", minWidth: "3ch", textAlign: "center", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1, marginLeft: "var(--space-2)" },
   landPlayBtn: { flexShrink: 0, minWidth: 92, height: 44, borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "grid", placeItems: "center", cursor: "pointer", marginLeft: "var(--space-2)" },
   landNavWrap: { flexShrink: 0, width: "100%", maxWidth: 430, alignSelf: "center" },
 };
