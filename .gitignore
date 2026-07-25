@@ -25,3 +25,6 @@ dist-ssr
 
 # Local reference material (not for the repo or the shipped site)
 reference/
+
+# Local Claude Code agent definitions (keep on disk, not in the repo)
+.claude/code-reviewer.md
