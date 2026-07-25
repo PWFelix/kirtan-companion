@@ -283,6 +283,30 @@ input[type="range"].kc-range::-moz-range-thumb {
   .kc-wm-anim .kc-wm-deva { animation: none; }
 }
 
+/* ── BPM scroll wheel (.kc-wheel) — snapping tempo picker ── */
+.kc-wheel {
+  position: relative;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  text-align: center;
+  /* mask the top/bottom rows to a fade so only the centre reads as chosen */
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 32%, #000 68%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 32%, #000 68%, transparent);
+}
+.kc-wheel::-webkit-scrollbar { display: none; }
+.kc-wheel-item {
+  scroll-snap-align: center;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-numeric); font-variant-numeric: tabular-nums;
+  font-size: 1.375rem; color: var(--syahi-soft);
+  transition: color 120ms ease, transform 120ms ease;
+}
+.kc-wheel-item[data-sel="true"] {
+  color: var(--syahi); font-weight: 700; transform: scale(1.15);
+}
+
 /* ── BeatStrip (.ks-*) — the straight-line visualizer ──
    Layout: [labels | scroller] on row 1, loop-position bar on row 2.
    Cells live in per-lane grids of minmax(cellmin, 1fr) columns; the

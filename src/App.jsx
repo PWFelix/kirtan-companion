@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
@@ -160,6 +160,56 @@ function ScrollFadeRow({ children, rowStyle }) {
   );
 }
 
+// Scroll-wheel BPM picker: an iOS-style snapping column, tuned so the
+// CENTRED value is the selection (updates live so you hear the tempo as you
+// scroll). Touch flick / mouse wheel / drag all scroll it. `value` changes
+// coming from OUTSIDE (typing in the field) re-centre the wheel; a self-sync
+// guard keeps the two from fighting.
+const WHEEL_ITEM_H = 40;   // px per row
+const WHEEL_PAD = 2;       // rows of padding each side (so ends can centre)
+function BpmWheel({ value, min, max, onChange }) {
+  const ref = useRef(null);
+  const scrollingRef = useRef(false);
+  const rafRef = useRef(0);
+  const settleRef = useRef(0);
+  const values = useMemo(
+    () => Array.from({ length: max - min + 1 }, (_, i) => min + i),
+    [min, max]
+  );
+
+  // Re-centre when value changes from elsewhere (not mid-scroll).
+  useEffect(() => {
+    const el = ref.current;
+    if (el && !scrollingRef.current) el.scrollTop = (value - min) * WHEEL_ITEM_H;
+  }, [value, min]);
+
+  const onScroll = () => {
+    const el = ref.current;
+    if (!el) return;
+    scrollingRef.current = true;
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      const idx = Math.round(el.scrollTop / WHEEL_ITEM_H);
+      const v = Math.min(max, Math.max(min, min + idx));
+      if (v !== value) onChange(v);
+    });
+    clearTimeout(settleRef.current);
+    settleRef.current = setTimeout(() => { scrollingRef.current = false; }, 140);
+  };
+
+  return (
+    <div className="kc-wheel" ref={ref} onScroll={onScroll}
+      style={{ height: (WHEEL_PAD * 2 + 1) * WHEEL_ITEM_H }}>
+      <div style={{ height: WHEEL_PAD * WHEEL_ITEM_H }} aria-hidden="true" />
+      {values.map((v) => (
+        <div key={v} className="kc-wheel-item" data-sel={v === value}
+          style={{ height: WHEEL_ITEM_H }}>{v}</div>
+      ))}
+      <div style={{ height: WHEEL_PAD * WHEEL_ITEM_H }} aria-hidden="true" />
+    </div>
+  );
+}
+
 function InfoIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -256,6 +306,7 @@ function App() {
   const [pickerTab, setPickerTab] = useState("builtin"); // category shown in the quick-pick
   const [mixerOpen, setMixerOpen] = useState(false);   // mixer sheet
   const [endVolumes, setEndVolumes] = useState({});    // per-lane faders, default 1
+  const [bpmEntryOpen, setBpmEntryOpen] = useState(false); // precise BPM sheet
 
   // ── Categories ──
   // Two are always present: "builtin" and "custom". User categories are
@@ -878,6 +929,37 @@ function App() {
   // Mixer sheet — master fader plus one fader + mute per lane. Shared by
   // both Home orientations (and it's where muting properly lives; the
   // strip's small lane labels remain a shortcut).
+  // Precise BPM entry: type the number (desktop) or scroll the wheel (touch);
+  // both drive changeBpm live. Disabled while tempo is locked.
+  const bpmEntry = bpmEntryOpen && (
+    <div style={st.sheetBackdrop} onClick={() => setBpmEntryOpen(false)}>
+      <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Set tempo"
+        onClick={(e) => e.stopPropagation()}>
+        <div style={st.sheetHead}>
+          <h2 style={st.sheetName}>Tempo</h2>
+          <button onClick={() => setBpmEntryOpen(false)} aria-label="Done" style={st.sheetClose}>×</button>
+        </div>
+        <div style={st.bpmEntryTop}>
+          <button onClick={() => changeBpm(Math.max(MIN_BPM, bpm - 1))}
+            disabled={bpm <= MIN_BPM} aria-label="Slower" style={st.bpmStep}>−</button>
+          <input type="number" inputMode="numeric" min={MIN_BPM} max={MAX_BPM} value={bpm}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v)) changeBpm(Math.min(MAX_BPM, Math.max(MIN_BPM, Math.round(v))));
+            }}
+            aria-label="Tempo in BPM" style={st.bpmInput} />
+          <button onClick={() => changeBpm(Math.min(MAX_BPM, bpm + 1))}
+            disabled={bpm >= MAX_BPM} aria-label="Faster" style={st.bpmStep}>+</button>
+        </div>
+        <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>BPM</span>
+        <div style={st.wheelWrap}>
+          <div style={st.wheelBand} aria-hidden="true" />
+          <BpmWheel value={bpm} min={MIN_BPM} max={MAX_BPM} onChange={changeBpm} />
+        </div>
+      </div>
+    </div>
+  );
+
   const mixerSheet = mixerOpen && (
     <div style={st.sheetBackdrop} onClick={() => setMixerOpen(false)}>
       <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Mixer"
@@ -952,8 +1034,11 @@ function App() {
             {beat.name} <span style={st.nameCaret}>▾</span>
           </button>
           <button onClick={() => cycleBeat(1)} aria-label="Next beat" style={st.chevBtnSm}>›</button>
-          <span style={st.landBpmNum}>{bpm}</span>
-          <span style={st.bpmUnit}>BPM</span>
+          <button onClick={() => setBpmEntryOpen(true)} style={st.bpmBtn}
+            aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set`}>
+            <span style={st.landBpmNum}>{bpm}</span>
+            <span style={st.bpmUnit}>BPM</span>
+          </button>
           <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
             onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
             style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
@@ -981,6 +1066,7 @@ function App() {
         <div style={st.landNavWrap}>{bottomNav}</div>
         {beatPicker}
         {mixerSheet}
+        {bpmEntry}
       </div>
     );
   }
@@ -1024,10 +1110,11 @@ function App() {
         {/* BPM as signage: the number IS the label. Becomes tappable for
             precise entry in an upcoming commit. */}
         <div>
-          <div style={st.bpmRow}>
+          <button onClick={() => setBpmEntryOpen(true)} style={{ ...st.bpmRow, ...st.bpmBtn }}
+            aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set precisely`}>
             <span style={st.bpmNum}>{bpm}</span>
             <span style={st.bpmUnit}>BPM</span>
-          </div>
+          </button>
           <div style={st.tempoRow}>
             <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
               onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
@@ -1064,6 +1151,7 @@ function App() {
       {bottomNav}
       {beatPicker}
       {mixerSheet}
+        {bpmEntry}
     </div>
   );
 }
@@ -1143,6 +1231,12 @@ const st = {
   lockBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
+  bpmBtn: { border: "none", background: "transparent", cursor: "pointer", padding: 0 },
+  bpmEntryTop: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", marginTop: "var(--space-4)" },
+  bpmStep: { flexShrink: 0, width: 48, height: 48, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
+  bpmInput: { width: 120, textAlign: "center", border: "none", background: "transparent", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "2.75rem", fontWeight: 600, color: "var(--syahi)", outline: "none", padding: 0, MozAppearance: "textfield" },
+  wheelWrap: { position: "relative", marginTop: "var(--space-5)" },
+  wheelBand: { position: "absolute", left: 0, right: 0, top: "50%", height: 40, transform: "translateY(-50%)", borderRadius: 12, background: "var(--head-sunken)", pointerEvents: "none" },
 
   // ── Home, landscape (the propped-up layout) ──
   landScreen: { width: "100%", maxWidth: 1100, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-3) + env(safe-area-inset-top)) calc(var(--space-4) + env(safe-area-inset-right)) calc(var(--space-2) + env(safe-area-inset-bottom)) calc(var(--space-4) + env(safe-area-inset-left))", gap: "var(--space-3)" },
