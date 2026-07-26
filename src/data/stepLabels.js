@@ -34,3 +34,21 @@ export function generateGuidedLabels(steps, cellsPerGroup) {
   }
   return labels;
 }
+
+/**
+ * Labels from an explicit GROUPS array (one entry = one numbered beat, its
+ * value = how many cells it spans). Supports uneven meters like 7/8 [2,2,3]
+ * that a single cellsPerGroup can't express. The first cell of each group is
+ * its beat number; the rest are middle dots.
+ *
+ * @param {number[]} groups - e.g. [2,2,2,2] (4/4 eighths) or [2,2,3] (7/8)
+ * @returns {string[]} one label per cell (length = sum(groups))
+ */
+export function labelsFromGroups(groups) {
+  const labels = [];
+  groups.forEach((g, n) => {
+    labels.push(String(n + 1));
+    for (let k = 1; k < g; k++) labels.push("·");
+  });
+  return labels;
+}

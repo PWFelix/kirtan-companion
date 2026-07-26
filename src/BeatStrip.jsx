@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useRef } from "react";
 import { LANES } from "./data/lanes.js";
 import { BOLS } from "./data/bols.js";
-import { generateGuidedLabels } from "./data/stepLabels.js";
+import { generateGuidedLabels, labelsFromGroups } from "./data/stepLabels.js";
 
 /**
  * BeatStrip — the straight-line beat visualizer
@@ -68,7 +68,11 @@ function BeatStrip({
 
   // ── Structure (memo'd — rebuilt on beat/display changes, never per step) ──
   const structure = useMemo(() => {
-    const labels = generateGuidedLabels(beat.steps, cpg);
+    // Uneven meters (7/8 etc.) carry an explicit groups array; uniform beats
+    // fall back to the cellsPerGroup labeller.
+    const labels = Array.isArray(beat.groups)
+      ? labelsFromGroups(beat.groups)
+      : generateGuidedLabels(beat.steps, cpg);
     return (
       <div
         className="ks-track"
