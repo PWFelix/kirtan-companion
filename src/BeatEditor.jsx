@@ -240,7 +240,9 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         {pageCount > 1 && (
           <div aria-hidden="true" style={{ ...st.overviewFrame,
             left: (windowStart / steps) * 100 + "%",
-            width: (zoomCells / steps) * 100 + "%" }} />
+            // span only the cells actually shown, so a short last page's
+            // frame doesn't overshoot the edge of the strip
+            width: ((windowEnd - windowStart) / steps) * 100 + "%" }} />
         )}
       </div>
 
@@ -255,7 +257,9 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
             disabled={page >= pageCount - 1} aria-label="Next page"
             style={{ ...st.pageBtn, opacity: page >= pageCount - 1 ? 0.3 : 1 }}>›</button>
         </div>
-        <div style={{ ...st.zoomGrid, gridTemplateColumns: `repeat(${windowEnd - windowStart}, 1fr)` }}>
+        {/* Always a full page of columns (zoomCells), so cells keep the SAME
+            width on a short last page — the extra tracks just stay empty. */}
+        <div style={{ ...st.zoomGrid, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
           {labels.slice(windowStart, windowEnd).map((l, j) => (
             <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
           ))}
