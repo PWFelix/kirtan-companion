@@ -36,19 +36,33 @@ const deriveGroup = (b) =>
   b == null ? DEFAULT_CELLS_PER_GROUP
             : b.cellsPerGroup ?? Math.max(1, Math.round(b.steps / (b.beatsPerBar ?? 4)));
 
-// The pad palette for the mridanga column. Each pad writes (dayan, bayan)
-// together. Order: dayan singles, bayan singles, named combos, rest.
-const PADS = [
-  { key: "ta",  label: BOLS.dayan.O,      dayan: "O",  bayan: null },
-  { key: "te",  label: BOLS.dayan.X,      dayan: "X",  bayan: null },
-  { key: "ge",  label: BOLS.bayan.O,      dayan: null, bayan: "O"  },
-  { key: "khe", label: BOLS.bayan.X,      dayan: null, bayan: "X"  },
-  { key: "da",  label: COMBO_BOLS["O+O"], dayan: "O",  bayan: "O"  },
-  { key: "gi",  label: COMBO_BOLS["X+O"], dayan: "X",  bayan: "O"  },
-  { key: "tk",  label: COMBO_BOLS["O+X"], dayan: "O",  bayan: "X"  },
-  { key: "tek", label: COMBO_BOLS["X+X"], dayan: "X",  bayan: "X"  },
-  { key: "rest", label: "Rest",           dayan: null, bayan: null, rest: true },
-];
+// Pad palettes keyed by edit mode. Each pad's `write` names exactly the
+// lanes it touches: in "both" mode a pad writes the whole column (both
+// hands); in a single-lane mode it writes ONLY that lane, leaving the other
+// untouched. Order: dayan singles, bayan singles, named combos, rest.
+const PAD_SETS = {
+  both: [
+    { key: "ta",   label: BOLS.dayan.O,      write: { dayan: "O",  bayan: null } },
+    { key: "te",   label: BOLS.dayan.X,      write: { dayan: "X",  bayan: null } },
+    { key: "ge",   label: BOLS.bayan.O,      write: { dayan: null, bayan: "O"  } },
+    { key: "khe",  label: BOLS.bayan.X,      write: { dayan: null, bayan: "X"  } },
+    { key: "da",   label: COMBO_BOLS["O+O"], write: { dayan: "O",  bayan: "O"  } },
+    { key: "gi",   label: COMBO_BOLS["X+O"], write: { dayan: "X",  bayan: "O"  } },
+    { key: "tk",   label: COMBO_BOLS["O+X"], write: { dayan: "O",  bayan: "X"  } },
+    { key: "tek",  label: COMBO_BOLS["X+X"], write: { dayan: "X",  bayan: "X"  } },
+    { key: "rest", label: "Rest",            write: { dayan: null, bayan: null }, rest: true },
+  ],
+  dayan: [
+    { key: "ta",   label: BOLS.dayan.O, write: { dayan: "O" } },
+    { key: "te",   label: BOLS.dayan.X, write: { dayan: "X" } },
+    { key: "rd",   label: "Rest",       write: { dayan: null }, rest: true },
+  ],
+  bayan: [
+    { key: "ge",   label: BOLS.bayan.O, write: { bayan: "O" } },
+    { key: "khe",  label: BOLS.bayan.X, write: { bayan: "X" } },
+    { key: "rb",   label: "Rest",       write: { bayan: null }, rest: true },
+  ],
+};
 
 const soundName = (end, v) => (v === "O" ? `${end}_open` : v === "X" ? `${end}_closed` : null);
 
@@ -89,6 +103,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
   const [cursor, setCursor] = useState(0); // the column the pads write to
+  const [editLane, setEditLane] = useState("both"); // "both" | "dayan" | "bayan"
   const overviewRef = useRef(null);
   const scrubbingRef = useRef(false);
   const nameInputRef = useRef(null);
@@ -170,16 +185,16 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     undoRef.current = []; setCanUndo(false);
   }
 
-  // Tap a pad: record undo, write the whole cursor column, sound it, advance.
+  // Tap a pad: record undo, write only the lanes the pad names (both in
+  // "both" mode, one in a single-lane mode), sound them, advance the cursor.
   function tapPad(pad) {
     pushUndo();
-    setDayan(p => { const c = [...p]; c[cursor] = pad.dayan; return c; });
-    setBayan(p => { const c = [...p]; c[cursor] = pad.bayan; return c; });
+    const w = pad.write;
+    if ("dayan" in w) setDayan(p => { const c = [...p]; c[cursor] = w.dayan; return c; });
+    if ("bayan" in w) setBayan(p => { const c = [...p]; c[cursor] = w.bayan; return c; });
     if (!previewing) {
-      const dn = soundName("dayan", pad.dayan);
-      const bn = soundName("bayan", pad.bayan);
-      if (dn) engine.playStroke(dn);
-      if (bn) engine.playStroke(bn);
+      if ("dayan" in w) { const n = soundName("dayan", w.dayan); if (n) engine.playStroke(n); }
+      if ("bayan" in w) { const n = soundName("bayan", w.bayan); if (n) engine.playStroke(n); }
     }
     setCursor(c => (c + 1) % steps); // wrap at the end of the loop
   }
@@ -270,40 +285,64 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
               <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
             ))}
           </div>
-          {[["dayan", dayan], ["bayan", bayan]].map(([end, arr]) => (
-            <div key={end} style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
-              {arr.slice(windowStart, windowEnd).map((v, j) => {
-                const i = windowStart + j;
-                const isCursor = i === cursor;
-                const lit = previewing && i === step;
-                return (
-                  <button key={end + i} onClick={() => setCursor(i)}
-                    aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
-                    style={{ ...st.zoomCell,
-                      borderColor: isCursor ? "var(--clay)" : "var(--rule)",
-                      borderWidth: isCursor ? 2 : 1,
-                      background: lit ? "var(--head-sunken)" : "var(--head)" }}>
-                    {/* One dot — this cell belongs to a single lane. */}
-                    <span aria-hidden="true"
-                      style={dotStyle(v, end === "dayan" ? "var(--lane-dayan)" : "var(--lane-bayan)", 18)} />
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {[["dayan", "Dayan", dayan], ["bayan", "Bayan", bayan]].map(([end, label, arr]) => {
+            const isolatedOut = editLane !== "both" && editLane !== end;
+            const active = editLane === end;
+            return (
+              <div key={end} style={{ opacity: isolatedOut ? 0.4 : 1 }}>
+                {/* Row label doubles as the isolate toggle: tap to edit only
+                    this lane (pads switch to its strokes); tap again = both. */}
+                <button onClick={() => setEditLane(m => (m === end ? "both" : end))}
+                  aria-pressed={active}
+                  style={{ ...st.laneLabel, color: `var(--lane-${end})`,
+                    fontWeight: active ? 800 : 700 }}>
+                  {label}{active ? " · editing only" : ""}
+                </button>
+                <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
+                  {arr.slice(windowStart, windowEnd).map((v, j) => {
+                    const i = windowStart + j;
+                    const isCursor = i === cursor;
+                    const lit = previewing && i === step;
+                    return (
+                      <button key={end + i} onClick={() => setCursor(i)}
+                        aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
+                        style={{ ...st.zoomCell,
+                          borderColor: isCursor ? "var(--clay)" : "var(--rule)",
+                          borderWidth: isCursor ? 2 : 1,
+                          background: lit ? "var(--head-sunken)" : "var(--head)" }}>
+                        {/* One dot — this cell belongs to a single lane. */}
+                        <span aria-hidden="true"
+                          style={dotStyle(v, end === "dayan" ? "var(--lane-dayan)" : "var(--lane-bayan)", 18)} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* ── PADS: tap to write the cursor column, sound it, advance ── */}
+      {/* ── PADS: tap to write the cursor column, sound it, advance. The set
+          depends on the edit mode (both hands, or one isolated lane). ── */}
       <div style={st.pads}>
-        {PADS.map(pad => (
-          <button key={pad.key} onClick={() => tapPad(pad)}
-            aria-label={pad.rest ? "Rest (silence this beat)" : `${pad.label}`}
-            style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
-            <span style={st.padLabel}>{pad.label}</span>
-            {!pad.rest && <StrokeMark dayan={pad.dayan} bayan={pad.bayan} size={9} />}
-          </button>
-        ))}
+        {PAD_SETS[editLane].map(pad => {
+          const w = pad.write;
+          const both = "dayan" in w && "bayan" in w;
+          return (
+            <button key={pad.key} onClick={() => tapPad(pad)}
+              aria-label={pad.rest ? "Rest" : pad.label}
+              style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
+              <span style={st.padLabel}>{pad.label}</span>
+              {!pad.rest && (both
+                ? <StrokeMark dayan={w.dayan} bayan={w.bayan} size={9} />
+                : <span aria-hidden="true" style={dotStyle(
+                    "dayan" in w ? w.dayan : w.bayan,
+                    "dayan" in w ? "var(--lane-dayan)" : "var(--lane-bayan)", 11)} />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Controls: undo, feel, length, tempo, preview ── */}
@@ -378,6 +417,7 @@ const st = {
   zoomLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, color: "var(--syahi-soft)", letterSpacing: "0.03em" },
   zoomRows: { display: "flex", flexDirection: "column", gap: 6 },
   zoomLine: { display: "grid", gap: 6, alignItems: "center" },
+  laneLabel: { display: "block", border: "none", background: "transparent", cursor: "pointer", padding: "2px 0 3px", fontFamily: "var(--font-body)", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", textAlign: "left" },
   zoomNum: { textAlign: "center", fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)", lineHeight: 1 },
   zoomCell: { height: 56, borderRadius: 10, border: "1px solid var(--rule)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, transition: "border-color 120ms ease, background 120ms ease" },
 
