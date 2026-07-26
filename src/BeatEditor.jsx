@@ -94,10 +94,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const beatsPerBar = steps / cellsPerGroup;
   const labels = generateGuidedLabels(steps, cellsPerGroup);
 
-  // How many cells the zoom shows at once: a whole number of groups, ~6 cells,
-  // so cells stay >=48px tappable on a phone. The visible page is the one
-  // containing the cursor.
-  const zoomCells = Math.min(steps, Math.max(cellsPerGroup, Math.floor(6 / cellsPerGroup) * cellsPerGroup));
+  // How many cells the zoom shows at once: a whole number of groups, ~8 cells
+  // to match the main strip's fit (so a standard 8-cell beat shows in one
+  // page). The visible page is the one containing the cursor.
+  const zoomCells = Math.min(steps, Math.max(cellsPerGroup, Math.round(8 / cellsPerGroup) * cellsPerGroup));
   const pageCount = Math.ceil(steps / zoomCells);
   const page = Math.floor(cursor / zoomCells);
   const windowStart = page * zoomCells;
