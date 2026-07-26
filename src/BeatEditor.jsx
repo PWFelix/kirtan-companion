@@ -61,18 +61,20 @@ function PencilIcon() {
   );
 }
 
-// A little top/bottom mark pair showing what a pad (or cell) writes:
-// filled = open, ring = closed, faint dot = silent. Top = dayan, bottom = bayan.
+// filled = open, ring = closed, faint dot = silent.
+function dotStyle(v, color, size) {
+  if (v === "O") return { width: size, height: size, borderRadius: "50%", background: color };
+  if (v === "X") return { width: size, height: size, borderRadius: "50%", border: `2.5px solid ${color}` };
+  return { width: 4, height: 4, borderRadius: "50%", background: "var(--rule)" };
+}
+
+// A top/bottom mark PAIR — used on the pads, which write BOTH hands at once
+// (top = dayan, bottom = bayan).
 function StrokeMark({ dayan, bayan, size = 12 }) {
-  const dot = (v, color) => {
-    if (v === "O") return { width: size, height: size, borderRadius: "50%", background: color };
-    if (v === "X") return { width: size, height: size, borderRadius: "50%", border: `2.5px solid ${color}` };
-    return { width: 4, height: 4, borderRadius: "50%", background: "var(--rule)" };
-  };
   return (
     <span aria-hidden="true" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-      <span style={dot(dayan, "var(--lane-dayan)")} />
-      <span style={dot(bayan, "var(--lane-bayan)")} />
+      <span style={dotStyle(dayan, "var(--lane-dayan)", size)} />
+      <span style={dotStyle(bayan, "var(--lane-bayan)", size)} />
     </span>
   );
 }
@@ -281,7 +283,9 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
                       borderColor: isCursor ? "var(--clay)" : "var(--rule)",
                       borderWidth: isCursor ? 2 : 1,
                       background: lit ? "var(--head-sunken)" : "var(--head)" }}>
-                    <StrokeMark dayan={end === "dayan" ? v : null} bayan={end === "bayan" ? v : null} size={16} />
+                    {/* One dot — this cell belongs to a single lane. */}
+                    <span aria-hidden="true"
+                      style={dotStyle(v, end === "dayan" ? "var(--lane-dayan)" : "var(--lane-bayan)", 18)} />
                   </button>
                 );
               })}
