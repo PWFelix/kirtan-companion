@@ -52,6 +52,15 @@ const PADS = [
 
 const soundName = (end, v) => (v === "O" ? `${end}_open` : v === "X" ? `${end}_closed` : null);
 
+function PencilIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  );
+}
+
 // A little top/bottom mark pair showing what a pad (or cell) writes:
 // filled = open, ring = closed, faint dot = silent. Top = dayan, bottom = bayan.
 function StrokeMark({ dayan, bayan, size = 12 }) {
@@ -80,6 +89,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [cursor, setCursor] = useState(0); // the column the pads write to
   const overviewRef = useRef(null);
   const scrubbingRef = useRef(false);
+  const nameInputRef = useRef(null);
 
   const beatsPerBar = steps / cellsPerGroup;
   const labels = generateGuidedLabels(steps, cellsPerGroup);
@@ -211,9 +221,13 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         {onBack && (
           <button onClick={onBack} style={st.backBtn} aria-label="Back">‹</button>
         )}
-        {/* The name IS the title: click to rename. Placeholder for a new beat. */}
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-          placeholder="Name your beat" aria-label="Beat name" style={st.titleInput} />
+        {/* The name IS the title: click (or the pencil) to rename. */}
+        <div style={st.titleWrap}>
+          <input ref={nameInputRef} type="text" value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="Name your beat" aria-label="Beat name" style={st.titleInput} />
+          <button onClick={() => nameInputRef.current?.focus()} aria-label="Rename beat"
+            style={st.titlePencil}><PencilIcon /></button>
+        </div>
       </header>
 
       {/* ── OVERVIEW: whole beat + a draggable frame over the current page ── */}
@@ -334,7 +348,9 @@ const st = {
   screen: { width: "100%", maxWidth: 430, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-5) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-4)" },
   header: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
   backBtn: { flexShrink: 0, width: 40, height: 44, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 28, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
-  titleInput: { flex: 1, minWidth: 0, border: "none", borderBottom: "1px dashed var(--rule)", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", padding: "2px 0", outline: "none" },
+  titleWrap: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "var(--space-2)", borderBottom: "1px dashed var(--rule)" },
+  titleInput: { flex: 1, minWidth: 0, border: "none", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", padding: "2px 0", outline: "none" },
+  titlePencil: { flexShrink: 0, width: 40, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", cursor: "pointer", display: "grid", placeItems: "center" },
   footer: { flexShrink: 0, display: "flex", justifyContent: "flex-end" },
   saveBtn: { minHeight: 48, padding: "0 28px", borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
 
