@@ -257,29 +257,36 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
             disabled={page >= pageCount - 1} aria-label="Next page"
             style={{ ...st.pageBtn, opacity: page >= pageCount - 1 ? 0.3 : 1 }}>›</button>
         </div>
-        {/* Always a full page of columns (zoomCells), so cells keep the SAME
-            width on a short last page — the extra tracks just stay empty. */}
-        <div style={{ ...st.zoomGrid, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
-          {labels.slice(windowStart, windowEnd).map((l, j) => (
-            <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
+        {/* Each row (numbers, dayan, bayan) is its OWN grid of a full page of
+            columns (zoomCells). Separate grids keep the three rows stacked
+            even on a short last page — a single shared grid would auto-flow
+            a 2-cell page's items onto one row. Cells keep constant width;
+            unused tracks stay empty. */}
+        <div style={st.zoomRows}>
+          <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
+            {labels.slice(windowStart, windowEnd).map((l, j) => (
+              <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
+            ))}
+          </div>
+          {[["dayan", dayan], ["bayan", bayan]].map(([end, arr]) => (
+            <div key={end} style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
+              {arr.slice(windowStart, windowEnd).map((v, j) => {
+                const i = windowStart + j;
+                const isCursor = i === cursor;
+                const lit = previewing && i === step;
+                return (
+                  <button key={end + i} onClick={() => setCursor(i)}
+                    aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
+                    style={{ ...st.zoomCell,
+                      borderColor: isCursor ? "var(--clay)" : "var(--rule)",
+                      borderWidth: isCursor ? 2 : 1,
+                      background: lit ? "var(--head-sunken)" : "var(--head)" }}>
+                    <StrokeMark dayan={end === "dayan" ? v : null} bayan={end === "bayan" ? v : null} size={16} />
+                  </button>
+                );
+              })}
+            </div>
           ))}
-          {[["dayan", dayan], ["bayan", bayan]].map(([end, arr]) =>
-            arr.slice(windowStart, windowEnd).map((v, j) => {
-              const i = windowStart + j;
-              const isCursor = i === cursor;
-              const lit = previewing && i === step;
-              return (
-                <button key={end + i} onClick={() => setCursor(i)}
-                  aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
-                  style={{ ...st.zoomCell,
-                    borderColor: isCursor ? "var(--clay)" : "var(--rule)",
-                    borderWidth: isCursor ? 2 : 1,
-                    background: lit ? "var(--head-sunken)" : "var(--head)" }}>
-                  <StrokeMark dayan={end === "dayan" ? v : null} bayan={end === "bayan" ? v : null} size={16} />
-                </button>
-              );
-            })
-          )}
         </div>
       </div>
 
@@ -365,7 +372,8 @@ const st = {
   zoomHead: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   pageBtn: { width: 44, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 24, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 10 },
   zoomLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, color: "var(--syahi-soft)", letterSpacing: "0.03em" },
-  zoomGrid: { display: "grid", gap: 6, alignItems: "center" },
+  zoomRows: { display: "flex", flexDirection: "column", gap: 6 },
+  zoomLine: { display: "grid", gap: 6, alignItems: "center" },
   zoomNum: { textAlign: "center", fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)", lineHeight: 1 },
   zoomCell: { height: 56, borderRadius: 10, border: "1px solid var(--rule)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, transition: "border-color 120ms ease, background 120ms ease" },
 
