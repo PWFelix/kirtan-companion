@@ -1,577 +1,94 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext, verticalListSortingStrategy, arrayMove, useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { KirtanEngine } from "./engine/KirtanEngine.js";
+import { useState } from "react";
 import { BEATS } from "./data/beats.js";
-import { LANES } from "./data/lanes.js";
+import { useTransport } from "./hooks/useTransport.js";
+import { useBeatLibrary } from "./hooks/useBeatLibrary.js";
+import { useLandscape } from "./hooks/useLandscape.js";
 import BeatEditor from "./BeatEditor.jsx";
-import BeatStrip from "./BeatStrip.jsx";
 import Splash from "./Splash.jsx";
-import Wordmark from "./Wordmark.jsx";
+import BottomNav from "./ui/BottomNav.jsx";
+import HomeView from "./views/HomeView.jsx";
+import BeatsView from "./views/BeatsView.jsx";
+import SettingsView from "./views/SettingsView.jsx";
 
-const MIN_BPM = 40, MAX_BPM = 200;
-const SAVED_KEY = "kirtan-custom-beats";
-const CATS_KEY = "kirtan-user-categories";
-const ACTIVE_CAT_KEY = "kirtan-active-category";
-
-function loadUserCategories() {
-  try { return JSON.parse(localStorage.getItem(CATS_KEY)) || []; }
-  catch { return []; }
-}
-
-// Landscape = rotated phones, propped tablets, and most laptop windows.
-// (Desktop monitors taller than 900px keep the centred portrait column.)
-const LANDSCAPE_Q = "(orientation: landscape) and (max-height: 900px)";
-
-function useLandscape() {
-  const [landscape, setLandscape] = useState(
-    () => window.matchMedia(LANDSCAPE_Q).matches
-  );
-  useEffect(() => {
-    const mq = window.matchMedia(LANDSCAPE_Q);
-    const onChange = (e) => setLandscape(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return landscape;
-}
-
-function loadSavedBeats() {
-  try { return JSON.parse(localStorage.getItem(SAVED_KEY)) || []; }
-  catch (e) { return []; }
-}
-
-// ── Bottom navigation ───────────────────────────────────────────────────────
-// A persistent tab bar of FOUR EQUAL cells (icon + small label). Equal widths
-// matter: mixed sizes made the wide middle buttons swallow near-miss taps
-// aimed at the small end buttons. The active destination is filled clay.
-// Switching pages does NOT stop playback (except the editor, which takes over
-// the engine) so you can browse while a beat plays.
-// Padlock for the tempo lock — open when free, closed when locked. An icon
-// (not the words Lock/Locked) so the button's size never changes with state,
-// which would resize the flexible slider beside it.
-function LockIcon({ locked }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="4" y="11" width="16" height="10" rx="2" />
-      {locked
-        ? <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-        : <path d="M8 11V7a4 4 0 0 1 7.7-1.5" />}
-    </svg>
-  );
-}
-
-function HomeIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 10.2 12 3l9 7.2V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
-    </svg>
-  );
-}
-function CogIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function BeatsIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-      <path d="M4 6v12M9 9v6M14 4v16M19 8v8" />
-    </svg>
-  );
-}
-function PencilIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-    </svg>
-  );
-}
-
-function BottomNav({ view, onHome, onBeats, onEditor, onSettings }) {
-  const cell = (v) => ({ ...st.navCell, ...(view === v ? st.navActive : null) });
-  const cur = (v) => (view === v ? "page" : undefined);
-  return (
-    <nav style={st.nav} aria-label="Primary">
-      <button onClick={onHome} aria-current={cur("home")} style={cell("home")}>
-        <HomeIcon /><span style={st.navLabel}>Home</span>
-      </button>
-      <button onClick={onBeats} aria-current={cur("beats")} style={cell("beats")}>
-        <BeatsIcon /><span style={st.navLabel}>Beats</span>
-      </button>
-      <button onClick={onEditor} aria-current={cur("editor")} style={cell("editor")}>
-        <PencilIcon /><span style={st.navLabel}>Editor</span>
-      </button>
-      <button onClick={onSettings} aria-current={cur("settings")} style={cell("settings")}>
-        <CogIcon /><span style={st.navLabel}>Settings</span>
-      </button>
-    </nav>
-  );
-}
-
-// Horizontal scroller with gradient edge fades: content visibly "melts"
-// off whichever side has more to see, and the fade vanishes at that end —
-// the standard cue that a row scrolls. Used by the category tab bar.
-function ScrollFadeRow({ children, rowStyle }) {
-  const ref = useRef(null);
-  const [fades, setFades] = useState({ left: false, right: false });
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => {
-      const left = el.scrollLeft > 2;
-      const right = el.scrollLeft < el.scrollWidth - el.clientWidth - 2;
-      setFades(f => (f.left === left && f.right === right ? f : { left, right }));
-    };
-    update();
-    el.addEventListener("scroll", update, { passive: true });
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => { el.removeEventListener("scroll", update); ro.disconnect(); };
-    // children: re-measure when tabs are added/removed (content width
-    // changes don't fire the ResizeObserver, which watches el's own box).
-  }, [children]);
-
-  return (
-    <div style={{ position: "relative", flexShrink: 0 }}>
-      <div ref={ref} style={rowStyle}>{children}</div>
-      <div aria-hidden="true" style={{ ...st.edgeFade, left: 0,
-        background: "linear-gradient(90deg, var(--head), transparent)",
-        opacity: fades.left ? 1 : 0 }} />
-      <div aria-hidden="true" style={{ ...st.edgeFade, right: 0,
-        background: "linear-gradient(270deg, var(--head), transparent)",
-        opacity: fades.right ? 1 : 0 }} />
-    </div>
-  );
-}
-
-// Scroll-wheel BPM picker: an iOS-style snapping column, tuned so the
-// CENTRED value is the selection (updates live so you hear the tempo as you
-// scroll). Touch flick / mouse wheel / drag all scroll it. `value` changes
-// coming from OUTSIDE (typing in the field) re-centre the wheel; a self-sync
-// guard keeps the two from fighting.
-const WHEEL_ITEM_H = 40;   // px per row
-const WHEEL_PAD = 2;       // rows of padding each side (so ends can centre)
-function BpmWheel({ value, min, max, onChange }) {
-  const ref = useRef(null);
-  const scrollingRef = useRef(false);
-  const rafRef = useRef(0);
-  const settleRef = useRef(0);
-  const values = useMemo(
-    () => Array.from({ length: max - min + 1 }, (_, i) => min + i),
-    [min, max]
-  );
-
-  // Re-centre when value changes from elsewhere (not mid-scroll).
-  useEffect(() => {
-    const el = ref.current;
-    if (el && !scrollingRef.current) el.scrollTop = (value - min) * WHEEL_ITEM_H;
-  }, [value, min]);
-
-  const onScroll = () => {
-    const el = ref.current;
-    if (!el) return;
-    scrollingRef.current = true;
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      const idx = Math.round(el.scrollTop / WHEEL_ITEM_H);
-      const v = Math.min(max, Math.max(min, min + idx));
-      if (v !== value) onChange(v);
-    });
-    clearTimeout(settleRef.current);
-    settleRef.current = setTimeout(() => { scrollingRef.current = false; }, 140);
-  };
-
-  return (
-    <div className="kc-wheel" ref={ref} onScroll={onScroll}
-      style={{ height: (WHEEL_PAD * 2 + 1) * WHEEL_ITEM_H }}>
-      <div style={{ height: WHEEL_PAD * WHEEL_ITEM_H }} aria-hidden="true" />
-      {values.map((v) => (
-        <div key={v} className="kc-wheel-item" data-sel={v === value}
-          style={{ height: WHEEL_ITEM_H }}>{v}</div>
-      ))}
-      <div style={{ height: WHEEL_PAD * WHEEL_ITEM_H }} aria-hidden="true" />
-    </div>
-  );
-}
-
-function InfoIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 11v5" />
-      <path d="M12 7.5h.01" />
-    </svg>
-  );
-}
-// Sortable row wrapper (dnd-kit). MODULE-LEVEL so React keeps its identity
-// across App re-renders — a component defined inside App would remount every
-// render and break the drag mid-gesture (the trap the hand-rolled version
-// kept falling into). It owns only the drag mechanics and hands them back
-// through a render-prop; the row's content stays a closure in the Beats view.
-function SortableRow({ id, children }) {
-  const { listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    ...(isDragging
-      ? { zIndex: 5, position: "relative", boxShadow: "0 8px 22px oklch(0.24 0.02 60 / 0.28)" }
-      : null),
-  };
-  // `listeners` spread on the WHOLE row (the delay sensor tells hold-drag from
-  // tap-select); the exempt buttons stop pointer-down so they never drag.
-  return children({ setNodeRef, style, isDragging, listeners });
-}
-
-function MixerIcon() {
-  return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-      <path d="M5 21v-6M5 11V3M12 21v-10M12 7V3M19 21v-4M19 13V3" />
-      <path d="M2 14h6M9 10h6M16 16h6" />
-    </svg>
-  );
-}
-function SpeakerIcon({ muted }) {
-  return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M11 5 6 9H3v6h3l5 4z" />
-      {muted
-        ? <path d="m16 9 6 6M22 9l-6 6" />
-        : <path d="M15.5 8.5a5 5 0 0 1 0 7" />}
-    </svg>
-  );
-}
-
-// Membership check for the add-beats sheet — square, clay tick when in.
-function CheckDot({ checked }) {
-  return (
-    <span aria-hidden="true" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 8,
-      display: "grid", placeItems: "center", fontSize: 15, fontWeight: 800, lineHeight: 1,
-      border: `2px solid ${checked ? "var(--clay)" : "var(--rule)"}`,
-      background: checked ? "var(--clay)" : "transparent",
-      color: "var(--on-clay)" }}>
-      {checked ? "✓" : ""}
-    </span>
-  );
-}
-
-// Selection radio for the beat list — hollow ring, saffron dot when chosen.
-function RadioDot({ selected }) {
-  return (
-    <span aria-hidden="true" style={{ flexShrink: 0, width: 24, height: 24, borderRadius: "50%",
-      display: "grid", placeItems: "center",
-      border: `2px solid ${selected ? "var(--accent-action)" : "var(--rule)"}` }}>
-      {selected && <span style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--accent-action)" }} />}
-    </span>
-  );
-}
-
+/**
+ * App — the shell. It routes, and it owns the one piece of state that spans
+ * everything else: WHICH BEAT IS LOADED.
+ *
+ * Everything else has a home of its own:
+ *   useTransport   — the engine and its React mirror (playing, tempo, mixer)
+ *   useBeatLibrary — saved beats, categories, and their persistence
+ *   views/*        — one screen each, owning only its own sheets and tabs
+ *
+ * The split is by STATE OWNERSHIP, not by screen count. `beatId` stays here
+ * because selecting a beat has to touch both halves — the library (which
+ * category was it chosen from) and the transport (point the engine at it) —
+ * so `selectBeat` is the seam between them and belongs to neither.
+ */
 function App() {
-  const engineRef = useRef(null);
-  if (engineRef.current === null) engineRef.current = new KirtanEngine();
-  const engine = engineRef.current;
+  const transport = useTransport();
+  const library = useBeatLibrary();
   const isLandscape = useLandscape();
-
-  // The whole beat row is the drag surface AND the tap-to-select target, so
-  // the sensor distinguishes the two by a HOLD: press ~220ms to pick up and
-  // reorder; a quick tap stays a tap (selects); a swipe that moves past the
-  // tolerance before the delay elapses is left to the browser (list scrolls).
-  const dragSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
-  );
 
   const [view, setView] = useState("home"); // "home" | "beats" | "editor" | "settings"
   const [entered, setEntered] = useState(false); // splash shown until Begin
-  const [detailBeat, setDetailBeat] = useState(null); // beat shown in the Beats-page info sheet
-  const [pickerOpen, setPickerOpen] = useState(false); // Home quick-pick sheet
-  const [pickerTab, setPickerTab] = useState("builtin"); // category shown in the quick-pick
-  const [mixerOpen, setMixerOpen] = useState(false);   // mixer sheet
-  const [endVolumes, setEndVolumes] = useState({});    // per-lane faders, default 1
-  const [bpmEntryOpen, setBpmEntryOpen] = useState(false); // precise BPM sheet
-  const [bpmDraft, setBpmDraft] = useState("");            // raw text in the entry field
-  const bpmFocusRef = useRef(false);                        // is the field being typed in
-
-  // ── Categories ──
-  // Two are always present: "builtin" and "custom". User categories are
-  // ordered lists of beat ids — each one is a kirtan progression. The
-  // ACTIVE category is the one the current beat was chosen from: Home's
-  // chevrons and quick-pick cycle within it.
-  const [categories, setCategories] = useState(loadUserCategories);
-  const [activeCat, setActiveCat] = useState(() => localStorage.getItem(ACTIVE_CAT_KEY) || "builtin");
-  const [browseTab, setBrowseTab] = useState("builtin"); // which tab the Beats page shows
-  const [createCatOpen, setCreateCatOpen] = useState(false);
-  const [newCatName, setNewCatName] = useState("");
-  const [addBeatsOpen, setAddBeatsOpen] = useState(false); // add-beats sheet for the browsed category
-
-  // One confirmation sheet guards every destructive action (delete a
-  // beat, remove from a category, delete a category):
-  // { message, label, onConfirm } or null.
-  const [confirmAction, setConfirmAction] = useState(null);
-  const askConfirm = (message, label, onConfirm) =>
-    setConfirmAction({ message, label, onConfirm });
+  const [beatId, setBeatId] = useState(BEATS[0].id);
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
+  // Where the editor's Back button returns to, or null when it was opened
+  // from the nav tab (then there's no Back — the nav bar navigates).
+  const [editorReturn, setEditorReturn] = useState(null);
 
-  const [customBeats, setCustomBeats] = useState(loadSavedBeats);
-  const allBeats = [...BEATS, ...customBeats];
+  const beat = library.allBeats.find(b => b.id === beatId) || library.allBeats[0];
 
-  const [ready, setReady]     = useState(false);
-  const [beatId, setBeatId]   = useState(BEATS[0].id);
-  const [bpm, setBpm]         = useState(BEATS[0].bpm);
-  const [playing, setPlaying] = useState(false);
-  const [step, setStep]       = useState(-1);
-  const [volume, setVolume]   = useState(0.9);
-  const [mutedEnds, setMutedEnds] = useState({});
-  const [tempoLocked, setTempoLocked] = useState(false);
-
-  const tapTimesRef = useRef([]);
-  const beat = allBeats.find(b => b.id === beatId) || allBeats[0];
-
-  // Stable identity so BeatStrip's rAF effect doesn't re-subscribe on
-  // every render (the engine ref never changes).
-  const getPhase = useCallback(() => engine.getPhase(), [engine]);
-
-  useEffect(() => {
-    engine.loadSounds({
-      dayan_open:   "/sounds/dayan_open.wav",
-      dayan_closed: "/sounds/dayan_closed.wav",
-      bayan_open:   "/sounds/bayan_open.wav",
-      bayan_closed: "/sounds/bayan_closed.wav",
-    });
-    engine.on("ready",   () => setReady(true));
-    engine.on("started", () => setPlaying(true));
-    engine.on("stopped", () => setPlaying(false));
-    engine.on("step",    (s) => setStep(s));
-    engine.setVolume(volume);
-  }, []);
-
-  async function togglePlay() {
-    if (!ready) return;            // sounds still loading — ignore the tap
-    await engine.unlock();
-    if (playing) engine.stop();
-    else { engine.setBpm(bpm); engine.setBeat(beat); engine.start(); }
-  }
-
-  // From the Beats page: jump to Home and start the selected beat playing.
-  async function startBeat() {
-    setView("home");
-    if (!ready || playing) return;
-    await engine.unlock();
-    engine.setBpm(bpm); engine.setBeat(beat); engine.start();
-  }
-
-  // From the info sheet: select THAT beat and start it. Takes the beat as an
-  // argument because React state (beatId) won't have updated yet this tick.
-  async function startFromDetail(b) {
-    setDetailBeat(null);
-    selectBeat(b);
-    setView("home");
-    if (!ready || playing) return; // playing: selectBeat already switched the loop live
-    await engine.unlock();
-    engine.setBpm(tempoLocked ? bpm : b.bpm);
-    engine.setBeat(b);
-    engine.start();
-  }
-
-  function saveCategories(updated) {
-    setCategories(updated);
-    try { localStorage.setItem(CATS_KEY, JSON.stringify(updated)); } catch { /* storage full/blocked */ }
-  }
-
-  /** The ordered beats of a category ("builtin" | "custom" | user cat id). */
-  function categoryBeats(catId) {
-    if (catId === "builtin") return BEATS;
-    if (catId === "custom") return customBeats;
-    const c = categories.find(c => c.id === catId);
-    if (!c) return allBeats;
-    return c.beatIds.map(id => allBeats.find(b => b.id === id)).filter(Boolean);
-  }
-  function catName(catId) {
-    if (catId === "builtin") return "Built in";
-    if (catId === "custom") return "Your beats";
-    return categories.find(c => c.id === catId)?.name ?? "Beats";
-  }
-
-  // Selecting a beat FROM a category makes that category the active
-  // cycling context for Home's chevrons and quick-pick.
+  // Selecting a beat FROM a category makes that category the active cycling
+  // context for Home's chevrons and quick-pick. Switches the loop live if
+  // playing — the mid-kirtan "next step in the progression" move.
   function selectBeat(b, fromCat) {
     setBeatId(b.id);
-    engine.setBeat(b);
-    if (!tempoLocked) { setBpm(b.bpm); engine.setBpm(b.bpm); }
-    if (fromCat) {
-      setActiveCat(fromCat);
-      try { localStorage.setItem(ACTIVE_CAT_KEY, fromCat); } catch { /* non-fatal */ }
-    }
+    transport.loadBeat(b);
+    if (fromCat) library.setActiveCat(fromCat);
   }
 
   // Home chevrons: step through the ACTIVE category in its order (wraps).
-  // Switches the loop live if playing — the mid-kirtan "next step in the
-  // progression" move.
   function cycleBeat(dir) {
-    let list = categoryBeats(activeCat);
-    if (list.length === 0) list = allBeats;
+    let list = library.categoryBeats(library.activeCat);
+    if (list.length === 0) list = library.allBeats;
     const i = list.findIndex(b => b.id === beatId);
     const next = i === -1 ? list[0] : list[(i + dir + list.length) % list.length];
     selectBeat(next);
   }
 
-  function createCategory() {
-    const name = newCatName.trim();
-    if (!name) return;
-    const cat = { id: "cat_" + Date.now(), name, beatIds: [] };
-    saveCategories([...categories, cat]);
-    setNewCatName("");
-    setCreateCatOpen(false);
-    setBrowseTab(cat.id);
+  // The Beats page's Start button: jump to Home and play what's already
+  // loaded — it doesn't re-select, so a nudged tempo survives.
+  function startCurrent() {
+    setView("home");
+    transport.play(beat);
   }
-  // Pure action — callers wrap it in askConfirm.
-  function deleteCategory(catId) {
-    saveCategories(categories.filter(c => c.id !== catId));
-    if (browseTab === catId) setBrowseTab("builtin");
-    if (activeCat === catId) {
-      setActiveCat("builtin");
-      try { localStorage.setItem(ACTIVE_CAT_KEY, "builtin"); } catch { /* non-fatal */ }
-    }
-  }
-  function toggleBeatInCategory(catId, id) {
-    saveCategories(categories.map(c => c.id !== catId ? c : {
-      ...c,
-      beatIds: c.beatIds.includes(id) ? c.beatIds.filter(x => x !== id) : [...c.beatIds, id],
-    }));
-  }
-  // Reorder a progression from a dnd-kit drag end (arrayMove keeps it pure).
-  function reorderCategory(catId, activeId, overId) {
-    if (activeId === overId) return;
-    saveCategories(categories.map(c => {
-      if (c.id !== catId) return c;
-      const from = c.beatIds.indexOf(activeId);
-      const to = c.beatIds.indexOf(overId);
-      if (from === -1 || to === -1) return c;
-      return { ...c, beatIds: arrayMove(c.beatIds, from, to) };
-    }));
+  // Start from the info sheet: select THAT beat first (which adopts its
+  // suggested tempo unless locked), then play it. Deliberately passes no
+  // category — reading a beat's details doesn't change what Home cycles.
+  function startFromDetail(b) {
+    selectBeat(b);
+    setView("home");
+    transport.play(b);
   }
 
-  const clampBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
-  function changeBpm(value) { setBpm(value); engine.setBpm(value); }
+  // ── Editor ──
+  // Opening the editor stops playback: it takes the engine over entirely.
 
-  // Step BPM by ±1. Reads/writes bpmRef so rapid taps STACK even before a
-  // re-render (plain `bpm + delta` reuses a stale value, so fast clicks did
-  // nothing / bounced).
-  const bpmRef = useRef(bpm);
-  useEffect(() => { bpmRef.current = bpm; }, [bpm]);
-  function nudgeBpm(delta) {
-    const v = clampBpm(bpmRef.current + delta);
-    bpmRef.current = v; // optimistic: next rapid tap reads this, not stale bpm
-    changeBpm(v);
-  }
-
-  // Precise-entry field: edits live in a DRAFT string (never clamped mid-type,
-  // so backspace works and "80" isn't briefly applied as "8"). In-range drafts
-  // commit after a short pause; out-of-range/partial drafts commit-clamp only
-  // on blur or close.
-  useEffect(() => {
-    if (bpmEntryOpen && !bpmFocusRef.current) setBpmDraft(String(bpm));
-  }, [bpm, bpmEntryOpen]);
-  useEffect(() => {
-    if (!bpmEntryOpen) return;
-    const v = parseInt(bpmDraft, 10);
-    if (!Number.isFinite(v) || v < MIN_BPM || v > MAX_BPM) return;
-    const t = setTimeout(() => { if (v !== bpm) changeBpm(v); }, 450);
-    return () => clearTimeout(t);
-  }, [bpmDraft, bpmEntryOpen, bpm]);
-  function commitBpmDraft() {
-    const v = parseInt(bpmDraft, 10);
-    if (Number.isFinite(v)) changeBpm(clampBpm(v));
-    else setBpmDraft(String(bpm));
-  }
-  // The ✓ (and backdrop) confirm: apply whatever's typed, then close.
-  function closeBpmEntry() {
-    bpmFocusRef.current = false;
-    commitBpmDraft();
-    setBpmEntryOpen(false);
-  }
-  function changeVolume(value) { setVolume(value); engine.setVolume(value); }
-  function changeEndVolume(end, value) {
-    setEndVolumes(prev => ({ ...prev, [end]: value }));
-    engine.setEndVolume(end, value);
-  }
-
-  function toggleMute(end) {
-    setMutedEnds(prev => {
-      const next = { ...prev, [end]: !prev[end] };
-      engine.setEndMuted(end, !!next[end]);
-      return next;
-    });
-  }
-
-  function handleTap() {
-    const now = Date.now();
-    const taps = tapTimesRef.current;
-    taps.push(now);
-    if (taps.length > 4) taps.shift();
-    if (taps.length >= 2) {
-      const gaps = [];
-      for (let i = 1; i < taps.length; i++) gaps.push(taps[i] - taps[i - 1]);
-      if (gaps[gaps.length - 1] > 2000) { tapTimesRef.current = [now]; return; }
-      const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
-      const clamped = Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(60000 / avgGap)));
-      changeBpm(clamped);
-    }
-  }
-
-  const isCustomBeat = (id) => customBeats.some(b => b.id === id);
-
-  // Upsert by id: editing a custom beat overwrites its entry, a new beat
-  // (or a fork of a built-in) appends. Only ever touches customBeats, so the
-  // read-only BEATS are always safe.
-  function handleSaveBeat(newBeat) {
-    setCustomBeats(prev => {
-      const exists = prev.some(b => b.id === newBeat.id);
-      const updated = exists
-        ? prev.map(b => (b.id === newBeat.id ? newBeat : b))
-        : [...prev, newBeat];
-      try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
-      return updated;
-    });
-    selectBeat(newBeat, "custom"); // reflect the saved beat in the engine + main view (engine already stopped)
-  }
-
-  // Where the editor's Back button returns to, or null when it was opened
-  // from the nav tab (then there's no Back — the nav bar navigates).
-  const [editorReturn, setEditorReturn] = useState(null);
-
-  // Open the editor blank (new beat) — from the nav tab, so no Back.
+  // Blank (new beat) — from the nav tab, so no Back.
   function openNewBeat() {
-    engine.stop(); setPlaying(false);
+    transport.stop();
     setEditorInitial(null);
     setEditorReturn(null);
     setView("editor");
   }
-  // Open the editor on a beat (defaults to the loaded one). `returnTo` is the
-  // view Back should return to (a drill-in from Home/Beats); null = no Back.
-  // Custom beats edit in place (same id); built-ins fork into a fresh custom
-  // copy that the original never sees.
+  // On a beat (defaults to the loaded one). `returnTo` is the view Back should
+  // return to (a drill-in from Home/Beats); null = no Back. Custom beats edit
+  // in place (same id); built-ins fork into a fresh custom copy that the
+  // original never sees.
   function openEditBeat(target = beat, returnTo = null) {
-    engine.stop(); setPlaying(false);
-    const seed = isCustomBeat(target.id)
+    transport.stop();
+    const seed = library.isCustomBeat(target.id)
       ? target
       : {
           ...target,
@@ -584,32 +101,35 @@ function App() {
     setEditorReturn(returnTo);
     setView("editor");
   }
-  // Pure action — callers wrap it in askConfirm.
-  function deleteCustomBeat(id) {
-    const updated = customBeats.filter(b => b.id !== id);
-    setCustomBeats(updated);
-    try { localStorage.setItem(SAVED_KEY, JSON.stringify(updated)); } catch (e) {}
-    // Drop the beat from any user categories referencing it.
-    if (categories.some(c => c.beatIds.includes(id))) {
-      saveCategories(categories.map(c => ({ ...c, beatIds: c.beatIds.filter(x => x !== id) })));
-    }
+  function closeEditor(to) {
+    transport.stop();
+    setEditorInitial(null);
+    setView(to);
+  }
+  function handleSaveBeat(newBeat) {
+    library.saveBeat(newBeat);
+    // Reflect the saved beat in the engine + main view (engine already stopped).
+    selectBeat(newBeat, "custom");
+  }
+  // Deleting the loaded beat falls back to the first built-in.
+  function handleDeleteBeat(id) {
+    library.deleteBeat(id);
     if (beatId === id) selectBeat(BEATS[0], "builtin");
   }
 
   // The Begin tap does double duty: it satisfies the browser's "no sound
-  // before a user gesture" rule (engine.unlock) on the way into the app.
+  // before a user gesture" rule on the way into the app.
   async function handleBegin() {
-    await engine.unlock();
+    await transport.unlock();
     setEntered(true);
   }
 
   if (!entered) {
-    return <Splash onBegin={handleBegin} ready={ready} />;
+    return <Splash onBegin={handleBegin} ready={transport.ready} />;
   }
 
-  // Persistent tab bar + the fixed (non-scrolling) screen frame shared by the
-  // Home, Beats and Settings pages. The Editor keeps its own scrolling frame.
-  const screenFixed = { ...st.screen, minHeight: 0 };
+  // Built once and handed to whichever screen is showing, so the bar is the
+  // same element across a navigation and never shifts.
   const bottomNav = (
     <BottomNav
       view={view}
@@ -620,702 +140,49 @@ function App() {
     />
   );
 
-  // ── Editor view ──
   if (view === "editor") {
     return (
-      <BeatEditor engine={engine} initialBeat={editorInitial} onSave={handleSaveBeat} nav={bottomNav}
-        onBack={editorReturn ? () => { engine.stop(); setPlaying(false); setEditorInitial(null); setView(editorReturn); } : undefined}
-        onClose={() => { engine.stop(); setPlaying(false); setEditorInitial(null); setView("home"); }} />
+      <BeatEditor engine={transport.engine} initialBeat={editorInitial}
+        onSave={handleSaveBeat} nav={bottomNav}
+        onBack={editorReturn ? () => closeEditor(editorReturn) : undefined}
+        onClose={() => closeEditor("home")} />
     );
   }
 
-  // ── Beats view — library list: built-ins and the user's beats in
-  //    separate sections. Row tap = select (the fast path); the ⓘ opens
-  //    an info sheet with the full strip, the description, and
-  //    Edit / Start. Rows preview the real pattern via a mini strip. ──
   if (view === "beats") {
-    // The row is a div, not a button: nesting the info/delete buttons inside
-    // a row-button is invalid HTML and confuses screen readers. The name area
-    // is the keyboard-reachable select control; the whole row stays tappable
-    // via the div's onClick (inner buttons stop propagation).
-    const inUserCat = categories.some(c => c.id === browseTab);
-
-    // The whole row IS the control: tap (or Enter) selects; in a progression,
-    // press-and-hold picks it up to reorder. `drag` carries the sortable bits
-    // (empty on non-sortable tabs). The remove/info/delete buttons stop
-    // pointer-down so holding them never starts a drag, and stop click so
-    // tapping them never selects.
-    const stopPD = (e) => e.stopPropagation();
-    const rowBody = (b, drag = {}) => {
-      const sel = b.id === beatId;
-      const { setNodeRef, style, listeners, isDragging } = drag;
-      return (
-        <div ref={setNodeRef} {...listeners}
-          role="button" tabIndex={0} aria-pressed={sel}
-          aria-label={inUserCat ? `${b.name} — tap to select, hold to reorder` : b.name}
-          onClick={() => selectBeat(b, browseTab)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); selectBeat(b, browseTab); } }}
-          style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)",
-            ...(listeners ? { cursor: isDragging ? "grabbing" : "grab", touchAction: "manipulation" } : null),
-            ...style }}>
-          <div style={st.beatRowTop}>
-            <div style={st.beatRowSelect}>
-              <span style={st.beatRowName}>{b.name}</span>
-              <span style={st.beatRowMeta}>{b.note} · {b.steps} cells</span>
-            </div>
-            {inUserCat && (
-              <button onPointerDown={stopPD} onClick={(e) => {
-                  e.stopPropagation();
-                  askConfirm(
-                    `Remove “${b.name}” from “${catName(browseTab)}”? The beat itself is kept.`,
-                    "Remove",
-                    () => toggleBeatInCategory(browseTab, b.id)
-                  );
-                }}
-                aria-label={`Remove ${b.name} from ${catName(browseTab)}`}
-                style={st.deleteBtn}>−</button>
-            )}
-            <button onPointerDown={stopPD} onClick={(e) => { e.stopPropagation(); setDetailBeat(b); }}
-              aria-label={`About ${b.name}`} style={st.infoBtn}><InfoIcon /></button>
-            {!inUserCat && isCustomBeat(b.id) && (
-              <button onPointerDown={stopPD} onClick={(e) => {
-                  e.stopPropagation();
-                  askConfirm(
-                    `Delete the beat “${b.name}”? This can't be undone, and it also leaves any categories it's in.`,
-                    "Delete",
-                    () => deleteCustomBeat(b.id)
-                  );
-                }}
-                aria-label={`Delete ${b.name}`} style={st.deleteBtn}>×</button>
-            )}
-            <RadioDot selected={sel} />
-          </div>
-          <BeatStrip beat={b} mini />
-        </div>
-      );
-    };
-    // Non-sortable tabs (built-in, custom) render the body directly.
-    const renderRow = (b) => <div key={b.id} style={{ display: "contents" }}>{rowBody(b)}</div>;
-    // User-category rows are draggable to reorder the progression.
-    const renderSortableRow = (b) => (
-      <SortableRow key={b.id} id={b.id}>
-        {(bits) => rowBody(b, bits)}
-      </SortableRow>
-    );
-
-    const browsedCat = categories.find(c => c.id === browseTab);
-    const builtinGroups = [...new Set(BEATS.map(b => b.group))];
-
     return (
-      <div className="kc-screen" style={screenFixed}>
-        <header style={st.subHeader}>
-          <span style={{ width: 44 }} aria-hidden="true" />
-          <h1 style={st.subTitle}>Beats</h1>
-          <span style={{ width: 44 }} aria-hidden="true" />
-        </header>
-
-        {/* Category tabs: the two fixed ones, the user's own, and +.
-            Edge fades signal when the row scrolls. */}
-        <ScrollFadeRow rowStyle={st.catTabs}>
-          {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
-            <button key={id} onClick={() => setBrowseTab(id)}
-              style={{ ...st.catTab, ...(browseTab === id ? st.catTabActive : null) }}
-              aria-pressed={browseTab === id}>
-              {catName(id)}
-            </button>
-          ))}
-          <button onClick={() => setCreateCatOpen(true)} aria-label="New category"
-            style={{ ...st.catTab, flexShrink: 0 }}>+</button>
-        </ScrollFadeRow>
-
-        <section style={st.beatList}>
-          {browseTab === "builtin" && builtinGroups.map(g => (
-            <div key={g} style={{ display: "contents" }}>
-              <div style={st.sectionLabel}>{g}</div>
-              {BEATS.filter(b => b.group === g).map(renderRow)}
-            </div>
-          ))}
-
-          {browseTab === "custom" && (
-            customBeats.length === 0
-              ? <p style={st.emptyHint}>Nothing here yet — beats you build or customize will appear here.</p>
-              : customBeats.map(renderRow)
-          )}
-
-          {browsedCat && (
-            <>
-              {categoryBeats(browsedCat.id).length === 0 && (
-                <p style={st.emptyHint}>
-                  An empty progression. Add beats in the order you want the kirtan
-                  to move through them — Home's ‹ › will follow that order. Press and
-                  hold a beat to drag it into place.
-                </p>
-              )}
-              <DndContext sensors={dragSensors} collisionDetection={closestCenter}
-                onDragEnd={({ active, over }) => {
-                  if (over) reorderCategory(browsedCat.id, active.id, over.id);
-                }}>
-                <SortableContext items={categoryBeats(browsedCat.id).map(b => b.id)}
-                  strategy={verticalListSortingStrategy}>
-                  {categoryBeats(browsedCat.id).map(renderSortableRow)}
-                </SortableContext>
-              </DndContext>
-              <div style={st.catActions}>
-                <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>+ Add beats</button>
-                <button onClick={() => askConfirm(
-                    `Delete the category “${browsedCat.name}”? The beats themselves are kept.`,
-                    "Delete",
-                    () => deleteCategory(browsedCat.id)
-                  )}
-                  style={st.deleteCatBtn}>
-                  Delete category
-                </button>
-              </div>
-            </>
-          )}
-        </section>
-        <button onClick={startBeat} disabled={!ready} style={{ ...st.startBtn, opacity: ready ? 1 : 0.5 }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5 19 12 7 19 Z" fill="currentColor" /></svg>
-          Start · {beat.name}
-        </button>
-        {bottomNav}
-
-        {/* Info sheet — slides over the list; backdrop tap or × closes. */}
-        {detailBeat && (
-          <div style={st.sheetBackdrop} onClick={() => setDetailBeat(null)}>
-            <div style={st.sheet} role="dialog" aria-modal="true" aria-label={detailBeat.name}
-              onClick={(e) => e.stopPropagation()}>
-              <div style={st.sheetHead}>
-                <h2 style={st.sheetName}>{detailBeat.name}</h2>
-                <button onClick={() => setDetailBeat(null)} aria-label="Close" style={st.sheetClose}>×</button>
-              </div>
-              <span style={st.beatRowMeta}>
-                {detailBeat.note} · {detailBeat.steps} cells · suggested {detailBeat.bpm} BPM
-              </span>
-              <div style={{ margin: "var(--space-4) 0" }}>
-                <BeatStrip beat={detailBeat} />
-              </div>
-              <p style={st.sheetDesc}>
-                {detailBeat.description || "One of your own beats, built in the editor."}
-              </p>
-              <div style={st.sheetActions}>
-                <button onClick={() => { setDetailBeat(null); openEditBeat(detailBeat, "beats"); }} style={st.sheetEditBtn}>
-                  {isCustomBeat(detailBeat.id) ? "Edit" : "Customize"}
-                </button>
-                <button onClick={() => startFromDetail(detailBeat)} disabled={!ready}
-                  style={{ ...st.sheetStartBtn, opacity: ready ? 1 : 0.5 }}>
-                  Start
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* New-category sheet — name it, create it, land in its tab. */}
-        {createCatOpen && (
-          <div style={st.sheetBackdrop} onClick={() => setCreateCatOpen(false)}>
-            <div style={st.sheet} role="dialog" aria-modal="true" aria-label="New category"
-              onClick={(e) => e.stopPropagation()}>
-              <div style={st.sheetHead}>
-                <h2 style={st.sheetName}>New category</h2>
-                <button onClick={() => setCreateCatOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
-              </div>
-              <p style={st.emptyHint}>
-                A category is a kirtan progression: an ordered set of beats that
-                Home's ‹ › will move through.
-              </p>
-              <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
-                <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") createCategory(); }}
-                  placeholder="e.g. Sunday feast kirtan" autoFocus style={st.catNameInput} />
-                <button onClick={createCategory} disabled={!newCatName.trim()}
-                  style={{ ...st.sheetStartBtn, flex: "0 0 auto", padding: "0 22px", opacity: newCatName.trim() ? 1 : 0.5 }}>
-                  Create
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Add-beats sheet — toggle any beat in/out of the browsed
-            category; order of adding = order of the progression. */}
-        {addBeatsOpen && browsedCat && (
-          <div style={st.sheetBackdrop} onClick={() => setAddBeatsOpen(false)}>
-            <div style={st.sheet} role="dialog" aria-modal="true" aria-label={`Add beats to ${browsedCat.name}`}
-              onClick={(e) => e.stopPropagation()}>
-              <div style={st.sheetHead}>
-                <h2 style={st.sheetName}>Add to {browsedCat.name}</h2>
-                <button onClick={() => setAddBeatsOpen(false)} aria-label="Done" style={st.sheetClose}>×</button>
-              </div>
-              <div style={st.pickList}>
-                {allBeats.map(b => {
-                  const inCat = browsedCat.beatIds.includes(b.id);
-                  return (
-                    <button key={b.id} onClick={() => toggleBeatInCategory(browsedCat.id, b.id)}
-                      aria-pressed={inCat}
-                      style={{ ...st.pickRow, borderColor: inCat ? "var(--clay)" : "var(--rule)" }}>
-                      <div style={st.beatRowTop}>
-                        <span style={st.beatRowName}>{b.name}</span>
-                        <span style={{ ...st.beatRowMeta, flex: 1 }}>{b.note}</span>
-                        <CheckDot checked={inCat} />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <button onClick={() => setAddBeatsOpen(false)}
-                style={{ ...st.sheetStartBtn, marginTop: "var(--space-4)" }}>Done</button>
-            </div>
-          </div>
-        )}
-
-        {/* Confirmation sheet — guards all destructive actions. Backdrop
-            tap cancels; only the explicit red button proceeds. */}
-        {confirmAction && (
-          <div style={st.sheetBackdrop} onClick={() => setConfirmAction(null)}>
-            <div style={st.sheet} role="alertdialog" aria-modal="true" aria-label="Are you sure?"
-              onClick={(e) => e.stopPropagation()}>
-              <p style={st.confirmMsg}>{confirmAction.message}</p>
-              <div style={st.sheetActions}>
-                <button onClick={() => setConfirmAction(null)} style={st.sheetEditBtn}>Cancel</button>
-                <button onClick={() => { confirmAction.onConfirm(); setConfirmAction(null); }}
-                  style={st.confirmDangerBtn}>
-                  {confirmAction.label}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      <BeatsView
+        library={library}
+        beat={beat}
+        beatId={beatId}
+        ready={transport.ready}
+        onSelect={selectBeat}
+        onStart={startCurrent}
+        onStartBeat={startFromDetail}
+        onEdit={(b) => openEditBeat(b, "beats")}
+        onDeleteBeat={handleDeleteBeat}
+        nav={bottomNav}
+      />
     );
   }
 
-  // ── Settings view ──
   if (view === "settings") {
-    return (
-      <div className="kc-screen" style={screenFixed}>
-        <header style={st.subHeader}>
-          <button onClick={() => setView("home")} style={st.backBtn} aria-label="Back">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M15 5 8 12l7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <h1 style={st.subTitle}>Settings</h1>
-          <span style={{ width: 44 }} />
-        </header>
-        <section style={{ ...st.controls, flex: 1 }}>
-          <p style={st.subtitle}>More settings coming soon.</p>
-        </section>
-        {bottomNav}
-      </div>
-    );
-  }
-
-  // ── Home view ──
-  const fillPct = ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)) * 100;
-
-  const playIcon = playing ? (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="5" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
-      <rect x="14" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
-    </svg>
-  ) : (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M8 4.5 20 12 8 19.5 Z" fill="currentColor" />
-    </svg>
-  );
-
-  // Quick-pick sheet — shared by both Home orientations. Opens on the
-  // ACTIVE category but carries its own tab row, so the user can hop to
-  // another progression without visiting the Beats page. Picking a beat
-  // makes its tab the active cycling context and dismisses.
-  function openPicker() {
-    setPickerTab(activeCat);
-    setPickerOpen(true);
-  }
-  const pickerBeats = categoryBeats(pickerTab);
-  const beatPicker = pickerOpen && (
-    <div style={st.sheetBackdrop} onClick={() => setPickerOpen(false)}>
-      <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Choose a beat"
-        onClick={(e) => e.stopPropagation()}>
-        <div style={st.sheetHead}>
-          <h2 style={st.sheetName}>Choose a beat</h2>
-          <button onClick={() => setPickerOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
-        </div>
-        <ScrollFadeRow rowStyle={st.catTabs}>
-          {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
-            <button key={id} onClick={() => setPickerTab(id)}
-              style={{ ...st.catTab, ...(pickerTab === id ? st.catTabActive : null) }}
-              aria-pressed={pickerTab === id}>
-              {catName(id)}
-            </button>
-          ))}
-        </ScrollFadeRow>
-        <div style={st.pickList}>
-          {pickerBeats.length === 0 && (
-            <p style={st.emptyHint}>This category is empty — add beats to it on the Beats page.</p>
-          )}
-          {pickerBeats.map(b => {
-            const sel = b.id === beatId;
-            return (
-              <button key={b.id} onClick={() => { selectBeat(b, pickerTab); setPickerOpen(false); }}
-                style={{ ...st.pickRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
-                <div style={st.beatRowTop}>
-                  <span style={st.beatRowName}>{b.name}</span>
-                  <span style={{ ...st.beatRowMeta, flex: 1 }}>{b.note}</span>
-                  <RadioDot selected={sel} />
-                </div>
-                <BeatStrip beat={b} mini />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-
-  // Mixer sheet — master fader plus one fader + mute per lane. Shared by
-  // both Home orientations (and it's where muting properly lives; the
-  // strip's small lane labels remain a shortcut).
-  // Precise BPM entry: type the number (desktop) or scroll the wheel (touch);
-  // both drive changeBpm live. Disabled while tempo is locked.
-  const bpmEntry = bpmEntryOpen && (
-    <div style={st.sheetBackdrop} onClick={closeBpmEntry}>
-      <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Set tempo"
-        onClick={(e) => e.stopPropagation()}>
-        <div style={st.sheetHead}>
-          <h2 style={st.sheetName}>Tempo</h2>
-          <button onClick={closeBpmEntry} aria-label="Confirm tempo" style={st.sheetConfirm}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 12.5 9.5 18 20 6.5" />
-            </svg>
-          </button>
-        </div>
-        <div style={st.bpmEntryTop}>
-          {/* select-all on focus so the first keystroke replaces the value
-              (open at 140, type 8 → "8", type 0 → "80"); capped at 3 digits. */}
-          <input type="text" inputMode="numeric" maxLength={3} value={bpmDraft}
-            onFocus={(e) => { bpmFocusRef.current = true; e.target.select(); }}
-            onBlur={() => { bpmFocusRef.current = false; commitBpmDraft(); }}
-            onChange={(e) => setBpmDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
-            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-            aria-label="Tempo in BPM" style={st.bpmInput} />
-        </div>
-        <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>BPM</span>
-        <div style={st.wheelWrap}>
-          <div style={st.wheelBand} aria-hidden="true" />
-          <BpmWheel value={bpm} min={MIN_BPM} max={MAX_BPM} onChange={changeBpm} />
-        </div>
-      </div>
-    </div>
-  );
-
-  const mixerSheet = mixerOpen && (
-    <div style={st.sheetBackdrop} onClick={() => setMixerOpen(false)}>
-      <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Mixer"
-        onClick={(e) => e.stopPropagation()}>
-        <div style={st.sheetHead}>
-          <h2 style={st.sheetName}>Mixer</h2>
-          <button onClick={() => setMixerOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
-        </div>
-        <div style={st.mixRows}>
-          <div style={st.mixRow}>
-            <span style={st.mixLabel}>Master</span>
-            <input className="kc-range" type="range" min={0} max={100} value={Math.round(volume * 100)}
-              onChange={(e) => changeVolume(Number(e.target.value) / 100)}
-              style={{ "--fill": volume * 100 + "%", flex: 1 }} aria-label="Master volume" />
-            <span style={{ width: 44 }} aria-hidden="true" />
-          </div>
-          {LANES.map(l => {
-            const v = endVolumes[l.id] ?? 1;
-            const muted = !!mutedEnds[l.id];
-            return (
-              <div key={l.id} style={st.mixRow}>
-                <span style={{ ...st.mixLabel, color: l.color }}>{l.label}</span>
-                <input className="kc-range" type="range" min={0} max={100} value={Math.round(v * 100)}
-                  onChange={(e) => changeEndVolume(l.id, Number(e.target.value) / 100)}
-                  style={{ "--fill": v * 100 + "%", flex: 1, opacity: muted ? 0.35 : 1 }}
-                  aria-label={`${l.label} volume`} />
-                <button onClick={() => toggleMute(l.id)} aria-pressed={muted}
-                  aria-label={muted ? `Unmute ${l.label}` : `Mute ${l.label}`}
-                  style={{ ...st.muteBtn, background: muted ? "var(--head-sunken)" : "transparent",
-                    color: muted ? "var(--clay)" : "var(--syahi-soft)" }}>
-                  <SpeakerIcon muted={muted} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        <p style={{ ...st.emptyHint, marginTop: "var(--space-4)" }}>
-          100% is balanced for phone speakers — the bass end is already boosted.
-        </p>
-      </div>
-    </div>
-  );
-
-  // ── Home, landscape: the propped-up layout. Phone-height landscape
-  //    leaves ~120-200px for everything besides the strip and nav, so
-  //    the ENTIRE transport collapses into one 44px rail: edit, name,
-  //    BPM + slider, Lock/Tap, Play. Volume sits out of landscape (the
-  //    mixer button will take its slot). The strip gets all remaining
-  //    height, cells sized from the slot via container units. ──
-  if (isLandscape) {
-    return (
-      <div className="kc-screen" style={st.landScreen}>
-        <main style={st.landStripWrap}>
-          <BeatStrip
-            beat={beat}
-            step={step}
-            playing={playing}
-            getPhase={getPhase}
-            mutedEnds={mutedEnds}
-            onToggleMute={toggleMute}
-          />
-        </main>
-
-        <div style={st.landRail}>
-          <button onClick={() => openEditBeat(beat, "home")} style={st.landEditBtn}
-            aria-label={isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat"}>
-            <PencilIcon />
-          </button>
-          <button onClick={() => cycleBeat(-1)} aria-label="Previous beat" style={st.chevBtnSm}>‹</button>
-          <button onClick={openPicker} style={st.landNameBtn}
-            aria-haspopup="dialog" aria-expanded={pickerOpen}>
-            {beat.name} <span style={st.nameCaret}>▾</span>
-          </button>
-          <button onClick={() => cycleBeat(1)} aria-label="Next beat" style={st.chevBtnSm}>›</button>
-          <button onClick={() => setBpmEntryOpen(true)} style={{ ...st.bpmBtn, ...st.landBpmBtn }}
-            aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set`}>
-            <span style={st.landBpmNum}>{bpm}</span>
-            <span style={st.bpmUnit}>BPM</span>
-            <span style={st.bpmCaret} aria-hidden="true">▾</span>
-          </button>
-          <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
-            onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
-            style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-            aria-label="Tempo" />
-          <button onClick={() => setTempoLocked(v => !v)}
-            style={{ ...st.lockBtn,
-              background: tempoLocked ? "var(--clay)" : "transparent",
-              color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
-            aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
-            aria-pressed={tempoLocked}>
-            <LockIcon locked={tempoLocked} />
-          </button>
-          <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
-          <button onClick={() => setMixerOpen(true)} style={st.landEditBtn} aria-label="Mixer"
-            aria-haspopup="dialog" aria-expanded={mixerOpen}>
-            <MixerIcon />
-          </button>
-          <button onClick={togglePlay} disabled={!ready}
-            style={{ ...st.landPlayBtn, opacity: ready ? 1 : 0.5 }}
-            aria-label={playing ? "Pause" : "Play"}>
-            {playIcon}
-          </button>
-        </div>
-
-        <div style={st.landNavWrap}>{bottomNav}</div>
-        {beatPicker}
-        {mixerSheet}
-        {bpmEntry}
-      </div>
-    );
+    return <SettingsView onBack={() => setView("home")} nav={bottomNav} />;
   }
 
   return (
-    <div className="kc-screen" style={screenFixed}>
-      {/* Small live wordmark — same component as the splash hero. */}
-      <header style={st.header}>
-        <Wordmark style={{ "--wm-size": "clamp(18px, 3.6vh, 24px)" }} />
-      </header>
-
-      {/* Beat switcher: ‹ › step through beats; tapping the name opens
-          the quick-pick sheet. Pencil edits the loaded beat. */}
-      <div style={st.beatHead}>
-        <button onClick={() => cycleBeat(-1)} aria-label="Previous beat" style={st.chevBtn}>‹</button>
-        <button onClick={openPicker} style={st.nameBtn}
-          aria-haspopup="dialog" aria-expanded={pickerOpen}>
-          <h1 style={st.beatName}>{beat.name} <span style={st.nameCaret}>▾</span></h1>
-          <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
-        </button>
-        <button onClick={() => cycleBeat(1)} aria-label="Next beat" style={st.chevBtn}>›</button>
-        <button onClick={() => openEditBeat(beat, "home")} style={st.landEditBtn}
-          aria-label={isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat"}>
-          <PencilIcon />
-        </button>
-      </div>
-
-      {/* The strip — vertically centred in whatever space is left. */}
-      <main style={st.stripWrap}>
-        <BeatStrip
-          beat={beat}
-          step={step}
-          playing={playing}
-          getPhase={getPhase}
-          mutedEnds={mutedEnds}
-          onToggleMute={toggleMute}
-        />
-      </main>
-
-      <section style={st.controls}>
-        {/* BPM as signage: the number IS the label. Becomes tappable for
-            precise entry in an upcoming commit. */}
-        <div>
-          <div style={st.bpmRow}>
-            <button onClick={() => nudgeBpm(-1)} disabled={bpm <= MIN_BPM}
-              aria-label="Slower" style={{ ...st.bpmStep, opacity: bpm <= MIN_BPM ? 0.3 : 1 }}>−</button>
-            <button onClick={() => setBpmEntryOpen(true)} style={st.bpmBtn}
-              aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set precisely`}>
-              <span style={st.bpmNum}>{bpm}</span>
-              <span style={st.bpmUnit}>BPM</span>
-              <span style={st.bpmCaret} aria-hidden="true">▾</span>
-            </button>
-            <button onClick={() => nudgeBpm(1)} disabled={bpm >= MAX_BPM}
-              aria-label="Faster" style={{ ...st.bpmStep, opacity: bpm >= MAX_BPM ? 0.3 : 1 }}>+</button>
-          </div>
-          <div style={st.tempoRow}>
-            <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
-              onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
-              style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-              aria-label="Tempo" />
-            <button onClick={() => setTempoLocked(v => !v)}
-              style={{ ...st.lockBtn,
-                background: tempoLocked ? "var(--clay)" : "transparent",
-                color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
-              aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
-              aria-pressed={tempoLocked}>
-              <LockIcon locked={tempoLocked} />
-            </button>
-            <button onClick={handleTap} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
-          </div>
-        </div>
-
-        {/* Loudness lives in the mixer: master + per-drum faders. */}
-        <button onClick={() => setMixerOpen(true)} style={st.mixerBtn}
-          aria-haspopup="dialog" aria-expanded={mixerOpen}>
-          <MixerIcon /> Mixer
-        </button>
-      </section>
-
-      {/* The clay play bar — full width at thumb height: impossible to
-          miss, impossible to fumble. */}
-      <button onClick={togglePlay} disabled={!ready}
-        style={{ ...st.playBtn, opacity: ready ? 1 : 0.5 }}
-        aria-label={playing ? "Pause" : "Play"}>
-        {playIcon}
-        {playing ? "Pause" : "Play"}
-      </button>
-
-      {bottomNav}
-      {beatPicker}
-      {mixerSheet}
-        {bpmEntry}
-    </div>
+    <HomeView
+      transport={transport}
+      library={library}
+      beat={beat}
+      beatId={beatId}
+      isLandscape={isLandscape}
+      onSelect={selectBeat}
+      onCycle={cycleBeat}
+      onEdit={(b) => openEditBeat(b, "home")}
+      nav={bottomNav}
+    />
   );
 }
-
-const st = {
-  // NOTE: keep this padding identical to BeatEditor's st.screen so the bottom
-  // nav sits at the exact same spot on every page and never shifts on switch.
-  screen: { width: "100%", maxWidth: 430, minHeight: "100dvh", margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-6) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-5)" },
-  header: { flexShrink: 0, display: "flex", justifyContent: "center" },
-  beatHead: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
-  beatName: { margin: 0, maxWidth: "100%", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  beatMeta: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", fontWeight: 500 },
-  nameBtn: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: 0, border: "none", background: "transparent", cursor: "pointer" },
-  nameCaret: { fontSize: "0.55em", color: "var(--syahi-soft)", verticalAlign: "middle" },
-  chevBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
-  chevBtnSm: { flexShrink: 0, width: 32, height: 44, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 24, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
-  landNameBtn: { flexShrink: 1, minWidth: 56, padding: 0, border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "1.125rem", color: "var(--syahi)", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  pickList: { display: "flex", flexDirection: "column", gap: "var(--space-2)", marginTop: "var(--space-3)" },
-  pickRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "10px 12px", borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
-  stripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center" },
-  bpmRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-4)", marginBottom: "var(--space-2)" },
-  mixerBtn: { width: "100%", minHeight: 46, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 },
-  mixRows: { display: "flex", flexDirection: "column", gap: "var(--space-4)", marginTop: "var(--space-4)" },
-  mixRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  mixLabel: { flexShrink: 0, width: 64, fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
-  muteBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
-  playBtn: { flexShrink: 0, width: "100%", minHeight: 58, borderRadius: 16, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
-  subHeader: { display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
-  subTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 400, fontSize: "var(--text-display-lg)", letterSpacing: "0.01em", color: "var(--ink-primary)" },
-  backBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-secondary)", display: "grid", placeItems: "center", cursor: "pointer" },
-  subtitle: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
-  controls: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-5)" },
-  controlLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-display-md)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-secondary)", fontWeight: 600, marginBottom: "var(--space-3)" },
-
-  // ── Beats page (library list) ──
-  catTabs: { display: "flex", gap: "var(--space-2)", overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" },
-  edgeFade: { position: "absolute", top: 0, bottom: 2, width: 30, pointerEvents: "none", transition: "opacity 150ms ease" },
-  catTab: { flexShrink: 0, minHeight: 40, padding: "0 16px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
-  catTabActive: { background: "var(--clay)", borderColor: "var(--clay)", color: "var(--on-clay)" },
-  catActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
-  addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
-  deleteCatBtn: { flexShrink: 0, minHeight: 46, padding: "0 14px", borderRadius: 14, border: "none", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 600, cursor: "pointer" },
-  catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
-  beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
-  sectionLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--syahi-soft)" },
-  emptyHint: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--syahi-soft)", lineHeight: 1.5 },
-  beatRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "12px 14px", borderRadius: 16, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
-  beatRowTop: { display: "flex", alignItems: "center", gap: "var(--space-2)" },
-  beatRowSelect: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, padding: 0, border: "none", background: "transparent", textAlign: "left", cursor: "pointer" },
-  infoBtn: { flexShrink: 0, width: 40, height: 40, borderRadius: 12, border: "none", background: "transparent", color: "var(--syahi-soft)", display: "grid", placeItems: "center", cursor: "pointer" },
-  deleteBtn: { flexShrink: 0, width: 40, height: 40, border: "none", background: "transparent", color: "var(--ink-secondary)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 12 },
-  beatRowName: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, letterSpacing: "0.01em", color: "var(--ink-primary)" },
-  beatRowMeta: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 500, color: "var(--ink-secondary)" },
-
-  // ── Beat info sheet ──
-  sheetBackdrop: { position: "fixed", inset: 0, background: "oklch(0.24 0.02 60 / 0.35)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 10 },
-  sheet: { width: "100%", maxWidth: 430, maxHeight: "85dvh", overflowY: "auto", background: "var(--head)", borderRadius: "20px 20px 0 0", padding: "var(--space-5) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column" },
-  sheetHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
-  sheetName: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)" },
-  sheetClose: { flexShrink: 0, width: 44, height: 44, margin: "-8px -8px 0 0", border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
-  sheetConfirm: { flexShrink: 0, width: 44, height: 44, margin: "-6px -6px 0 0", borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", cursor: "pointer", display: "grid", placeItems: "center" },
-  sheetDesc: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", lineHeight: 1.55 },
-  confirmMsg: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", lineHeight: 1.55 },
-  confirmDangerBtn: { flex: 1, minHeight: 50, borderRadius: 14, border: "none", background: "var(--danger)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
-  sheetActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-5)" },
-  sheetEditBtn: { flex: 1, minHeight: 50, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
-  sheetStartBtn: { flex: 2, minHeight: 50, borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", cursor: "pointer" },
-  startBtn: { flexShrink: 0, width: "100%", padding: "16px", borderRadius: 18, border: "none", background: "var(--accent-action)", color: "var(--on-action)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 800, letterSpacing: "0.02em", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 },
-
-  // ── Bottom navigation — iOS-style pill wrapping the four buttons ──
-  nav: { flexShrink: 0, marginTop: "auto", display: "flex", alignItems: "stretch", gap: "var(--space-1)", padding: "var(--space-1)", borderRadius: 999, border: "var(--rule-hairline)", background: "var(--surface-raised)" },
-  navCell: { flex: 1, minWidth: 0, minHeight: 52, borderRadius: 999, border: "none", background: "transparent", color: "var(--ink-secondary)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, cursor: "pointer", padding: "4px 0" },
-  navLabel: { fontFamily: "var(--font-body)", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", lineHeight: 1 },
-  navActive: { background: "var(--accent-action)", color: "var(--on-action)" },
-  tempoHead: { display: "flex", alignItems: "baseline", justifyContent: "space-between" },
-  tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  tapBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
-  lockBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
-  // Fixed width (3 tabular digits) so 2- vs 3-digit values don't change the
-  // button's size and jitter the flanking steppers.
-  bpmNum: { display: "inline-block", minWidth: "3ch", textAlign: "center", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-numeric-xl)", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
-  bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
-  bpmBtn: { display: "flex", alignItems: "baseline", gap: 6, border: "none", background: "transparent", cursor: "pointer", padding: "4px 6px" },
-  landBpmBtn: { alignItems: "center" },
-  bpmCaret: { fontSize: "0.7rem", color: "var(--syahi-soft)", alignSelf: "center" },
-  bpmEntryTop: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", marginTop: "var(--space-4)" },
-  bpmStep: { flexShrink: 0, width: 48, height: 48, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
-  bpmInput: { width: 120, textAlign: "center", border: "none", background: "transparent", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "2.75rem", fontWeight: 600, color: "var(--syahi)", outline: "none", padding: 0, MozAppearance: "textfield" },
-  wheelWrap: { position: "relative", marginTop: "var(--space-5)" },
-  wheelBand: { position: "absolute", left: 0, right: 0, top: "50%", height: 40, transform: "translateY(-50%)", borderRadius: 12, background: "var(--head-sunken)", pointerEvents: "none" },
-
-  // ── Home, landscape (the propped-up layout) ──
-  landScreen: { width: "100%", maxWidth: 1100, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-3) + env(safe-area-inset-top)) calc(var(--space-4) + env(safe-area-inset-right)) calc(var(--space-2) + env(safe-area-inset-bottom)) calc(var(--space-4) + env(safe-area-inset-left))", gap: "var(--space-3)" },
-  landName: { flexShrink: 1, minWidth: 60, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "1.125rem", color: "var(--syahi)", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  // Cells sized from the WRAPPER's height (container query units), not
-  // the viewport's, so the strip can never outgrow its slot and spill
-  // over the rail. 100cqh = wrapper height; ~96px covers the strip's
-  // fixed parts (numbers row, two lane labels, internal gaps); the
-  // remainder splits between the two lanes.
-  landStripWrap: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", containerType: "size", "--ks-cellh": "clamp(18px, calc((100cqh - 96px) / 2), 72px)" },
-  landRail: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 44 },
-  landEditBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", display: "grid", placeItems: "center", cursor: "pointer" },
-  landBpmNum: { flexShrink: 0, display: "inline-block", minWidth: "3ch", textAlign: "center", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1, marginLeft: "var(--space-2)" },
-  landPlayBtn: { flexShrink: 0, minWidth: 92, height: 44, borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "grid", placeItems: "center", cursor: "pointer", marginLeft: "var(--space-2)" },
-  landNavWrap: { flexShrink: 0, width: "100%", maxWidth: 430, alignSelf: "center" },
-};
 
 export default App;

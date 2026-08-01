@@ -34,9 +34,20 @@ Files:
 
 ### UI layer
 
-- `src/App.jsx` — single-page shell. Holds the engine in a `useRef` (created once), owns all React state (current beat, bpm, mute state, volume, view). Switches between views via a `view` string (`"main" | "editor"` — and an in-flight `"practice"` lives in untracked `src/PracticeView.jsx`).
-- `src/BeatIndicator.jsx` — pure visualization. One oval pill per drum end, shape cells inside, smooth gliding playhead line driven by a CSS keyframe (`kc-glide` in `index.css`). Tappable pills call back via `onToggleMute(end)`. The `ROWS` constant at the top is the **single place** to add a new instrument row (e.g. karatalas).
-- `src/BeatEditor.jsx` — custom-beat creation, persisted to `localStorage` under `kirtan-custom-beats`.
+Split by **state ownership**, not by screen count. If a piece of state is only meaningful inside one screen (which sheet is open, which tab is browsed), it lives in that screen; if it spans screens or touches the engine, it lives in a hook or in App.
+
+- `src/App.jsx` — the shell. Routes on a `view` string (`"home" | "beats" | "editor" | "settings"`), shows the splash until Begin, and owns the one piece of state that spans everything: **which beat is loaded** (`beatId`). `selectBeat` is the seam between the library and the transport, which is why it belongs to neither.
+- `src/hooks/useTransport.js` — the engine plus its React mirror (`playing`, `step`, `bpm`, volumes, mutes) and every command that writes to it. **This is the only place that calls `engine.*`**, apart from `BeatEditor`, which is handed the engine outright because it takes the transport over while open. Also exports `MIN_BPM` / `MAX_BPM`.
+- `src/hooks/useBeatLibrary.js` — custom beats and categories (kirtan progressions), plus all their `localStorage` persistence (`kirtan-custom-beats`, `kirtan-user-categories`, `kirtan-active-category`). Pure data; touches no audio.
+- `src/hooks/useLandscape.js` — the media query behind Home's two layouts.
+- `src/views/HomeView.jsx` — the playing screen, portrait and landscape, plus the quick-pick, mixer and tempo sheets they share. Owns only which sheet is open.
+- `src/views/BeatsView.jsx` — the library list, category tabs, drag-to-reorder, and its four sheets. Owns the browsed tab, the open sheet and the pending confirmation.
+- `src/views/SettingsView.jsx` — placeholder shell.
+- `src/ui/` — shared chrome: `icons.jsx` (every inline SVG), `BottomNav.jsx`, `ScrollFadeRow.jsx`, and `styles.js` (only the style objects two or more screens use).
+- `src/BeatStrip.jsx` — the beat visualiser used by every screen. Reads `LANES` from `src/data/lanes.js`; mini variant renders `primary` lanes only.
+- `src/BeatEditor.jsx` — custom-beat creation. Its own file because it owns ~14 pieces of draft state (grids, cursor, meter groups, undo stack) that mean nothing outside editing; unmounting discards the draft for free. Contract is four props in, `onSave(beat)` out.
+
+> `src/BeatIndicator.jsx` is **orphaned** — nothing imports it; `BeatStrip.jsx` replaced it. `strokes.js`'s comments still refer to it.
 
 ### Data layer
 
@@ -48,8 +59,8 @@ Files:
 
 - **Sound files live in `public/sounds/`** and the manifest passed to `engine.loadSounds()` uses the prefix routing convention above. Currently: `dayan_open.wav`, `dayan_closed.wav`, `bayan_open.wav`, `bayan_closed.wav`.
 - **Adding a new instrument row** (e.g. karatalas) is a three-step pattern, no engine refactor needed:
-  1. Add an entry to `ROWS` in `BeatIndicator.jsx`.
+  1. Add an entry to `LANES` in `src/data/lanes.js` (the strip, the mixer and the editor all read it).
   2. Add a matching pattern array to each beat in `beats.js` (e.g. `kartal: [...]`).
   3. Name the sound files with the matching prefix (e.g. `kartal_open.wav`) so `SoundPlayer` routes them through their own gain.
-- **CSS** lives in `src/index.css` only (design tokens are CSS variables in `:root`). Component styles are inline-style objects in each `.jsx`, not modules — match the existing pattern.
+- **CSS** lives in `src/index.css` only (design tokens are CSS variables in `:root`). Component styles are inline-style objects in each `.jsx` — conventionally a module-level `const st = {...}` below the component. `src/ui/styles.js` is the one deliberate exception, for chrome that two or more screens share; anything a single screen draws stays in that screen's file.
 - The codebase intentionally favours small, well-commented files that explain *why* (see the headers of `Sequencer.js`, `SoundPlayer.js`, `strokes.js`). New files should follow the same tone.
