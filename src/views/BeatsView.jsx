@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
@@ -10,7 +10,12 @@ import { BEATS } from "../data/beats.js";
 import BeatStrip from "../BeatStrip.jsx";
 import ScrollFadeRow from "../ui/ScrollFadeRow.jsx";
 import * as sh from "../ui/styles.js";
-import { InfoIcon, StartIcon, CheckDot, RadioDot } from "../ui/icons.jsx";
+import { InfoIcon, StartIcon, ShareIcon, GlobeIcon, CheckIcon, CheckDot, RadioDot } from "../ui/icons.jsx";
+import { encodeBeat, encodeCategory, decodeShare, codeFromInput, shareUrl } from "../data/shareCodec.js";
+
+// Whether the platform has a native share sheet (iOS/Android do, most
+// desktop browsers don't). Checked once — it can't change mid-session.
+const CAN_NATIVE_SHARE = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
 // Sortable row wrapper (dnd-kit). MODULE-LEVEL so React keeps its identity
 // across re-renders — a component defined inside the view would remount every
@@ -47,11 +52,13 @@ function SortableRow({ id, children }) {
  */
 function BeatsView({
   library, beat, beatId, ready,
-  onSelect, onStart, onStartBeat, onEdit, onDeleteBeat, nav,
+  onSelect, onStart, onStartBeat, onEdit, onDeleteBeat,
+  pendingShare, onImportShare, onDismissShare, nav,
 }) {
   const {
     allBeats, customBeats, isCustomBeat, categories, categoryBeats, catName,
     createCategory, deleteCategory, toggleBeatInCategory, reorderCategory,
+    error, dismissError,
   } = library;
 
   const [browseTab, setBrowseTab] = useState("builtin");
@@ -59,6 +66,15 @@ function BeatsView({
   const [createCatOpen, setCreateCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [addBeatsOpen, setAddBeatsOpen] = useState(false);
+  // What's being shared out: { kind:"beat", beat } | { kind:"category", name, beats }.
+  const [shareTarget, setShareTarget] = useState(null);
+  const [copied, setCopied] = useState(null);           // "link" | "code", briefly
+  const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState("");
+  // What's about to come IN, awaiting the user's yes. Seeded from a share
+  // link if the app was opened with one (App decoded it before we mounted),
+  // and set again whenever a code is pasted. Nothing is written until Add.
+  const [importPreview, setImportPreview] = useState(() => pendingShare ?? null);
   // One confirmation sheet guards every destructive action (delete a beat,
   // remove from a category, delete a category): { message, label, onConfirm }.
   const [confirmAction, setConfirmAction] = useState(null);
@@ -73,17 +89,86 @@ function BeatsView({
     useSensor(PointerSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
   );
 
-  function handleCreateCategory() {
+  // The sheet closes straight away and the new tab is opened once the
+  // library confirms the id — which it mints, so there's nothing to switch
+  // to until it comes back. A failed save leaves the user where they were,
+  // with the reason in the strip at the top of the screen.
+  async function handleCreateCategory() {
     const name = newCatName.trim();
     if (!name) return;
-    const id = createCategory(name);
     setNewCatName("");
     setCreateCatOpen(false);
-    setBrowseTab(id);
+    const id = await createCategory(name);
+    if (id) setBrowseTab(id);
   }
   function handleDeleteCategory(catId) {
     deleteCategory(catId);
     if (browseTab === catId) setBrowseTab("builtin");
+  }
+
+  // ── Sharing out ──────────────────────────────────────────────────────
+  // The code is derived, not stored: re-deriving on each render is cheaper
+  // than keeping it in state in sync with the sheet.
+  const shareCode = !shareTarget ? ""
+    : shareTarget.kind === "beat"
+      ? encodeBeat(shareTarget.beat)
+      : encodeCategory(shareTarget.name, shareTarget.beats);
+  const shareLink = shareTarget ? shareUrl(shareCode) : "";
+  const linkInputRef = useRef(null);
+  const copiedTimer = useRef(null);
+
+  // The "Copied" label is a timeout, so it has to be cancelled if the sheet
+  // closes or the view unmounts first.
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
+  function flagCopied(which) {
+    clearTimeout(copiedTimer.current);
+    setCopied(which);
+    copiedTimer.current = setTimeout(() => setCopied(null), 1600);
+  }
+  async function copyText(text, which) {
+    try {
+      await navigator.clipboard.writeText(text);
+      flagCopied(which);
+    } catch {
+      // Blocked, or a non-secure context (plain http on a LAN). Select the
+      // link box instead so a manual copy is one keystroke away.
+      linkInputRef.current?.select();
+    }
+  }
+  async function nativeShare() {
+    try {
+      await navigator.share({ title: shareTarget.kind === "beat" ? shareTarget.beat.name : shareTarget.name, url: shareLink });
+    } catch { /* dismissed the OS sheet — nothing to do */ }
+  }
+  function closeShare() {
+    setShareTarget(null);
+    clearTimeout(copiedTimer.current);
+    setCopied(null);
+  }
+
+  // ── Sharing in ───────────────────────────────────────────────────────
+  function handlePastedCode() {
+    const payload = decodeShare(codeFromInput(codeInput));
+    if (!payload) {
+      setCodeError("That code isn't complete, or isn't a beat code.");
+      return;
+    }
+    setCodeError("");
+    setCodeInput("");
+    setImportPreview(payload);
+  }
+  async function acceptImport() {
+    const payload = importPreview;
+    setImportPreview(null);
+    // Land the user where the beats actually went — a list gets its own tab,
+    // a single beat goes to Your beats. The ids only exist after the import
+    // mints them, which is why the tab comes back from the call.
+    const { catId } = (await onImportShare(payload)) ?? {};
+    setBrowseTab(catId ?? "custom");
+  }
+  function dismissImport() {
+    setImportPreview(null);
+    onDismissShare();
   }
 
   const inUserCat = categories.some(c => c.id === browseTab);
@@ -164,14 +249,34 @@ function BeatsView({
         <span style={{ width: 44 }} aria-hidden="true" />
       </header>
 
-      {/* Category tabs: the two fixed ones, the user's own, and +.
-          Edge fades signal when the row scrolls. */}
+      {/* Storage failures land here — a full or blocked store used to be
+          swallowed, so a beat would save, appear in the list, and be gone on
+          the next launch. This is the only screen that writes, so it's the
+          only one that needs to say so. */}
+      {error && (
+        <div role="alert" style={st.errorStrip}>
+          <span style={st.errorText}>{error}</span>
+          <button onClick={dismissError} aria-label="Dismiss message"
+            style={st.errorClose}>×</button>
+        </div>
+      )}
+
+      {/* Category tabs: the three fixed ones, the user's own, and +.
+          Edge fades signal when the row scrolls.
+
+          "browse" is a BROWSE-ONLY pseudo-tab — the seat the community beat
+          library will take (PROJECT_PLAN §7); for now it's where a shared
+          code comes in. It is not a progression, so it must never reach
+          categoryBeats/catName/setActiveCat. It renders no beat rows, which
+          is what keeps it out of the only path that could send it there
+          (onSelect(b, browseTab)). */}
       <ScrollFadeRow rowStyle={sh.catTabs}>
-        {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
+        {["builtin", "browse", "custom", ...categories.map(c => c.id)].map(id => (
           <button key={id} onClick={() => setBrowseTab(id)}
-            style={{ ...sh.catTab, ...(browseTab === id ? sh.catTabActive : null) }}
+            style={{ ...sh.catTab, ...(browseTab === id ? sh.catTabActive : null),
+              ...(id === "browse" ? st.browseTab : null) }}
             aria-pressed={browseTab === id}>
-            {catName(id)}
+            {id === "browse" ? <><GlobeIcon />Browse</> : catName(id)}
           </button>
         ))}
         <button onClick={() => setCreateCatOpen(true)} aria-label="New category"
@@ -190,6 +295,29 @@ function BeatsView({
           customBeats.length === 0
             ? <p style={sh.emptyHint}>Nothing here yet — beats you build or customize will appear here.</p>
             : customBeats.map(renderRow)
+        )}
+
+        {browseTab === "browse" && (
+          <>
+            <p style={sh.emptyHint}>
+              A library of beats shared by other devotees is coming. Until then,
+              this is where a beat someone sent you comes in — paste their code
+              or link below. Opening a share link does the same thing.
+            </p>
+            <div style={st.pasteRow}>
+              <input type="text" value={codeInput}
+                onChange={(e) => { setCodeInput(e.target.value); setCodeError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") handlePastedCode(); }}
+                placeholder="Paste a share code or link"
+                aria-label="Share code" aria-invalid={!!codeError}
+                style={st.catNameInput} />
+              <button onClick={handlePastedCode} disabled={!codeInput.trim()}
+                style={{ ...st.sheetStartBtn, flex: "0 0 auto", padding: "0 22px", opacity: codeInput.trim() ? 1 : 0.5 }}>
+                Open
+              </button>
+            </div>
+            {codeError && <p style={st.codeError} role="alert">{codeError}</p>}
+          </>
         )}
 
         {browsedCat && (
@@ -212,6 +340,15 @@ function BeatsView({
             </DndContext>
             <div style={st.catActions}>
               <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>+ Add beats</button>
+              <button onClick={() => setShareTarget({
+                  kind: "category", name: browsedCat.name, beats: categoryBeats(browsedCat.id),
+                })}
+                disabled={categoryBeats(browsedCat.id).length === 0}
+                aria-label={`Share the list ${browsedCat.name}`}
+                style={{ ...st.addBeatsBtn, ...st.iconLabel, flex: "0 0 auto", padding: "0 16px",
+                  opacity: categoryBeats(browsedCat.id).length ? 1 : 0.5 }}>
+                <ShareIcon />Share
+              </button>
               <button onClick={() => askConfirm(
                   `Delete the category “${browsedCat.name}”? The beats themselves are kept.`,
                   "Delete",
@@ -237,7 +374,16 @@ function BeatsView({
             onClick={(e) => e.stopPropagation()}>
             <div style={sh.sheetHead}>
               <h2 style={sh.sheetName}>{detailBeat.name}</h2>
-              <button onClick={() => setDetailBeat(null)} aria-label="Close" style={sh.sheetClose}>×</button>
+              {/* Share sits in the head rather than the action row below so
+                  Edit/Start keep their 1:2 balance — three buttons squeezed
+                  into one row makes "Customize" too narrow to read. */}
+              <div style={st.sheetHeadBtns}>
+                <button onClick={() => setShareTarget({ kind: "beat", beat: detailBeat })}
+                  aria-label={`Share ${detailBeat.name}`} style={st.sheetHeadBtn}>
+                  <ShareIcon />
+                </button>
+                <button onClick={() => setDetailBeat(null)} aria-label="Close" style={sh.sheetClose}>×</button>
+              </div>
             </div>
             <span style={sh.beatRowMeta}>
               {detailBeat.note} · {detailBeat.steps} cells · suggested {detailBeat.bpm} BPM
@@ -336,6 +482,118 @@ function BeatsView({
           </div>
         </div>
       )}
+
+      {/* Share sheet — the same payload two ways. The link works once the app
+          is hosted; the bare code is copy-pasteable today and survives
+          messengers that mangle long URLs. There's no toast anywhere in this
+          app, so "Copied" is the button label for a moment instead. */}
+      {shareTarget && (
+        <div style={sh.sheetBackdrop} onClick={closeShare}>
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Share"
+            onClick={(e) => e.stopPropagation()}>
+            <div style={sh.sheetHead}>
+              <h2 style={sh.sheetName}>
+                Share {shareTarget.kind === "beat" ? shareTarget.beat.name : shareTarget.name}
+              </h2>
+              <button onClick={closeShare} aria-label="Close" style={sh.sheetClose}>×</button>
+            </div>
+            <p style={sh.emptyHint}>
+              {shareTarget.kind === "beat"
+                ? "Anyone who opens this link gets a copy of the beat. Nothing is uploaded — the whole beat travels inside the link itself."
+                : `All ${shareTarget.beats.length} beats in this list travel inside the link. Nothing is uploaded.`}
+            </p>
+            <input ref={linkInputRef} type="text" readOnly value={shareLink}
+              onFocus={(e) => e.target.select()} aria-label="Share link"
+              style={{ ...st.catNameInput, marginTop: "var(--space-4)", width: "100%" }} />
+            <div style={st.shareActions}>
+              {/* Native share takes its own row (flexBasis 100%) so the two
+                  copy buttons get half a sheet each rather than a third. */}
+              {CAN_NATIVE_SHARE && (
+                <button onClick={nativeShare} style={{ ...st.sheetStartBtn, ...st.iconLabel, flex: "1 0 100%" }}>
+                  <ShareIcon />Share
+                </button>
+              )}
+              <button onClick={() => copyText(shareLink, "link")} style={{ ...st.sheetEditBtn, ...st.iconLabel }}>
+                {copied === "link" ? <><CheckIcon />Copied</> : "Copy link"}
+              </button>
+              <button onClick={() => copyText(shareCode, "code")} style={{ ...st.sheetEditBtn, ...st.iconLabel }}>
+                {copied === "code" ? <><CheckIcon />Copied</> : "Copy code"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import confirmation — the last stop before anything is written. The
+          preview is the real BeatStrip, so what you approve is what you get.
+          An unusable code lands here too, as one friendly line. */}
+      {importPreview && (
+        <div style={sh.sheetBackdrop} onClick={dismissImport}>
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Add shared beat"
+            onClick={(e) => e.stopPropagation()}>
+            <div style={sh.sheetHead}>
+              <h2 style={sh.sheetName}>
+                {importPreview.kind === "invalid" ? "Can't open that link" : "Someone shared this"}
+              </h2>
+              <button onClick={dismissImport} aria-label="Close" style={sh.sheetClose}>×</button>
+            </div>
+
+            {importPreview.kind === "invalid" && (
+              <>
+                <p style={st.sheetDesc}>
+                  That link isn't complete, or isn't a beat link. Ask whoever sent
+                  it to copy it again — long links sometimes get cut in half.
+                </p>
+                <div style={st.sheetActions}>
+                  <button onClick={dismissImport} style={st.sheetStartBtn}>Close</button>
+                </div>
+              </>
+            )}
+
+            {importPreview.kind === "beat" && (
+              <>
+                <span style={sh.beatRowName}>{importPreview.beat.name}</span>
+                <span style={sh.beatRowMeta}>
+                  {importPreview.beat.steps} cells · suggested {importPreview.beat.bpm} BPM
+                </span>
+                <div style={{ margin: "var(--space-4) 0" }}>
+                  <BeatStrip beat={importPreview.beat} />
+                </div>
+                <p style={sh.emptyHint}>It'll be saved with your own beats.</p>
+                <div style={st.sheetActions}>
+                  <button onClick={dismissImport} style={st.sheetEditBtn}>Cancel</button>
+                  <button onClick={acceptImport} style={st.sheetStartBtn}>Add beat</button>
+                </div>
+              </>
+            )}
+
+            {importPreview.kind === "category" && (
+              <>
+                <p style={st.sheetDesc}>
+                  Add {importPreview.beats.length}{" "}
+                  {importPreview.beats.length === 1 ? "beat" : "beats"} and the
+                  list “{importPreview.name}”?
+                </p>
+                <div style={sh.pickList}>
+                  {importPreview.beats.map((b, i) => (
+                    <div key={i} style={sh.pickRow}>
+                      <div style={sh.beatRowTop}>
+                        <span style={sh.beatRowName}>{b.name}</span>
+                        <span style={{ ...sh.beatRowMeta, flex: 1 }}>{b.steps} cells</span>
+                      </div>
+                      <BeatStrip beat={b} mini />
+                    </div>
+                  ))}
+                </div>
+                <div style={st.sheetActions}>
+                  <button onClick={dismissImport} style={st.sheetEditBtn}>Cancel</button>
+                  <button onClick={acceptImport} style={st.sheetStartBtn}>Add all</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -348,11 +606,34 @@ const st = {
   infoBtn: { flexShrink: 0, width: 40, height: 40, borderRadius: 12, border: "none", background: "transparent", color: "var(--syahi-soft)", display: "grid", placeItems: "center", cursor: "pointer" },
   deleteBtn: { flexShrink: 0, width: 40, height: 40, border: "none", background: "transparent", color: "var(--ink-secondary)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 12 },
 
+  // ── Storage error strip ──
+  // --danger rather than --clay: --clay is the app's ACTION colour and reads
+  // as something to press. This is the only place outside a destructive
+  // confirm that should look like a warning.
+  errorStrip: { flexShrink: 0, display: "flex", alignItems: "flex-start", gap: "var(--space-2)", padding: "10px 12px", borderRadius: 14, border: "1px solid var(--danger)", background: "var(--head-worn)" },
+  errorText: { flex: 1, minWidth: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--danger)", lineHeight: 1.45 },
+  errorClose: { flexShrink: 0, width: 28, height: 28, marginTop: -2, border: "none", background: "transparent", color: "var(--danger)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 8 },
+
   // ── Category actions ──
-  catActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
-  addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
+  // Wraps since Share joined the row — three controls don't fit a narrow phone.
+  catActions: { display: "flex", flexWrap: "wrap", gap: "var(--space-3)", marginTop: "var(--space-2)" },
+  addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
   deleteCatBtn: { flexShrink: 0, minHeight: 46, padding: "0 14px", borderRadius: 14, border: "none", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 600, cursor: "pointer" },
   catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
+
+  // ── Sharing ──
+  browseTab: { display: "inline-flex", alignItems: "center", gap: 6 },
+  pasteRow: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
+  codeError: { margin: "var(--space-2) 0 0", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--clay)", lineHeight: 1.5 },
+  // The head's controls as one cluster, so space-between keeps the title
+  // left and both buttons right.
+  sheetHeadBtns: { flexShrink: 0, display: "flex", alignItems: "center", gap: 2 },
+  sheetHeadBtn: { width: 44, height: 44, margin: "-8px 0 0 0", border: "none", background: "transparent", color: "var(--syahi-soft)", cursor: "pointer", display: "grid", placeItems: "center" },
+  // Wraps, unlike sheetActions: three buttons don't fit one phone row.
+  shareActions: { display: "flex", flexWrap: "wrap", gap: "var(--space-3)", marginTop: "var(--space-5)" },
+  // Buttons in this file are plain text; these carry an icon too, and a
+  // button's default centring leaves the glyph sitting on the text baseline.
+  iconLabel: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 },
 
   // ── Sheet bodies and actions ──
   sheetDesc: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", lineHeight: 1.55 },

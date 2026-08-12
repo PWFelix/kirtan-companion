@@ -9,6 +9,13 @@ import BottomNav from "./ui/BottomNav.jsx";
 import HomeView from "./views/HomeView.jsx";
 import BeatsView from "./views/BeatsView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
+import { readShareFromLocation } from "./data/shareCodec.js";
+
+// An inbound share link, read ONCE at module load. Deliberately not in a
+// useState initialiser: StrictMode double-invokes those, and this one has a
+// side effect (it clears the hash so a hostile payload can't wedge the app
+// across refreshes). Module scope runs exactly once per page load.
+const INBOUND_SHARE = readShareFromLocation();
 
 /**
  * App — the shell. It routes, and it owns the one piece of state that spans
@@ -29,7 +36,11 @@ function App() {
   const library = useBeatLibrary();
   const isLandscape = useLandscape();
 
-  const [view, setView] = useState("home"); // "home" | "beats" | "editor" | "settings"
+  // A share link lands the user in the library, where the beat it carries is
+  // about to be offered to them. The splash gate below still comes first, so
+  // the audio-unlock gesture is never skipped.
+  const [view, setView] = useState(INBOUND_SHARE ? "beats" : "home"); // "home" | "beats" | "editor" | "settings"
+  const [pendingShare, setPendingShare] = useState(INBOUND_SHARE);
   const [entered, setEntered] = useState(false); // splash shown until Begin
   const [beatId, setBeatId] = useState(BEATS[0].id);
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
@@ -92,10 +103,13 @@ function App() {
       ? target
       : {
           ...target,
-          id: "custom_" + target.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
+          // No id: that's what makes this a FORK. The library mints one on
+          // save, so the built-in it came from is never written over.
+          id: null,
           name: target.name + " (custom)",
           note: "Custom",
           description: undefined,
+          readOnly: undefined,
         };
     setEditorInitial(seed);
     setEditorReturn(returnTo);
@@ -106,15 +120,28 @@ function App() {
     setEditorInitial(null);
     setView(to);
   }
-  function handleSaveBeat(newBeat) {
-    library.saveBeat(newBeat);
+  async function handleSaveBeat(newBeat) {
+    // Awaited because a new beat's id doesn't exist until the library mints
+    // it — `newBeat` here may not have one yet. Nothing is selected if the
+    // save failed; the library surfaces the reason on the Beats screen.
+    const saved = await library.saveBeat(newBeat);
     // Reflect the saved beat in the engine + main view (engine already stopped).
-    selectBeat(newBeat, "custom");
+    if (saved) selectBeat(saved, "custom");
   }
   // Deleting the loaded beat falls back to the first built-in.
   function handleDeleteBeat(id) {
     library.deleteBeat(id);
     if (beatId === id) selectBeat(BEATS[0], "builtin");
+  }
+  // Accepting a share: same shape as saving from the editor — the library
+  // takes it, then the engine and main view move to what just arrived. The
+  // result goes back to the caller so the library screen can land the user
+  // in the tab the beats went into (the ids only exist after the mint).
+  async function handleImportShare(payload) {
+    const result = await library.importShared(payload);
+    if (result.beats.length) selectBeat(result.beats[0], result.catId ?? "custom");
+    setPendingShare(null);
+    return result;
   }
 
   // The Begin tap does double duty: it satisfies the browser's "no sound
@@ -124,8 +151,12 @@ function App() {
     setEntered(true);
   }
 
+  // The splash is where the async library load hides. Reading beats is a
+  // round trip now, so Begin waits for BOTH the sounds and the library —
+  // which for localStorage resolves long before anyone taps it, and is a
+  // real gate the day the store is remote. No screen ever renders empty.
   if (!entered) {
-    return <Splash onBegin={handleBegin} ready={transport.ready} />;
+    return <Splash onBegin={handleBegin} ready={transport.ready && !library.loading} />;
   }
 
   // Built once and handed to whichever screen is showing, so the bar is the
@@ -161,6 +192,9 @@ function App() {
         onStartBeat={startFromDetail}
         onEdit={(b) => openEditBeat(b, "beats")}
         onDeleteBeat={handleDeleteBeat}
+        pendingShare={pendingShare}
+        onImportShare={handleImportShare}
+        onDismissShare={() => setPendingShare(null)}
         nav={bottomNav}
       />
     );

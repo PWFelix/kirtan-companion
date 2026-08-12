@@ -4,8 +4,8 @@ import { labelsFromGroups } from "./data/stepLabels.js";
 import { BOLS, COMBO_BOLS } from "./data/bols.js";
 
 /**
- * BeatEditor — three fixed zones, no scrolling, phone-first
- * --------------------------------------------------------
+ * BeatEditor — three zones, phone-first
+ * -------------------------------------
  * 1. OVERVIEW  — a mini BeatStrip of the WHOLE beat with a draggable frame
  *    showing which page the zoom is on; doubles as the live visualiser.
  * 2. ZOOM      — one page of cells, magnified, both mridanga lanes aligned
@@ -14,6 +14,10 @@ import { BOLS, COMBO_BOLS } from "./data/bols.js";
  * 3. PADS      — one pad per enterable stroke (from data/bols.js). Tapping a
  *    pad writes the cursor column (or one lane when isolated), SOUNDS the
  *    sample(s), and advances the cursor.
+ *
+ * The three zones sit in one scrolling region so a viewport too short for all
+ * of them scrolls instead of overflowing; the title, Save and the nav bar are
+ * pinned, which is what keeps the nav pill aligned with the other screens.
  *
  * METER MODEL — a beat is a list of GROUPS (one entry per numbered beat, its
  * value = cells it spans). This supports uneven meters like 7/8 = [2,2,3]
@@ -233,7 +237,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     const hasAnyHit = dayan.some((c) => c !== null) || bayan.some((c) => c !== null);
     if (!hasAnyHit) { alert("Add at least one stroke before saving."); return; }
     const finalName = name.trim() || "Custom Beat";
-    const id = initialBeat?.id ?? ("custom_" + finalName.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now());
+    // No id means "new" — the library mints one on save, and it is now the
+    // only place in the app ids come from. Editing an existing custom beat
+    // keeps its id and so overwrites in place.
+    const id = initialBeat?.id ?? null;
     const uniform = groups.every((g) => g === groups[0]);
     onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar,
       cellsPerGroup: uniform ? groups[0] : cpq, groups, dayan, bayan });
@@ -267,125 +274,134 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         </div>
       </header>
 
-      {/* ── OVERVIEW: whole beat + a draggable frame over the current page ── */}
-      <div ref={overviewRef} style={st.overviewWrap}
-        onPointerDown={(e) => { scrubbingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); scrubTo(e.clientX); }}
-        onPointerMove={(e) => { if (scrubbingRef.current) scrubTo(e.clientX); }}
-        onPointerUp={() => { scrubbingRef.current = false; }}
-        onPointerCancel={() => { scrubbingRef.current = false; }}>
-        <BeatStrip beat={previewBeat} step={step} playing={previewing} getPhase={getPhase} mini />
-        {pageCount > 1 && (
-          <div aria-hidden="true" style={{ ...st.overviewFrame,
-            left: (windowStart / steps) * 100 + "%",
-            width: ((windowEnd - windowStart) / steps) * 100 + "%" }} />
-        )}
-      </div>
+      {/* Everything between the title and Save scrolls as one region. The
+          editor's sections are all flexShrink:0 (a squashed pad grid is
+          unusable), so on a short viewport they used to overflow the fixed
+          frame and push the nav bar under the clip edge. Pinning the header,
+          Save and nav keeps the nav pill at the same y as every other page. */}
+      <div style={st.body}>
 
-      {/* ── ZOOM: one magnified page; the cursor is a column ── */}
-      <div style={st.zoom}>
-        <div style={st.zoomHead}>
-          <button onClick={() => setCursor(Math.max(0, windowStart - zoomCells))}
-            disabled={page === 0} aria-label="Previous page"
-            style={{ ...st.pageBtn, opacity: page === 0 ? 0.3 : 1 }}>‹</button>
-          <span style={st.zoomLabel}>{windowStart + 1}–{windowEnd} of {steps}</span>
-          <button onClick={() => setCursor(Math.min(steps - 1, windowStart + zoomCells))}
-            disabled={page >= pageCount - 1} aria-label="Next page"
-            style={{ ...st.pageBtn, opacity: page >= pageCount - 1 ? 0.3 : 1 }}>›</button>
+        {/* ── OVERVIEW: whole beat + a draggable frame over the current page ── */}
+        <div ref={overviewRef} style={st.overviewWrap}
+          onPointerDown={(e) => { scrubbingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); scrubTo(e.clientX); }}
+          onPointerMove={(e) => { if (scrubbingRef.current) scrubTo(e.clientX); }}
+          onPointerUp={() => { scrubbingRef.current = false; }}
+          onPointerCancel={() => { scrubbingRef.current = false; }}>
+          <BeatStrip beat={previewBeat} step={step} playing={previewing} getPhase={getPhase} mini />
+          {pageCount > 1 && (
+            <div aria-hidden="true" style={{ ...st.overviewFrame,
+              left: (windowStart / steps) * 100 + "%",
+              width: ((windowEnd - windowStart) / steps) * 100 + "%" }} />
+          )}
         </div>
-        <div style={st.zoomRows}>
-          <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
-            {labels.slice(windowStart, windowEnd).map((l, j) => (
-              <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
-            ))}
+
+        {/* ── ZOOM: one magnified page; the cursor is a column ── */}
+        <div style={st.zoom}>
+          <div style={st.zoomHead}>
+            <button onClick={() => setCursor(Math.max(0, windowStart - zoomCells))}
+              disabled={page === 0} aria-label="Previous page"
+              style={{ ...st.pageBtn, opacity: page === 0 ? 0.3 : 1 }}>‹</button>
+            <span style={st.zoomLabel}>{windowStart + 1}–{windowEnd} of {steps}</span>
+            <button onClick={() => setCursor(Math.min(steps - 1, windowStart + zoomCells))}
+              disabled={page >= pageCount - 1} aria-label="Next page"
+              style={{ ...st.pageBtn, opacity: page >= pageCount - 1 ? 0.3 : 1 }}>›</button>
           </div>
-          {[["dayan", "Dayan", dayan], ["bayan", "Bayan", bayan]].map(([end, label, arr]) => {
-            const isolatedOut = editLane !== "both" && editLane !== end;
-            const active = editLane === end;
-            return (
-              <div key={end} style={{ opacity: isolatedOut ? 0.4 : 1 }}>
-                <button onClick={() => setEditLane((m) => (m === end ? "both" : end))}
-                  aria-pressed={active}
-                  style={{ ...st.laneLabel, color: `var(--lane-${end})`, fontWeight: active ? 800 : 700 }}>
-                  {label}{active ? " · editing only" : ""}
-                </button>
-                <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
-                  {arr.slice(windowStart, windowEnd).map((v, j) => {
-                    const i = windowStart + j;
-                    const isCursor = i === cursor;
-                    const lit = previewing && i === step;
-                    return (
-                      <button key={end + i} onClick={() => setCursor(i)}
-                        aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
-                        style={{ ...st.zoomCell,
-                          borderColor: isCursor ? "var(--clay)" : "var(--rule)",
-                          borderWidth: isCursor ? 2 : 1,
-                          background: lit ? "var(--head-sunken)" : "var(--head)" }}>
-                        <span aria-hidden="true"
-                          style={dotStyle(v, end === "dayan" ? "var(--lane-dayan)" : "var(--lane-bayan)", 18)} />
-                      </button>
-                    );
-                  })}
+          <div style={st.zoomRows}>
+            <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
+              {labels.slice(windowStart, windowEnd).map((l, j) => (
+                <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
+              ))}
+            </div>
+            {[["dayan", "Dayan", dayan], ["bayan", "Bayan", bayan]].map(([end, label, arr]) => {
+              const isolatedOut = editLane !== "both" && editLane !== end;
+              const active = editLane === end;
+              return (
+                <div key={end} style={{ opacity: isolatedOut ? 0.4 : 1 }}>
+                  <button onClick={() => setEditLane((m) => (m === end ? "both" : end))}
+                    aria-pressed={active}
+                    style={{ ...st.laneLabel, color: `var(--lane-${end})`, fontWeight: active ? 800 : 700 }}>
+                    {label}{active ? " · editing only" : ""}
+                  </button>
+                  <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
+                    {arr.slice(windowStart, windowEnd).map((v, j) => {
+                      const i = windowStart + j;
+                      const isCursor = i === cursor;
+                      const lit = previewing && i === step;
+                      return (
+                        <button key={end + i} onClick={() => setCursor(i)}
+                          aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
+                          style={{ ...st.zoomCell,
+                            borderColor: isCursor ? "var(--clay)" : "var(--rule)",
+                            borderWidth: isCursor ? 2 : 1,
+                            background: lit ? "var(--head-sunken)" : "var(--head)" }}>
+                          <span aria-hidden="true"
+                            style={dotStyle(v, end === "dayan" ? "var(--lane-dayan)" : "var(--lane-bayan)", 18)} />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── PADS ── */}
+        <div style={st.pads}>
+          {PAD_SETS[editLane].map((pad) => {
+            const w = pad.write;
+            const both = "dayan" in w && "bayan" in w;
+            return (
+              <button key={pad.key} onClick={() => tapPad(pad)}
+                aria-label={pad.rest ? "Rest" : pad.label}
+                style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
+                <span style={st.padLabel}>{pad.label}</span>
+                {!pad.rest && (both
+                  ? <StrokeMark dayan={w.dayan} bayan={w.bayan} size={9} />
+                  : <span aria-hidden="true" style={dotStyle(
+                      "dayan" in w ? w.dayan : w.bayan,
+                      "dayan" in w ? "var(--lane-dayan)" : "var(--lane-bayan)", 11)} />
+                )}
+              </button>
             );
           })}
         </div>
-      </div>
 
-      {/* ── PADS ── */}
-      <div style={st.pads}>
-        {PAD_SETS[editLane].map((pad) => {
-          const w = pad.write;
-          const both = "dayan" in w && "bayan" in w;
-          return (
-            <button key={pad.key} onClick={() => tapPad(pad)}
-              aria-label={pad.rest ? "Rest" : pad.label}
-              style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
-              <span style={st.padLabel}>{pad.label}</span>
-              {!pad.rest && (both
-                ? <StrokeMark dayan={w.dayan} bayan={w.bayan} size={9} />
-                : <span aria-hidden="true" style={dotStyle(
-                    "dayan" in w ? w.dayan : w.bayan,
-                    "dayan" in w ? "var(--lane-dayan)" : "var(--lane-bayan)", 11)} />
-              )}
+        {/* ── Controls ── */}
+        <div style={st.controls}>
+          <div style={st.controlRow}>
+            <button onClick={undo} disabled={!canUndo} style={{ ...st.utilBtn, opacity: canUndo ? 1 : 0.4 }}>↶ Undo</button>
+            <button onClick={clearGrid} style={st.utilBtn}>Clear</button>
+            <button onClick={togglePreview} style={{ ...st.utilBtn, ...(previewing ? st.previewOn : null) }}>
+              {previewing ? "■ Stop" : "▶ Preview"}
             </button>
-          );
-        })}
-      </div>
+          </div>
 
-      {/* ── Controls ── */}
-      <div style={st.controls}>
-        <div style={st.controlRow}>
-          <button onClick={undo} disabled={!canUndo} style={{ ...st.utilBtn, opacity: canUndo ? 1 : 0.4 }}>↶ Undo</button>
-          <button onClick={clearGrid} style={st.utilBtn}>Clear</button>
-          <button onClick={togglePreview} style={{ ...st.utilBtn, ...(previewing ? st.previewOn : null) }}>
-            {previewing ? "■ Stop" : "▶ Preview"}
-          </button>
-        </div>
+          <div style={st.metaRow}>
+            {/* Feel/meter — one picker button. */}
+            <button onClick={() => setFeelOpen(true)} style={st.feelBtn}
+              aria-haspopup="dialog" aria-expanded={feelOpen}>
+              <span style={st.feelName}>{meter.label}</span>
+              <span style={st.feelCaret}>▾</span>
+            </button>
+            {/* Length: add/remove one unit of the current meter. */}
+            <div style={st.lengthRow}>
+              <button onClick={removeGroup} disabled={groups.length <= meter.unit.length}
+                style={{ ...st.groupBtn, opacity: groups.length <= meter.unit.length ? 0.4 : 1 }}
+                aria-label="Remove a group">−</button>
+              <span style={st.lengthLabel}>{steps} cells</span>
+              <button onClick={addGroup} style={st.groupBtn} aria-label="Add a group">+</button>
+            </div>
+          </div>
 
-        <div style={st.metaRow}>
-          {/* Feel/meter — one picker button. */}
-          <button onClick={() => setFeelOpen(true)} style={st.feelBtn}
-            aria-haspopup="dialog" aria-expanded={feelOpen}>
-            <span style={st.feelName}>{meter.label}</span>
-            <span style={st.feelCaret}>▾</span>
-          </button>
-          {/* Length: add/remove one unit of the current meter. */}
-          <div style={st.lengthRow}>
-            <button onClick={removeGroup} disabled={groups.length <= meter.unit.length}
-              style={{ ...st.groupBtn, opacity: groups.length <= meter.unit.length ? 0.4 : 1 }}
-              aria-label="Remove a group">−</button>
-            <span style={st.lengthLabel}>{steps} cells</span>
-            <button onClick={addGroup} style={st.groupBtn} aria-label="Add a group">+</button>
+          <div style={st.tempoRow}>
+            <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>BPM</span>
+            <input className="kc-range" type="range" min={40} max={200} value={bpm}
+              onChange={(e) => setBpm(Number(e.target.value))}
+              style={{ "--fill": fillPct + "%", flex: 1 }} aria-label="Tempo" />
           </div>
         </div>
 
-        <div style={st.tempoRow}>
-          <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>BPM</span>
-          <input className="kc-range" type="range" min={40} max={200} value={bpm}
-            onChange={(e) => setBpm(Number(e.target.value))}
-            style={{ "--fill": fillPct + "%", flex: 1 }} aria-label="Tempo" />
-        </div>
       </div>
 
       <div style={st.footer}>
@@ -426,6 +442,9 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
 const st = {
   screen: { width: "100%", maxWidth: 430, minHeight: 0, margin: "0 auto", display: "flex", flexDirection: "column", padding: "calc(var(--space-5) + env(safe-area-inset-top)) calc(var(--space-5) + env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) calc(var(--space-5) + env(safe-area-inset-left))", gap: "var(--space-4)" },
   header: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)", paddingBottom: "var(--space-3)", borderBottom: "var(--rule-hairline)" },
+  // The one scrolling region — see the note at its JSX. `padding: 2px` keeps
+  // the overview's and the pads' outer edges off the clipping boundary.
+  body: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)", padding: "2px" },
   backBtn: { flexShrink: 0, width: 40, height: 44, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 28, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
   titleWrap: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
   titleInput: { flex: 1, minWidth: 0, border: "none", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", padding: "2px 0", outline: "none" },

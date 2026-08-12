@@ -116,6 +116,35 @@ export function CheckIcon() {
   );
 }
 
+// Share — the three-node "send this onward" glyph, not an upload arrow: it
+// reads the same on iOS and Android, where the platform share sheets differ.
+export function ShareIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="18" cy="5.5" r="2.5" />
+      <circle cx="6" cy="12" r="2.5" />
+      <circle cx="18" cy="18.5" r="2.5" />
+      <path d="M8.2 10.8 15.8 6.7" />
+      <path d="M8.2 13.2 15.8 17.3" />
+    </svg>
+  );
+}
+
+// Globe for the Browse tab. It marks the one tab whose beats come from
+// OUTSIDE this device — today by pasted code, later from the community
+// library (PROJECT_PLAN §7), which is why it isn't a paste/clipboard glyph.
+export function GlobeIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3c2.5 2.6 3.8 5.6 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" />
+    </svg>
+  );
+}
+
 // Filled transport glyphs — solid, not stroked, so they read at a glance
 // on the clay play bar. `size` because the landscape rail runs smaller.
 export function PlayIcon({ size = 22 }) {

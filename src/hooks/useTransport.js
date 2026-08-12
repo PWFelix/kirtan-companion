@@ -1,8 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { KirtanEngine } from "../engine/KirtanEngine.js";
 import { BEATS } from "../data/beats.js";
+import { MIN_BPM, MAX_BPM } from "../data/meter.js";
 
-export const MIN_BPM = 40, MAX_BPM = 200;
+// The bounds now live in data/meter.js so pure data modules (the share codec)
+// can clamp a BPM without importing React, Tone.js and the engine along with
+// it. Re-exported here because this is where the app has always found them.
+export { MIN_BPM, MAX_BPM };
 
 /**
  * useTransport — the engine and its React mirror, as one unit.

@@ -23,8 +23,9 @@ export const screen = {
   gap: "var(--space-5)",
 };
 
-// The fixed (non-scrolling) frame shared by Home, Beats and Settings. The
-// Editor keeps its own scrolling frame.
+// The fixed (non-scrolling) frame shared by Home, Beats and Settings — each
+// scrolls an inner region instead. The Editor keeps its own copy of this
+// (it wants a tighter gap) with the same padding, for the reason above.
 export const screenFixed = { ...screen, minHeight: 0 };
 
 // ── Sub-page header (Beats, Settings) ──
