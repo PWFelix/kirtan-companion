@@ -16,6 +16,27 @@ import { beatsProvider, storageErrorMessage } from "../storage/index.js";
 const BUILTIN_BEATS = BEATS.map((b) => ({ ...b, readOnly: true }));
 
 /**
+ * A name nobody else in the library is using: "My Beat" → "My Beat (2)".
+ *
+ * NAMING IS THE LIBRARY'S JOB, not the editor's, because this is the only
+ * place that knows what's already taken. It used to live inside importShared
+ * — so re-importing your own share link couldn't produce two identical rows
+ * — while beats made in the editor got no such treatment, and two beats with
+ * one name are genuinely indistinguishable in the list (a row shows the name
+ * and "Custom · 8 cells", nothing else). Every way in now goes through here:
+ * the editor, a fork of a built-in, and an import.
+ *
+ * MUTATES `taken`, which is what lets a batch import stay unique against
+ * itself and not just against what was already saved.
+ */
+function uniqueName(wanted, taken) {
+  let name = wanted;
+  for (let n = 2; taken.has(name); n++) name = `${wanted} (${n})`;
+  taken.add(name);
+  return name;
+}
+
+/**
  * useBeatLibrary — everything the user has saved, and its persistence.
  *
  * Two things live here:
@@ -133,6 +154,14 @@ export function useBeatLibrary(provider = beatsProvider) {
    */
   async function saveBeat(newBeat) {
     const { id, ...fields } = newBeat;
+    // Every name in the library EXCEPT this beat's own — otherwise editing a
+    // beat without renaming it would suffix it a little further every save
+    // ("My Beat (2)", "My Beat (2) (2)"). Built-ins are included, so a custom
+    // beat can't shadow "Te Ta" either.
+    fields.name = uniqueName(
+      fields.name,
+      new Set(allBeats.filter((b) => b.id !== id).map((b) => b.name))
+    );
     try {
       // An id we don't recognise is treated as new rather than as an error:
       // the alternative is refusing to save the user's work over a
@@ -202,13 +231,6 @@ export function useBeatLibrary(provider = beatsProvider) {
     }
 
     // Re-importing your own link shouldn't produce two rows with one name.
-    const uniqueName = (wanted, taken) => {
-      let name = wanted;
-      for (let n = 2; taken.has(name); n++) name = `${wanted} (${n})`;
-      taken.add(name);
-      return name;
-    };
-
     const takenNames = new Set(allBeats.map((b) => b.name));
     const drafts = (payload.kind === "beat" ? [payload.beat] : payload.beats).map(
       (draft) => ({ ...draft, name: uniqueName(draft.name, takenNames) })

@@ -135,6 +135,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [cursor, setCursor] = useState(0);
   const [editLane, setEditLane] = useState("both");
   const [feelOpen, setFeelOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const overviewRef = useRef(null);
   const scrubbingRef = useRef(false);
   const nameInputRef = useRef(null);
@@ -232,7 +233,23 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     else { engine.setBeat(beatRef.current); engine.setBpm(bpm); engine.start(); setPreviewing(true); }
   }
 
-  function handleSave() {
+  /**
+   * Save, then leave — but only if it actually saved.
+   *
+   * Two things guard this, both because saving reaches durable storage now
+   * and so takes real time (imperceptible for localStorage, not for anything
+   * remote):
+   *
+   *  - `saving` blocks a second press. The window is tiny today — the editor
+   *    unmounts so fast the button is gone before a second tap lands — but
+   *    "too fast to hit" is a property of the current store, not a guarantee,
+   *    and a duplicated beat is exactly what it would cost.
+   *  - The editor stays OPEN if the save failed. Unmounting is how a draft is
+   *    discarded here, so closing on a failed write would throw the user's
+   *    work away and leave them only an error message about it.
+   */
+  async function handleSave() {
+    if (saving) return;
     if (previewing) { engine.stop(); setPreviewing(false); }
     const hasAnyHit = dayan.some((c) => c !== null) || bayan.some((c) => c !== null);
     if (!hasAnyHit) { alert("Add at least one stroke before saving."); return; }
@@ -242,9 +259,11 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     // keeps its id and so overwrites in place.
     const id = initialBeat?.id ?? null;
     const uniform = groups.every((g) => g === groups[0]);
-    onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar,
+    setSaving(true);
+    const saved = await onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar,
       cellsPerGroup: uniform ? groups[0] : cpq, groups, dayan, bayan });
-    onClose();
+    if (saved) { onClose(); return; }   // unmounts — no state to reset
+    setSaving(false);
   }
 
   function clearGrid() {
@@ -405,7 +424,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
       </div>
 
       <div style={st.footer}>
-        <button onClick={handleSave} style={st.saveBtn}>Save beat</button>
+        <button onClick={handleSave} disabled={saving}
+          style={{ ...st.saveBtn, ...(saving ? st.saveBtnBusy : null) }}>
+          {saving ? "Saving…" : "Save beat"}
+        </button>
       </div>
 
       {/* Feel/meter picker sheet */}
@@ -485,6 +507,9 @@ const st = {
 
   footer: { flexShrink: 0, display: "flex", justifyContent: "flex-end" },
   saveBtn: { minHeight: 48, padding: "0 28px", borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
+  // Dimmed rather than greyed: the button keeps its colour so the press
+  // clearly registered, it just isn't pressable again.
+  saveBtnBusy: { opacity: 0.65, cursor: "default" },
 
   sheetBackdrop: { position: "fixed", inset: 0, background: "oklch(0.24 0.02 60 / 0.35)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 10 },
   sheet: { width: "100%", maxWidth: 430, maxHeight: "85dvh", overflowY: "auto", background: "var(--head)", borderRadius: "20px 20px 0 0", padding: "var(--space-5) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column" },

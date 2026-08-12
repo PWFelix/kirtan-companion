@@ -127,6 +127,9 @@ function App() {
     const saved = await library.saveBeat(newBeat);
     // Reflect the saved beat in the engine + main view (engine already stopped).
     if (saved) selectBeat(saved, "custom");
+    // Handed back so the editor knows whether it may close: it discards the
+    // draft on unmount, so it must stay open if this didn't stick.
+    return saved;
   }
   // Deleting the loaded beat falls back to the first built-in.
   function handleDeleteBeat(id) {
