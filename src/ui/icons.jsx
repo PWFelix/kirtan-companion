@@ -56,6 +56,20 @@ export function BeatsIcon() {
   );
 }
 
+// Scholar's cap for the Learn tab. Drawn narrower than the 24-box allows
+// (3 → 21 rather than edge to edge) so its wide mortarboard doesn't read as
+// heavier than the home and cog icons sitting beside it in the nav.
+export function CapIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 4 3 8.5l9 4.5 9-4.5z" />
+      <path d="M6.5 10.8V15c0 1.4 2.5 2.6 5.5 2.6s5.5-1.2 5.5-2.6v-4.2" />
+      <path d="M21 8.5V14" />
+    </svg>
+  );
+}
+
 export function PencilIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"

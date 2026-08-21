@@ -448,6 +448,69 @@ input[type="range"].kc-range::-moz-range-thumb {
   .ks-playhead { display: none; }   /* cell lighting carries the position */
 }
 
+/* ── BottomNav — the sliding clay pill (see BottomNav.jsx) ──
+   ONE indicator element travels between tabs rather than each tab fading its
+   own background in and out, so the highlight reads as a single object moving
+   along the bar. Its position comes from an inline transform (the tab index);
+   only the motion lives here.
+
+   The icon and label colour waits 130ms — half the slide — before flipping
+   (they share the cell's `color`, so one rule moves both). Swapping on tap
+   would put --on-action (light) ink on the bare bar for the whole journey,
+   where it all but disappears; this way a tab changes as the pill reaches it. */
+.kc-nav-pill {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Ink timing is deliberately ASYMMETRIC, because a transition is defined by
+   the state being moved TO. Leaving: fast and immediate, so the tab drops back
+   to normal ink as the pill slides off it — held white over the bare bar for
+   even a moment, it looks broken. Arriving: waits 130ms for the pill to get
+   there, or --on-action would be sitting on nothing for the whole journey. */
+.kc-nav-cell {
+  transition: color 120ms ease;
+}
+.kc-nav-cell[data-lit="true"] {
+  transition: color 130ms ease 130ms;
+}
+
+/* Icon press feedback, in two halves.
+
+   HELD: the icon shrinks under the finger — a 90ms ease-out, because
+   acknowledging a press late feels broken in a way arriving late does not.
+
+   RELEASED: it springs back on a bezier that overshoots 1.0 (the 1.56) and
+   settles. On a tab you are already on, that IS the pop, with no JS at all.
+
+   ARRIVING: a tap that changes screens rebuilds this whole bar (see
+   BottomNav.jsx), which would kill a press animation halfway through — so
+   the destination icon plays `kc-nav-pop` fresh on mount instead. Its 120ms
+   delay lands the pop as the pill arrives underneath it, rather than while
+   it is still travelling. */
+.kc-nav-icon {
+  display: inline-flex;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.kc-nav-cell:active .kc-nav-icon {
+  transform: scale(0.82);
+  transition: transform 90ms ease-out;
+}
+@keyframes kc-nav-pop {
+  0%   { transform: scale(0.74); }
+  55%  { transform: scale(1.11); }
+  100% { transform: scale(1); }
+}
+.kc-nav-pop {
+  animation: kc-nav-pop 340ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kc-nav-pill { transition: none; }
+  .kc-nav-cell { transition: none; }
+  .kc-nav-icon { transition: none; }
+  .kc-nav-pop  { animation: none; }
+  .kc-nav-cell:active .kc-nav-icon { transform: none; }
+}
+
 /* ── BeatEditor grid — narrow-screen horizontal scroll ──
    Below 480px the editor's `1fr` cell tracks shrink well under the 44px touch
    target, so each block becomes ONE horizontal scroll container: the numbers,

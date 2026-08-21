@@ -8,6 +8,7 @@ import Splash from "./Splash.jsx";
 import BottomNav from "./ui/BottomNav.jsx";
 import HomeView from "./views/HomeView.jsx";
 import BeatsView from "./views/BeatsView.jsx";
+import LearnView from "./views/LearnView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
 import { readShareFromLocation } from "./data/shareCodec.js";
 
@@ -39,7 +40,7 @@ function App() {
   // A share link lands the user in the library, where the beat it carries is
   // about to be offered to them. The splash gate below still comes first, so
   // the audio-unlock gesture is never skipped.
-  const [view, setView] = useState(INBOUND_SHARE ? "beats" : "home"); // "home" | "beats" | "editor" | "settings"
+  const [view, setView] = useState(INBOUND_SHARE ? "beats" : "home"); // "home" | "beats" | "editor" | "learn" | "settings"
   const [pendingShare, setPendingShare] = useState(INBOUND_SHARE);
   const [entered, setEntered] = useState(false); // splash shown until Begin
   const [beatId, setBeatId] = useState(BEATS[0].id);
@@ -170,6 +171,7 @@ function App() {
       onHome={() => setView("home")}
       onBeats={() => setView("beats")}
       onEditor={openNewBeat}
+      onLearn={() => setView("learn")}
       onSettings={() => setView("settings")}
     />
   );
@@ -201,6 +203,10 @@ function App() {
         nav={bottomNav}
       />
     );
+  }
+
+  if (view === "learn") {
+    return <LearnView onBack={() => setView("home")} nav={bottomNav} />;
   }
 
   if (view === "settings") {
