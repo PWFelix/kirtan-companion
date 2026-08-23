@@ -14,6 +14,10 @@ import {
   ChevronRightIcon, SearchIcon, BackIcon,
 } from "../ui/icons.jsx";
 import { encodeBeat, encodeCategory, decodeShare, codeFromInput, shareUrl } from "../data/shareCodec.js";
+import {
+  browse as browseCommunity, publish as publishCommunity,
+  incrementCopies, toImportPayload,
+} from "../storage/communityClient.js";
 
 // Whether the platform has a native share sheet (iOS/Android do, most
 // desktop browsers don't). Checked once — it can't change mid-session.
@@ -62,7 +66,7 @@ function SortableRow({ id, children }) {
 function BeatsView({
   library, beat, beatId, ready,
   onSelect, onStart, onStartBeat, onEdit, onNewBeat, onDeleteBeat,
-  pendingShare, onImportShare, onDismissShare, nav,
+  pendingShare, onImportShare, onDismissShare, auth, onRequestAuth, nav,
 }) {
   const {
     allBeats, customBeats, isCustomBeat, categories, categoryBeats, catName,
@@ -93,6 +97,62 @@ function BeatsView({
   const [confirmAction, setConfirmAction] = useState(null);
   const askConfirm = (message, label, onConfirm) =>
     setConfirmAction({ message, label, onConfirm });
+
+  // ── Community library (Browse page) ────────────────────────────────────
+  const signedIn = Boolean(auth?.configured && auth?.user);
+  const [community, setCommunity] = useState([]);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [communityError, setCommunityError] = useState("");
+  const [communityQuery, setCommunityQuery] = useState("");
+  const [copiedId, setCopiedId] = useState(null);       // "Added" flash on a card
+  // Publish-from-share state: null | "publishing" | "done" | an error string.
+  const [publishState, setPublishState] = useState(null);
+
+  // Load the community list when the Browse page is open and the user is
+  // signed in. Debounced so typing in the search box doesn't fire a request
+  // per keystroke; cancelled if the page changes or a newer query supersedes.
+  useEffect(() => {
+    if (page.name !== "browse" || !signedIn) return;
+    let cancelled = false;
+    // Everything runs inside the timer, so no state is set synchronously
+    // during the effect (which would cascade renders).
+    const t = setTimeout(() => {
+      if (cancelled) return;
+      setCommunityLoading(true);
+      setCommunityError("");
+      browseCommunity({ query: communityQuery })
+        .then((rows) => { if (!cancelled) setCommunity(rows); })
+        .catch((err) => { if (!cancelled) setCommunityError(err.message || "Couldn't load the community library."); })
+        .finally(() => { if (!cancelled) setCommunityLoading(false); });
+    }, communityQuery ? 300 : 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [page.name, signedIn, communityQuery]);
+
+  // Copy a community item into the library (an import), then best-effort bump
+  // its copy counter. The card flashes "Added" briefly.
+  async function copyCommunity(row) {
+    const result = await onImportShare(toImportPayload(row));
+    if (result?.beats?.length) {
+      incrementCopies(row.id);
+      setCopiedId(row.id);
+      setTimeout(() => setCopiedId((id) => (id === row.id ? null : id)), 1600);
+    }
+  }
+
+  // Publish whatever the share sheet is showing to the community library.
+  async function handlePublish() {
+    if (!signedIn) { onRequestAuth?.(); return; }
+    setPublishState("publishing");
+    try {
+      await publishCommunity(shareTarget, { authorId: auth.user.id, authorName: auth.displayName });
+      setPublishState("done");
+    } catch (err) {
+      setPublishState(err.message || "Couldn't publish that. Try again.");
+    }
+  }
+  // Opening the share sheet starts with a clean publish state — reset here
+  // rather than in an effect so no state is set synchronously on render.
+  const openShare = (target) => { setShareTarget(target); setPublishState(null); };
 
   // The category the "category" page is showing, resolved to the live object
   // (null on the two fixed pages and everywhere off a user category). The
@@ -174,6 +234,7 @@ function BeatsView({
   }
   function closeShare() {
     setShareTarget(null);
+    setPublishState(null);
     clearTimeout(copiedTimer.current);
     setCopied(null);
   }
@@ -373,11 +434,80 @@ function BeatsView({
     );
   }
 
+  // A published beat/playlist as a card — preview, author, copy count, and an
+  // Add button that imports it into the user's own library.
+  function communityCard(row) {
+    const added = copiedId === row.id;
+    const count = row.kind === "playlist" ? row.payload?.beats?.length ?? 0 : 0;
+    return (
+      <div key={row.id} style={st.beatRow}>
+        <div style={sh.beatRowTop}>
+          <div style={st.beatRowSelect}>
+            <span style={sh.beatRowName}>{row.name}</span>
+            <span style={sh.beatRowMeta}>
+              {row.kind === "beat" ? "Beat" : `Playlist · ${count} beats`} · by {row.author_name}
+              {row.copies ? ` · ${row.copies} ${row.copies === 1 ? "copy" : "copies"}` : ""}
+            </span>
+          </div>
+          <button onClick={() => copyCommunity(row)} disabled={added}
+            aria-label={`Add ${row.name} to your library`}
+            style={{ ...st.addChip, ...(added ? st.addChipDone : null) }}>
+            {added ? "Added" : "+ Add"}
+          </button>
+        </div>
+        {row.kind === "beat" && row.payload?.beat && <BeatStrip beat={row.payload.beat} mini />}
+      </div>
+    );
+  }
+
   // ── Browse page ────────────────────────────────────────────────────────
   function renderBrowse() {
     return (
       <>
-        {/* The paste box is the one thing to DO here, so it leads. */}
+        {/* Account status leads the page — sign in is the gate to everything
+            community below it. */}
+        {auth?.configured && (
+          <div style={st.accountRow}>
+            {signedIn ? (
+              <>
+                <span style={sh.beatRowMeta}>Signed in as {auth.displayName}</span>
+                <button onClick={auth.signOut} style={st.linkBtn}>Sign out</button>
+              </>
+            ) : (
+              <button onClick={onRequestAuth} style={st.sheetStartBtn}>
+                Sign in to browse &amp; share
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* The community library — only when signed in. */}
+        {signedIn && (
+          <>
+            <div style={st.searchField}>
+              <span style={st.searchIcon}><SearchIcon /></span>
+              <input type="text" value={communityQuery}
+                onChange={(e) => setCommunityQuery(e.target.value)}
+                placeholder="Search the community" aria-label="Search the community library"
+                style={st.searchInput} />
+              {communityQuery && (
+                <button onClick={() => setCommunityQuery("")} aria-label="Clear search" style={st.searchClear}>×</button>
+              )}
+            </div>
+            {communityLoading && <p style={sh.emptyHint}>Loading…</p>}
+            {communityError && <p style={st.codeError} role="alert">{communityError}</p>}
+            {!communityLoading && !communityError && community.length === 0 && (
+              <p style={sh.emptyHint}>
+                {communityQuery
+                  ? `Nothing shared matches “${communityQuery.trim()}”.`
+                  : "Nothing shared yet — be the first. Open any beat, tap Share, and choose “Publish to community”."}
+              </p>
+            )}
+            {!communityLoading && community.map(communityCard)}
+          </>
+        )}
+
+        {/* Paste a code — always available, works signed out and offline. */}
         <div style={st.pasteRow}>
           <input type="text" value={codeInput}
             onChange={(e) => { setCodeInput(e.target.value); setCodeError(""); }}
@@ -392,9 +522,9 @@ function BeatsView({
         </div>
         {codeError && <p style={st.codeError} role="alert">{codeError}</p>}
         <p style={sh.emptyHint}>
-          A library of beats and playlists shared by other devotees is coming.
-          Until then, this is where a beat someone sent you comes in — paste
-          their code or link above. Opening a share link does the same thing.
+          {auth?.configured
+            ? "A beat someone sent you directly comes in here — paste their code or link. Opening a share link does the same thing."
+            : "This is where a beat someone sent you comes in — paste their code or link above. Opening a share link does the same thing."}
         </p>
       </>
     );
@@ -441,7 +571,7 @@ function BeatsView({
         {/* Every edit control for the progression, at the top. */}
         <div style={st.pageActions}>
           <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>+ Add beats</button>
-          <button onClick={() => setShareTarget({
+          <button onClick={() => openShare({
               kind: "category", name: browsedCat.name, beats,
             })}
             disabled={beats.length === 0}
@@ -535,7 +665,7 @@ function BeatsView({
                   Edit/Start keep their 1:2 balance — three buttons squeezed
                   into one row makes "Customize" too narrow to read. */}
               <div style={st.sheetHeadBtns}>
-                <button onClick={() => setShareTarget({ kind: "beat", beat: detailBeat })}
+                <button onClick={() => openShare({ kind: "beat", beat: detailBeat })}
                   aria-label={`Share ${detailBeat.name}`} style={st.sheetHeadBtn}>
                   <ShareIcon />
                 </button>
@@ -662,6 +792,28 @@ function BeatsView({
             <input ref={linkInputRef} type="text" readOnly value={shareLink}
               onFocus={(e) => e.target.select()} aria-label="Share link"
               style={{ ...st.catNameInput, marginTop: "var(--space-4)", width: "100%" }} />
+
+            {/* Publish to the community library — only when the backend is set
+                up. Signed out, it routes to sign-in first. */}
+            {auth?.configured && (
+              <div style={st.publishRow}>
+                <button onClick={handlePublish} disabled={publishState === "publishing" || publishState === "done"}
+                  style={{ ...st.sheetStartBtn, ...st.iconLabel, flex: "1 0 100%",
+                    opacity: publishState === "publishing" ? 0.6 : 1 }}>
+                  <GlobeIcon size={18} />
+                  {publishState === "publishing" ? "Publishing…"
+                    : publishState === "done" ? "Published to community"
+                    : signedIn ? "Publish to community" : "Sign in to publish"}
+                </button>
+                {typeof publishState === "string" && publishState !== "publishing" && publishState !== "done" && (
+                  <p style={st.codeError} role="alert">{publishState}</p>
+                )}
+                {publishState === "done" && (
+                  <p style={sh.emptyHint}>Anyone can now find this under Browse.</p>
+                )}
+              </div>
+            )}
+
             <div style={st.shareActions}>
               {/* Native share takes its own row (flexBasis 100%) so the two
                   copy buttons get half a sheet each rather than a third. */}
@@ -802,6 +954,13 @@ const st = {
   addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
   deleteCatBtn: { flexShrink: 0, minHeight: 46, padding: "0 14px", borderRadius: 14, border: "none", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 600, cursor: "pointer" },
   catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
+
+  // ── Community (Browse) ──
+  accountRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", minHeight: 44 },
+  linkBtn: { flexShrink: 0, border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  addChip: { flexShrink: 0, minHeight: 40, padding: "0 16px", borderRadius: 999, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  addChipDone: { background: "transparent", color: "var(--syahi-soft)", border: "var(--rule-hairline)", cursor: "default" },
+  publishRow: { display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-4)" },
 
   // ── Sharing ──
   pasteRow: { display: "flex", gap: "var(--space-3)" },

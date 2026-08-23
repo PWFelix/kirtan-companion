@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { BEATS } from "./data/beats.js";
 import { useTransport } from "./hooks/useTransport.js";
 import { useBeatLibrary } from "./hooks/useBeatLibrary.js";
 import { useLandscape } from "./hooks/useLandscape.js";
+import { useAuth } from "./hooks/useAuth.js";
+import { beatsProvider } from "./storage/index.js";
+import { createSupabaseProvider } from "./storage/supabaseProvider.js";
 import BeatEditor from "./BeatEditor.jsx";
 import Splash from "./Splash.jsx";
 import BottomNav from "./ui/BottomNav.jsx";
+import AuthSheet from "./ui/AuthSheet.jsx";
 import HomeView from "./views/HomeView.jsx";
 import BeatsView from "./views/BeatsView.jsx";
 import LearnView from "./views/LearnView.jsx";
@@ -34,8 +38,26 @@ const INBOUND_SHARE = readShareFromLocation();
  */
 function App() {
   const transport = useTransport();
-  const library = useBeatLibrary();
+  const auth = useAuth();
+  // The storage seam: signed in on a configured project → the user's cloud
+  // library; otherwise this device's localStorage. useBeatLibrary reloads
+  // whenever this identity changes, so signing in swaps device → cloud live
+  // (and signing out swaps back). Memoised on the user id so it's a stable
+  // object across renders and only rebuilds on a real identity change.
+  const provider = useMemo(
+    () => (auth.configured && auth.user ? createSupabaseProvider(auth.user.id) : beatsProvider),
+    // Keyed on the id, not the user object: a new object for the same user
+    // must NOT rebuild the provider (it would refetch the whole library).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [auth.configured, auth.user?.id],
+  );
+  const library = useBeatLibrary(provider);
   const isLandscape = useLandscape();
+
+  // The sign-in sheet. App owns it because auth spans every screen, not just
+  // Beats. Rendering is gated on being signed OUT (below), so a session
+  // landing makes the sheet vanish without a setState-in-effect.
+  const [authOpen, setAuthOpen] = useState(false);
 
   // A share link lands the user in the library, where the beat it carries is
   // about to be offered to them. The splash gate below still comes first, so
@@ -189,22 +211,27 @@ function App() {
 
   if (view === "beats") {
     return (
-      <BeatsView
-        library={library}
-        beat={beat}
-        beatId={beatId}
-        ready={transport.ready}
-        onSelect={selectBeat}
-        onStart={startCurrent}
-        onStartBeat={startFromDetail}
-        onEdit={(b) => openEditBeat(b, "beats")}
-        onNewBeat={() => openNewBeat("beats")}
-        onDeleteBeat={handleDeleteBeat}
-        pendingShare={pendingShare}
-        onImportShare={handleImportShare}
-        onDismissShare={() => setPendingShare(null)}
-        nav={bottomNav}
-      />
+      <>
+        <BeatsView
+          library={library}
+          beat={beat}
+          beatId={beatId}
+          ready={transport.ready}
+          onSelect={selectBeat}
+          onStart={startCurrent}
+          onStartBeat={startFromDetail}
+          onEdit={(b) => openEditBeat(b, "beats")}
+          onNewBeat={() => openNewBeat("beats")}
+          onDeleteBeat={handleDeleteBeat}
+          pendingShare={pendingShare}
+          onImportShare={handleImportShare}
+          onDismissShare={() => setPendingShare(null)}
+          auth={auth}
+          onRequestAuth={() => setAuthOpen(true)}
+          nav={bottomNav}
+        />
+        {authOpen && !auth.user && <AuthSheet auth={auth} onClose={() => setAuthOpen(false)} />}
+      </>
     );
   }
 
