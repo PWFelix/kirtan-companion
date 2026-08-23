@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Secrets — Supabase keys live here. The template (.env.example) IS committed.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
