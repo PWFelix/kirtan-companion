@@ -264,6 +264,71 @@ export function useBeatLibrary(provider = beatsProvider) {
     }
   }
 
+  /**
+   * Bulk-move a whole local library into the current store — the first-sign-in
+   * "bring your on-device beats to your account" step.
+   *
+   * It's importShared writ large, and for the same reason: uploading beats
+   * mints FRESH ids, so any playlist that referenced a local beat by its old
+   * id has to be repointed to the new one. Built-in ids (a playlist can hold
+   * "te-ta" alongside a custom uuid) pass straight through — they're the same
+   * everywhere. Names are de-duped against what the account already holds.
+   *
+   * Resolves with a { beats, categories } count of what actually landed, so the
+   * prompt can say "moved 4 beats and 2 playlists".
+   */
+  async function importLibrary({ beats: localBeats = [], categories: localCats = [] }) {
+    if (localBeats.length === 0 && localCats.length === 0) {
+      return { beats: 0, categories: 0 };
+    }
+
+    // 1) Beats. Keep the old ids parallel to the drafts so the returned rows
+    //    (same order) give us an old→new id map for the playlists below.
+    const takenBeatNames = new Set(allBeats.map((b) => b.name));
+    const oldIds = localBeats.map((b) => b.id);
+    const drafts = localBeats.map((b) => {
+      // Drop the local id (the store mints a fresh one) and any readOnly tag.
+      const { id, readOnly, ...rest } = b; // eslint-disable-line no-unused-vars
+      return { ...rest, name: uniqueName(rest.name, takenBeatNames) };
+    });
+
+    let created = [];
+    try {
+      if (drafts.length) {
+        created = await provider.createBeats(drafts);
+        setCustomBeats((list) => [...list, ...created]);
+      }
+    } catch (err) {
+      console.error("[library] migration: beats failed", err);
+      setError(storageErrorMessage(err));
+      return { beats: 0, categories: 0, error: true };
+    }
+
+    const idMap = new Map();
+    oldIds.forEach((oldId, i) => { if (created[i]) idMap.set(oldId, created[i].id); });
+
+    // 2) Playlists, with their beat ids repointed. A custom id maps to its new
+    //    cloud id; anything not in the map (a built-in id) is left as-is.
+    const takenCatNames = new Set(categories.map((c) => c.name));
+    let madeCats = 0;
+    try {
+      for (const c of localCats) {
+        const beatIds = (c.beatIds ?? []).map((id) => idMap.get(id) ?? id);
+        const cat = await provider.createCategory({
+          name: uniqueName(c.name, takenCatNames), beatIds,
+        });
+        setCategories((list) => [...list, cat]);
+        madeCats++;
+      }
+      setError(null);
+    } catch (err) {
+      // The beats made it; only some grouping didn't. Say so, keep the rest.
+      console.error("[library] migration: a playlist failed", err);
+      setError(storageErrorMessage(err));
+    }
+    return { beats: created.length, categories: madeCats };
+  }
+
   /** Creates the category and resolves with its id (callers land the user in it). */
   async function createCategory(name) {
     try {
@@ -327,7 +392,7 @@ export function useBeatLibrary(provider = beatsProvider) {
   return {
     customBeats, allBeats, isCustomBeat,
     categories, activeCat, setActiveCat, categoryBeats, catName,
-    saveBeat, deleteBeat, importShared,
+    saveBeat, deleteBeat, importShared, importLibrary,
     createCategory, deleteCategory, toggleBeatInCategory, reorderCategory,
     loading, error, dismissError,
   };

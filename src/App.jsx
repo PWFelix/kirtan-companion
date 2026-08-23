@@ -4,12 +4,14 @@ import { useTransport } from "./hooks/useTransport.js";
 import { useBeatLibrary } from "./hooks/useBeatLibrary.js";
 import { useLandscape } from "./hooks/useLandscape.js";
 import { useAuth } from "./hooks/useAuth.js";
+import { useCloudMigration } from "./hooks/useCloudMigration.js";
 import { beatsProvider } from "./storage/index.js";
 import { createSupabaseProvider } from "./storage/supabaseProvider.js";
 import BeatEditor from "./BeatEditor.jsx";
 import Splash from "./Splash.jsx";
 import BottomNav from "./ui/BottomNav.jsx";
 import AuthSheet from "./ui/AuthSheet.jsx";
+import MigrationSheet from "./ui/MigrationSheet.jsx";
 import HomeView from "./views/HomeView.jsx";
 import BeatsView from "./views/BeatsView.jsx";
 import LearnView from "./views/LearnView.jsx";
@@ -53,6 +55,9 @@ function App() {
   );
   const library = useBeatLibrary(provider);
   const isLandscape = useLandscape();
+  // Offers to move this device's guest beats into a freshly signed-in, empty
+  // account. Self-contained: it watches auth + library and drives its own sheet.
+  const migration = useCloudMigration({ auth, library });
 
   // The sign-in sheet. App owns it because auth spans every screen, not just
   // Beats. Rendering is gated on being signed OUT (below), so a session
@@ -231,6 +236,17 @@ function App() {
           nav={bottomNav}
         />
         {authOpen && !auth.user && <AuthSheet auth={auth} onClose={() => setAuthOpen(false)} />}
+        {(migration.pending || migration.done) && (
+          <MigrationSheet
+            counts={migration.counts}
+            done={migration.done}
+            busy={migration.busy}
+            error={migration.error}
+            onMigrate={migration.migrate}
+            onDismiss={migration.dismiss}
+            onAcknowledge={migration.acknowledge}
+          />
+        )}
       </>
     );
   }
