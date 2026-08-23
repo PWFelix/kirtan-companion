@@ -110,6 +110,16 @@ function BeatsView({
   );
 
   const goLanding = () => setPage({ name: "landing" });
+  // Back steps up one level: a playlist's page returns to the Playlists hub;
+  // everything else (the hub, Browse, the two fixed libraries) returns to the
+  // landing.
+  const back = () => {
+    if (page.name === "category" && page.id !== "builtin" && page.id !== "custom") {
+      setPage({ name: "playlists" });
+    } else {
+      goLanding();
+    }
+  };
 
   // The sheet closes straight away and the new category's page is opened once
   // the library confirms the id — which it mints, so there's nothing to open
@@ -125,7 +135,7 @@ function BeatsView({
   }
   function handleDeleteCategory(catId) {
     deleteCategory(catId);
-    goLanding();
+    setPage({ name: "playlists" });
   }
 
   // ── Sharing out ──────────────────────────────────────────────────────
@@ -243,7 +253,7 @@ function BeatsView({
             <button onPointerDown={stopPD} onClick={(e) => {
                 e.stopPropagation();
                 askConfirm(
-                  `Delete the beat “${b.name}”? This can't be undone, and it also leaves any categories it's in.`,
+                  `Delete the beat “${b.name}”? This can't be undone, and it also leaves any playlists it's in.`,
                   "Delete",
                   () => onDeleteBeat(b.id)
                 );
@@ -321,15 +331,44 @@ function BeatsView({
         </button>
 
         {categoryCard("builtin", "Ships with the app")}
-        {categoryCard("custom", "Built or saved by you")}
 
-        {/* New category — the add action, sitting between the two fixed
-            libraries above and the user's own progressions it creates below. */}
-        <button onClick={() => setCreateCatOpen(true)} style={st.newCatBtn}>
-          + New category
+        {/* Playlists — the user's own progressions live behind one card, so
+            the landing stays short. It sits between the two fixed libraries.
+            (Internally these are still "categories"; "playlist" is the name
+            the user sees.) */}
+        <button onClick={() => setPage({ name: "playlists" })}
+          aria-label={`Open Playlists, ${categories.length} ${categories.length === 1 ? "playlist" : "playlists"}`}
+          style={st.card}>
+          <div style={st.cardTitleWrap}>
+            <span style={st.cardTitle}>Playlists</span>
+            <span style={sh.beatRowMeta}>
+              Your kirtan progressions · {categories.length} {categories.length === 1 ? "playlist" : "playlists"}
+            </span>
+          </div>
+          <span style={st.chevron}><ChevronRightIcon /></span>
         </button>
 
-        {categories.map(c => categoryCard(c.id, "Progression"))}
+        {categoryCard("custom", "Built or saved by you")}
+      </>
+    );
+  }
+
+  // ── Playlists hub ──────────────────────────────────────────────────────
+  // Every user playlist, plus the add action at the top. Opening one drills
+  // into its own category page (which is why back from there returns here,
+  // not to the landing).
+  function renderPlaylists() {
+    return (
+      <>
+        <button onClick={() => setCreateCatOpen(true)} style={st.newCatBtn}>
+          + New playlist
+        </button>
+        {categories.length === 0
+          ? <p style={sh.emptyHint}>
+              No playlists yet. A playlist is a kirtan progression — an ordered
+              set of beats that Home's ‹ › moves through. Make one to start.
+            </p>
+          : categories.map(c => categoryCard(c.id, "Progression"))}
       </>
     );
   }
@@ -393,9 +432,9 @@ function BeatsView({
       );
     }
 
-    // A user category (progression). If it vanished under us (deleted in
-    // another tab), fall back to the landing rather than render nothing.
-    if (!browsedCat) { goLanding(); return null; }
+    // A user playlist (progression). If it vanished under us (deleted in
+    // another tab), fall back to the hub rather than render nothing.
+    if (!browsedCat) { setPage({ name: "playlists" }); return null; }
     const beats = categoryBeats(browsedCat.id);
     return (
       <>
@@ -412,7 +451,7 @@ function BeatsView({
             <ShareIcon />Share
           </button>
           <button onClick={() => askConfirm(
-              `Delete the category “${browsedCat.name}”? The beats themselves are kept.`,
+              `Delete the playlist “${browsedCat.name}”? The beats themselves are kept.`,
               "Delete",
               () => handleDeleteCategory(browsedCat.id)
             )}
@@ -447,6 +486,7 @@ function BeatsView({
   // library so a renamed category updates here too.
   const title = page.name === "landing" ? "Beats"
     : page.name === "browse" ? "Browse"
+    : page.name === "playlists" ? "Playlists"
     : catName(page.id);
 
   return (
@@ -454,7 +494,7 @@ function BeatsView({
       <header style={sh.subHeader}>
         {page.name === "landing"
           ? <span style={{ width: 44 }} aria-hidden="true" />
-          : <button onClick={goLanding} aria-label="Back to library" style={sh.backBtn}><BackIcon /></button>}
+          : <button onClick={back} aria-label="Back" style={sh.backBtn}><BackIcon /></button>}
         <h1 style={sh.subTitle}>{title}</h1>
         <span style={{ width: 44 }} aria-hidden="true" />
       </header>
@@ -473,6 +513,7 @@ function BeatsView({
 
       <section style={st.scroll}>
         {page.name === "landing" && renderLanding()}
+        {page.name === "playlists" && renderPlaylists()}
         {page.name === "browse" && renderBrowse()}
         {page.name === "category" && renderCategory()}
       </section>
@@ -526,14 +567,14 @@ function BeatsView({
       {/* New-category sheet — name it, create it, land in its page. */}
       {createCatOpen && (
         <div style={sh.sheetBackdrop} onClick={() => setCreateCatOpen(false)}>
-          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="New category"
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="New playlist"
             onClick={(e) => e.stopPropagation()}>
             <div style={sh.sheetHead}>
-              <h2 style={sh.sheetName}>New category</h2>
+              <h2 style={sh.sheetName}>New playlist</h2>
               <button onClick={() => setCreateCatOpen(false)} aria-label="Close" style={sh.sheetClose}>×</button>
             </div>
             <p style={sh.emptyHint}>
-              A category is a kirtan progression: an ordered set of beats that
+              A playlist is a kirtan progression: an ordered set of beats that
               Home's ‹ › will move through.
             </p>
             <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
