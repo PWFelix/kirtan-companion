@@ -267,7 +267,12 @@ export function useBeatLibrary(provider = beatsProvider) {
   /** Creates the category and resolves with its id (callers land the user in it). */
   async function createCategory(name) {
     try {
-      const cat = await provider.createCategory({ name, beatIds: [] });
+      // Same de-duping every beat gets: a second "Sunday kirtan" becomes
+      // "Sunday kirtan (2)" rather than a twin the user can't tell apart. The
+      // import path already did this (importShared); doing it here means the
+      // New-category sheet and a shared link both go through one rule.
+      const unique = uniqueName(name, new Set(categories.map((c) => c.name)));
+      const cat = await provider.createCategory({ name: unique, beatIds: [] });
       setCategories((list) => [...list, cat]);
       setError(null);
       return cat.id;
