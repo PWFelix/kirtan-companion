@@ -320,14 +320,15 @@ function BeatsView({
           <span style={st.chevron}><ChevronRightIcon /></span>
         </button>
 
-        {/* New category — the add action for the list of categories, so it
-            leads the group rather than trailing it. */}
+        {categoryCard("builtin", "Ships with the app")}
+        {categoryCard("custom", "Built or saved by you")}
+
+        {/* New category — the add action, sitting between the two fixed
+            libraries above and the user's own progressions it creates below. */}
         <button onClick={() => setCreateCatOpen(true)} style={st.newCatBtn}>
           + New category
         </button>
 
-        {categoryCard("builtin", "Ships with the app")}
-        {categoryCard("custom", "Built or saved by you")}
         {categories.map(c => categoryCard(c.id, "Progression"))}
       </>
     );
