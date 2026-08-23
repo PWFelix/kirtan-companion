@@ -88,10 +88,12 @@ function App() {
   // Opening the editor stops playback: it takes the engine over entirely.
 
   // Blank (new beat) — from the nav tab, so no Back.
-  function openNewBeat() {
+  // `returnTo` is the view Back should return to (a drill-in from Beats);
+  // null = launched from the nav, so no Back and Close lands Home.
+  function openNewBeat(returnTo = null) {
     transport.stop();
     setEditorInitial(null);
-    setEditorReturn(null);
+    setEditorReturn(returnTo);
     setView("editor");
   }
   // On a beat (defaults to the loaded one). `returnTo` is the view Back should
@@ -170,7 +172,7 @@ function App() {
       view={view}
       onHome={() => setView("home")}
       onBeats={() => setView("beats")}
-      onEditor={openNewBeat}
+      onEditor={() => openNewBeat()}
       onLearn={() => setView("learn")}
       onSettings={() => setView("settings")}
     />
@@ -196,6 +198,7 @@ function App() {
         onStart={startCurrent}
         onStartBeat={startFromDetail}
         onEdit={(b) => openEditBeat(b, "beats")}
+        onNewBeat={() => openNewBeat("beats")}
         onDeleteBeat={handleDeleteBeat}
         pendingShare={pendingShare}
         onImportShare={handleImportShare}
