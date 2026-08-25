@@ -356,8 +356,17 @@ function BeatsView({
   function renderLanding() {
     return (
       <>
-        {/* Search — the box is the whole point of the card, so it sits up top
-            with matches unfurling beneath it as you type. */}
+        {/* Browse — the community library leads the page. */}
+        <button onClick={() => setPage({ name: "browse" })}
+          aria-label="Open Browse" style={st.card}>
+          <div style={st.cardTitleWrap}>
+            <span style={st.cardTitleRow}><GlobeIcon size={18} />Browse</span>
+            <span style={sh.beatRowMeta}>Beats and playlists shared by other devotees</span>
+          </div>
+          <span style={st.chevron}><ChevronRightIcon /></span>
+        </button>
+
+        {/* Search — matches unfurl beneath the box as you type. */}
         <div style={st.searchCard}>
           <span style={st.cardTitle}>Search</span>
           <div style={st.searchField}>
@@ -380,16 +389,6 @@ function BeatsView({
             </div>
           )}
         </div>
-
-        {/* Browse — opens the community page (paste-a-code today). */}
-        <button onClick={() => setPage({ name: "browse" })}
-          aria-label="Open Browse" style={st.card}>
-          <div style={st.cardTitleWrap}>
-            <span style={st.cardTitleRow}><GlobeIcon size={18} />Browse</span>
-            <span style={sh.beatRowMeta}>Beats and playlists shared by other devotees</span>
-          </div>
-          <span style={st.chevron}><ChevronRightIcon /></span>
-        </button>
 
         {categoryCard("builtin", "Ships with the app")}
 
