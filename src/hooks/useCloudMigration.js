@@ -42,13 +42,14 @@ export function useCloudMigration({ auth, library }) {
     let cancelled = false;
     (async () => {
       const lib = await readLocalLibrary();
+      if (cancelled || !(cloudEmpty && hasLocalContent(lib))) return;
+      // Let the just-issued sign-in token age a beat before we offer to move
+      // things — the migrate write would otherwise be the first thing to hit
+      // the "JWT issued at future" clock-skew race the instant after login.
+      await new Promise((r) => setTimeout(r, 2500));
       if (cancelled) return;
-      // setState here is AFTER an await, so it isn't a synchronous cascade.
-      // Only an empty account with local beats gets the offer.
-      if (cloudEmpty && hasLocalContent(lib)) {
-        setLocal(lib);
-        setPending(true);
-      }
+      setLocal(lib);
+      setPending(true);
     })();
     return () => { cancelled = true; };
   }, [auth.user?.id, library.loading, cloudEmpty]);

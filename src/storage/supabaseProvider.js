@@ -24,6 +24,21 @@
 import { supabase } from "./supabaseClient.js";
 import { StorageError } from "./BeatsProvider.js";
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The clock-skew race. Right after sign-in the access token's "issued at" is
+ * NOW; if the database node validating it runs a second or two behind the node
+ * that minted it, it reads the token as issued in the future and rejects the
+ * request ("JWT issued at future"). It's a tiny difference between Supabase's
+ * own servers and it clears itself within seconds, so one delayed retry hides
+ * it — this fires on the very first read at sign-in more than anywhere.
+ */
+function isClockSkew(err) {
+  const msg = (err?.message || "").toLowerCase();
+  return msg.includes("issued at future") || (msg.includes("jwt") && msg.includes("future"));
+}
+
 // A Postgres/PostgREST failure, mapped to the code the app branches on.
 function mapError(error, whileDoing) {
   const code = error?.code;
@@ -35,17 +50,29 @@ function mapError(error, whileDoing) {
   return new StorageError("unknown", `Couldn't save ${whileDoing}. ${error?.message ?? ""}`.trim(), error);
 }
 
-// Await a Supabase query, converting both a rejected fetch (offline) and a
-// returned `error` (rejected by the database) into a StorageError.
-async function run(query, whileDoing) {
-  let res;
-  try {
-    res = await query;
-  } catch (err) {
-    throw new StorageError("network", `Couldn't reach the server, so ${whileDoing} wasn't saved. Check your connection and try again.`, err);
+/**
+ * Run a Supabase query, converting a rejected fetch (offline) or a returned
+ * `error` (rejected by the database) into a StorageError.
+ *
+ * `build` is a FUNCTION that returns a fresh query, not a query — a Supabase
+ * query builder can only be awaited once, so retrying means rebuilding it.
+ * On a clock-skew rejection it waits and rebuilds once before giving up.
+ */
+async function run(build, whileDoing) {
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try {
+      res = await build();
+    } catch (err) {
+      if (attempt < 1 && isClockSkew(err)) { await sleep(2000); continue; }
+      throw new StorageError("network", `Couldn't reach the server, so ${whileDoing} wasn't saved. Check your connection and try again.`, err);
+    }
+    if (res.error) {
+      if (attempt < 1 && isClockSkew(res.error)) { await sleep(2000); continue; }
+      throw mapError(res.error, whileDoing);
+    }
+    return res.data;
   }
-  if (res.error) throw mapError(res.error, whileDoing);
-  return res.data;
 }
 
 const rowToBeat = (row) => ({ id: row.id, ...row.data });
@@ -60,11 +87,11 @@ export function createSupabaseProvider(userId) {
   return {
     async loadAll() {
       const [beats, playlists, profile] = await Promise.all([
-        run(supabase.from("beats").select("id, name, data").eq("user_id", userId).order("created_at"), "your beats"),
-        run(supabase.from("playlists").select("id, name, beat_ids").eq("user_id", userId).order("created_at"), "your playlists"),
+        run(() => supabase.from("beats").select("id, name, data").eq("user_id", userId).order("created_at"), "your beats"),
+        run(() => supabase.from("playlists").select("id, name, beat_ids").eq("user_id", userId).order("created_at"), "your playlists"),
         // maybeSingle: a brand-new user may not have a profile row yet (the
         // trigger normally makes one). Absent → fall back to the built-ins.
-        run(supabase.from("profiles").select("active_category_id").eq("id", userId).maybeSingle(), "your settings"),
+        run(() => supabase.from("profiles").select("active_category_id").eq("id", userId).maybeSingle(), "your settings"),
       ]);
       return {
         beats: (beats ?? []).map(rowToBeat),
@@ -75,7 +102,7 @@ export function createSupabaseProvider(userId) {
 
     async createBeat(draft) {
       const row = await run(
-        supabase.from("beats").insert({ user_id: userId, name: draft.name, data: beatBody(draft) }).select("id, name, data").single(),
+        () => supabase.from("beats").insert({ user_id: userId, name: draft.name, data: beatBody(draft) }).select("id, name, data").single(),
         "that beat",
       );
       return rowToBeat(row);
@@ -86,7 +113,7 @@ export function createSupabaseProvider(userId) {
     async createBeats(drafts) {
       if (drafts.length === 0) return [];
       const rows = await run(
-        supabase.from("beats")
+        () => supabase.from("beats")
           .insert(drafts.map((d) => ({ user_id: userId, name: d.name, data: beatBody(d) })))
           .select("id, name, data"),
         "those beats",
@@ -98,7 +125,7 @@ export function createSupabaseProvider(userId) {
     // jsonb blob is replaced wholesale rather than merged.
     async updateBeat(id, patch) {
       const row = await run(
-        supabase.from("beats").update({ name: patch.name, data: beatBody(patch) })
+        () => supabase.from("beats").update({ name: patch.name, data: beatBody(patch) })
           .eq("id", id).eq("user_id", userId).select("id, name, data").single(),
         "that beat",
       );
@@ -106,12 +133,12 @@ export function createSupabaseProvider(userId) {
     },
 
     async deleteBeat(id) {
-      await run(supabase.from("beats").delete().eq("id", id).eq("user_id", userId), "that change");
+      await run(() => supabase.from("beats").delete().eq("id", id).eq("user_id", userId), "that change");
     },
 
     async createCategory(draft) {
       const row = await run(
-        supabase.from("playlists").insert({ user_id: userId, name: draft.name, beat_ids: draft.beatIds ?? [] })
+        () => supabase.from("playlists").insert({ user_id: userId, name: draft.name, beat_ids: draft.beatIds ?? [] })
           .select("id, name, beat_ids").single(),
         "that playlist",
       );
@@ -125,7 +152,7 @@ export function createSupabaseProvider(userId) {
       if ("name" in patch) rowPatch.name = patch.name;
       if ("beatIds" in patch) rowPatch.beat_ids = patch.beatIds;
       const row = await run(
-        supabase.from("playlists").update(rowPatch).eq("id", id).eq("user_id", userId)
+        () => supabase.from("playlists").update(rowPatch).eq("id", id).eq("user_id", userId)
           .select("id, name, beat_ids").single(),
         "that playlist",
       );
@@ -133,14 +160,14 @@ export function createSupabaseProvider(userId) {
     },
 
     async deleteCategory(id) {
-      await run(supabase.from("playlists").delete().eq("id", id).eq("user_id", userId), "that change");
+      await run(() => supabase.from("playlists").delete().eq("id", id).eq("user_id", userId), "that change");
     },
 
     // Upsert so the row is created on first use even if the new-user trigger
     // never ran — a preference should never fail for a missing profile.
     async setActiveCategory(id) {
       await run(
-        supabase.from("profiles").upsert({ id: userId, active_category_id: id }, { onConflict: "id" }),
+        () => supabase.from("profiles").upsert({ id: userId, active_category_id: id }, { onConflict: "id" }),
         "that change",
       );
     },

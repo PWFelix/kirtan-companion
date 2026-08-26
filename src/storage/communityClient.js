@@ -27,18 +27,33 @@ function ensureClient() {
   }
 }
 
-async function run(query, whileDoing) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Same clock-skew race as the provider: a brand-new sign-in token can look
+// "issued at future" to a database node a second behind. One delayed retry.
+function isClockSkew(err) {
+  const msg = (err?.message || "").toLowerCase();
+  return msg.includes("issued at future") || (msg.includes("jwt") && msg.includes("future"));
+}
+
+// `build` returns a fresh query (a Supabase builder can only be awaited once,
+// so a retry has to rebuild it).
+async function run(build, whileDoing) {
   ensureClient();
-  let res;
-  try {
-    res = await query;
-  } catch (err) {
-    throw new StorageError("network", `Couldn't reach the community library, so ${whileDoing} failed. Check your connection.`, err);
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try {
+      res = await build();
+    } catch (err) {
+      if (attempt < 1 && isClockSkew(err)) { await sleep(2000); continue; }
+      throw new StorageError("network", `Couldn't reach the community library, so ${whileDoing} failed. Check your connection.`, err);
+    }
+    if (res.error) {
+      if (attempt < 1 && isClockSkew(res.error)) { await sleep(2000); continue; }
+      throw new StorageError("unknown", `Couldn't ${whileDoing}. ${res.error.message ?? ""}`.trim(), res.error);
+    }
+    return res.data;
   }
-  if (res.error) {
-    throw new StorageError("unknown", `Couldn't ${whileDoing}. ${res.error.message ?? ""}`.trim(), res.error);
-  }
-  return res.data;
 }
 
 /**
@@ -58,7 +73,7 @@ export async function publish(target, { authorId, authorName }) {
     payload: isBeat ? { beat: target.beat } : { name: target.name, beats: target.beats },
   };
   const data = await run(
-    supabase.from("published_beats").insert(row).select("id, author_name, kind, name, copies, created_at").single(),
+    () => supabase.from("published_beats").insert(row).select("id, author_name, kind, name, copies, created_at").single(),
     "publish that",
   );
   return data;
@@ -70,28 +85,31 @@ export async function publish(target, { authorId, authorName }) {
  * the real pattern without a second request.
  */
 export async function browse({ query = "", limit = 40 } = {}) {
-  let q = supabase
-    .from("published_beats")
-    .select("id, author_name, kind, name, payload, copies, created_at")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (query.trim()) q = q.ilike("name", `%${query.trim()}%`);
-  return (await run(q, "load the community library")) ?? [];
+  const build = () => {
+    let q = supabase
+      .from("published_beats")
+      .select("id, author_name, kind, name, payload, copies, created_at")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (query.trim()) q = q.ilike("name", `%${query.trim()}%`);
+    return q;
+  };
+  return (await run(build, "load the community library")) ?? [];
 }
 
 /** Everything the signed-in user has published, so they can unpublish it. */
 export async function myPublished(authorId) {
-  const q = supabase
+  const build = () => supabase
     .from("published_beats")
     .select("id, kind, name, copies, created_at")
     .eq("author_id", authorId)
     .order("created_at", { ascending: false });
-  return (await run(q, "load your shared beats")) ?? [];
+  return (await run(build, "load your shared beats")) ?? [];
 }
 
 /** Remove a published item. RLS lets only its author through. */
 export async function unpublish(id) {
-  await run(supabase.from("published_beats").delete().eq("id", id), "unpublish that");
+  await run(() => supabase.from("published_beats").delete().eq("id", id), "unpublish that");
 }
 
 /** Bump the copy counter when someone adds a community item to their library. */
