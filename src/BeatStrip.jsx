@@ -57,11 +57,21 @@ function BeatStrip({
   const loopBarRef = useRef(null);
   const loopWinRef = useRef(null);
 
-  // Mini strips show only PRIMARY lanes (the beat's rhythmic identity);
-  // see lanes.js for the reasoning. Full strips render everything.
-  const lanes = LANES.filter(
-    (l) => Array.isArray(beat[l.id]) && (!mini || l.primary !== false)
-  );
+  // Which lanes to draw:
+  //   • Mini strips show only PRIMARY lanes (the beat's rhythmic identity) —
+  //     see lanes.js for the reasoning.
+  //   • Full strips always draw the primary lanes, but draw a NON-primary lane
+  //     (kartal, melody…) only when the beat actually has a hit in it. This
+  //     keeps a beat with no cymbals from sprouting an empty brass row —
+  //     notably shared/imported beats, which the codec hands an all-rest array
+  //     for every lane whether the sender used it or not.
+  const lanes = LANES.filter((l) => {
+    if (!Array.isArray(beat[l.id])) return false;
+    const isPrimary = l.primary !== false;
+    if (mini) return isPrimary;
+    if (isPrimary) return true;
+    return beat[l.id].some((c) => c != null);
+  });
   const cpg =
     beat.cellsPerGroup ??
     Math.max(1, Math.round(beat.steps / (beat.beatsPerBar ?? 4)));

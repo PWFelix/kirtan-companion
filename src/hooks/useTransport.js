@@ -53,6 +53,11 @@ export function useTransport() {
       dayan_closed: "/sounds/dayan_closed.wav",
       bayan_open:   "/sounds/bayan_open.wav",
       bayan_closed: "/sounds/bayan_closed.wav",
+      // Only the KEYS matter here — SoundPlayer resolves the real files from
+      // its own STROKE_SAMPLES map. Registering the kartal strokes is what
+      // makes them audible once the recordings land in public/sounds/kartal/.
+      kartal_open:   "/sounds/kartal_open.wav",
+      kartal_closed: "/sounds/kartal_closed.wav",
     });
     engine.on("ready",   () => setReady(true));
     engine.on("started", () => setPlaying(true));

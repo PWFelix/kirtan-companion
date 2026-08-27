@@ -6,8 +6,12 @@
  *
  * FORMAT:
  *   id, name, note, bpm, steps, beatsPerBar, cellsPerGroup
- *   dayan - small end (right hand): "O" open, "X" closed, null silent
- *   bayan - big end   (left hand):  "O" open, "X" closed, null silent
+ *   dayan  - small end (right hand): "O" open, "X" closed, null silent
+ *   bayan  - big end   (left hand):  "O" open, "X" closed, null silent
+ *   kartal - karatalas (hand cymbals), OPTIONAL: "O" ring, "X" damped, null.
+ *            Here the standard "1-2-3": ring on the first three pulses of the
+ *            bar, silent on the fourth — the congregation's timekeeper. A beat
+ *            without a kartal line simply has no cymbal row.
  *
  * BPM = quarter-note PULSE (the 1-2-3-4 you'd clap along to).
  * beatsPerBar = how many of those pulses make one bar.
@@ -37,6 +41,7 @@ export const BEATS = [
     //        1     +     2     +     3     +     4     +
     dayan: ["X",  "O",  "X",  "O",  "X",  "O",  "X",  "O"],
     bayan: ["O",  null, null,  "X", null,  "O", "O",  null],
+    kartal:["O",  null, "O",  null, "O",  null, null, null],
   },
   {
     id: "forward", group: "Everyday", name: "Forward", note: "Everyday", bpm: 90, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
@@ -44,6 +49,7 @@ export const BEATS = [
     //        1     +     2     +     3     +     4     +
     dayan: ["X",  null,  "O",  "O",  "X",  null,  "O", "O"],
     bayan: ["O",  null, null,  "X", null,  "O", "O",  null],
+    kartal:["O",  null, "O",  null, "O",  null, null, null],
   },
   {
     id: "backward", group: "Everyday", name: "Backward", note: "Variation", bpm: 90, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
@@ -51,6 +57,7 @@ export const BEATS = [
     //        1     +     2     +     3     +     4     +
     dayan: ["O",  "O",  "O",  "O",  "X",  "O",  null, null],
     bayan: ["O",  null, "X",  null, "O",  null, "O",  null],
+    kartal:["O",  null, "O",  null, "O",  null, null, null],
   },
   {
     id: "funky_swing", group: "Everyday", name: "Funky Swing", note: "Lively", bpm: 95, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
@@ -58,6 +65,7 @@ export const BEATS = [
     //        1     +     2     +     3     +     4     +
     dayan: ["O",  "X",  "X",  "O",  "X",  "X",  null, null],
     bayan: ["O",  null, "X",  null, "O",  null, "O",  null],
+    kartal:["O",  null, "O",  null, "O",  null, null, null],
   },
   {
     id: "da_ge_te_te", group: "Building up", name: "Da Ge Te Te", note: "Build up", bpm: 110, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
@@ -65,6 +73,7 @@ export const BEATS = [
     //        1     +     2     +     3     +     4     +
     dayan: ["X",  "O",  "X",  "O",  "X",  "O",  "X",  "O"],
     bayan: ["O",  "O",  "X",  null, "O",  null, "O",  null],
+    kartal:["O",  null, "O",  null, "O",  null, null, null],
   },
   {
     id: "prabhupada", group: "Gentle", name: "Prabhupada", note: "Gentle", bpm: 65, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
@@ -72,6 +81,7 @@ export const BEATS = [
     //        1     +     2     +     3     +     4     +
     dayan: ["X",  "O",  "X",  "O",  "X",  "O",  "X",  "O"],
     bayan: [null, null, null, null, "X",  "X",  "O",  "O"],
+    kartal:["O",  null, "O",  null, "O",  null, null, null],
   },
 
   // ── Double-time sample (16 steps) ──
@@ -82,6 +92,8 @@ export const BEATS = [
     //        1    e    +    a    2    e    +    a    3    e    +    a    4    e    +    a
     dayan: ["X", null, "O", "O", "X", null, "O", "O", "X", null, "O", "O", "X", null, "O", "O"],
     bayan: ["O", null, null, "X",null, "O","O",null,"O", null,null, "X",null, "O","O",null],
+    // 1-2-3 lands on the quarter-note pulses (steps 0, 4, 8), rest on 4 (12).
+    kartal:["O", null, null, null,"O", null,null,null,"O", null,null,null,null, null,null,null],
   },
 
   // ── Dadra taal sample (12 steps, felt as 4/4 with triplets) ──
@@ -96,5 +108,7 @@ export const BEATS = [
     //        1   trip let   2   trip let   3   trip let   4   trip let
     dayan: ["X", null, "O", null, "O", null, "X", null, "O", null, "O", null],
     bayan: ["O", null,null, "X",null,null,null, null,null, "O",null,null],
+    // 1-2-3 on the pulses (steps 0, 3, 6), rest on the fourth (9).
+    kartal:["O", null,null, "O",null,null,"O", null,null,null,null,null],
   },
 ];

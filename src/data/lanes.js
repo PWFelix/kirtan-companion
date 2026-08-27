@@ -23,7 +23,12 @@ export const LANES = [
   { id: "dayan", label: "Dayan", color: "var(--lane-dayan)", primary: true },
   { id: "bayan", label: "Bayan", color: "var(--lane-bayan)", primary: true },
 
-  // ── Ready for when these instruments are added ──
-  // { id: "kartal", label: "Kartal", color: "var(--lane-kartal)", primary: false },
+  // Karatalas (hand cymbals) — the congregation's timekeeper. NOT primary:
+  // they colour a beat, they don't define its rhythmic identity, so mini
+  // strips leave them out and the full strip only draws the row when a beat
+  // actually uses it (see BeatStrip's lane filter).
+  { id: "kartal", label: "Kartal", color: "var(--lane-kartal)", primary: false },
+
+  // ── Ready for when this instrument is added ──
   // { id: "melody", label: "Melody", color: "var(--lane-melody)", primary: false },
 ];

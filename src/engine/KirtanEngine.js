@@ -85,8 +85,8 @@ export class KirtanEngine extends EventEmitter {
     this._soundPlayer.setVolume(value);
   }
  /**
-   * Mute or unmute a drum end (for practice isolation).
-   * @param {"dayan"|"bayan"} end
+   * Mute or unmute an instrument channel (for practice isolation).
+   * @param {"dayan"|"bayan"|"kartal"} end
    * @param {boolean} muted
    */
   setEndMuted(end, muted) {
@@ -95,7 +95,7 @@ export class KirtanEngine extends EventEmitter {
 
   /**
    * Per-end volume — the mixer's track faders.
-   * @param {"dayan"|"bayan"} end
+   * @param {"dayan"|"bayan"|"kartal"} end
    * @param {number} value 0..1
    */
   setEndVolume(end, value) {

@@ -8,9 +8,11 @@ import { BOLS, COMBO_BOLS } from "./data/bols.js";
  * -------------------------------------
  * 1. OVERVIEW  — a mini BeatStrip of the WHOLE beat with a draggable frame
  *    showing which page the zoom is on; doubles as the live visualiser.
- * 2. ZOOM      — one page of cells, magnified, both mridanga lanes aligned
- *    in a column. The CURSOR is a column; tapping a cell moves it. A lane
- *    label above each row doubles as an "edit only this lane" toggle.
+ * 2. ZOOM      — one page of cells, magnified, the lanes aligned in a column
+ *    (the two mridanga heads, plus the karatalas when present). The CURSOR is
+ *    a column; tapping a cell moves it. A lane label above each row doubles as
+ *    an "edit only this lane" toggle — which is how the cymbal row is authored,
+ *    since the both-hands pads only write the drum.
  * 3. PADS      — one pad per enterable stroke (from data/bols.js). Tapping a
  *    pad writes the cursor column (or one lane when isolated), SOUNDS the
  *    sample(s), and advances the cursor.
@@ -121,6 +123,14 @@ const PAD_SETS = {
     { key: "khe", label: BOLS.bayan.X, write: { bayan: "X" } },
     { key: "rb",  label: "Rest",       write: { bayan: null }, rest: true },
   ],
+  // Karatalas are authored on their own (isolate the lane), so they only need
+  // an isolated pad set — ring, damped, rest. No "both" combo pads: the cymbal
+  // isn't struck together with a drum head under one bol.
+  kartal: [
+    { key: "kch", label: BOLS.kartal.O, write: { kartal: "O" } },
+    { key: "kdm", label: BOLS.kartal.X, write: { kartal: "X" } },
+    { key: "rk",  label: "Rest",        write: { kartal: null }, rest: true },
+  ],
 };
 
 function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
@@ -128,6 +138,11 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [meter, setMeter]   = useState(() => meterFor(seedGroups(initialBeat), seedCpq(initialBeat)));
   const [dayan, setDayan] = useState(initialBeat ? [...initialBeat.dayan] : emptyGrid(sum(seedGroups(initialBeat))));
   const [bayan, setBayan] = useState(initialBeat ? [...initialBeat.bayan] : emptyGrid(sum(seedGroups(initialBeat))));
+  // Kartal is optional on a beat, so an existing beat may not carry one —
+  // fall back to an empty grid of the same length as the drum lanes.
+  const [kartal, setKartal] = useState(
+    initialBeat?.kartal ? [...initialBeat.kartal] : emptyGrid(sum(seedGroups(initialBeat)))
+  );
   const [bpm, setBpm]     = useState(initialBeat?.bpm ?? 90);
   const [name, setName]   = useState(initialBeat?.name ?? "");
   const [previewing, setPreviewing] = useState(false);
@@ -153,22 +168,22 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const windowStart = page * zoomCells;
   const windowEnd = Math.min(windowStart + zoomCells, steps);
 
-  const previewBeat = { id: "preview", name: name || "Preview", note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan };
+  const previewBeat = { id: "preview", name: name || "Preview", note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan, kartal };
   const beatRef = useRef(previewBeat);
   useEffect(() => { beatRef.current = previewBeat; });
 
-  // Undo history of {dayan, bayan, cursor} snapshots.
+  // Undo history of {dayan, bayan, kartal, cursor} snapshots.
   const undoRef = useRef([]);
   const [canUndo, setCanUndo] = useState(false);
   function pushUndo() {
-    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], cursor });
+    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor });
     if (undoRef.current.length > 60) undoRef.current.shift();
     setCanUndo(true);
   }
   function undo() {
     const prev = undoRef.current.pop();
     if (!prev) return;
-    setDayan(prev.dayan); setBayan(prev.bayan); setCursor(prev.cursor);
+    setDayan(prev.dayan); setBayan(prev.bayan); setKartal(prev.kartal); setCursor(prev.cursor);
     setCanUndo(undoRef.current.length > 0);
   }
   function resetUndo() { undoRef.current = []; setCanUndo(false); }
@@ -183,7 +198,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     if (!previewing) return;
     engine.setBeat(beatRef.current);
     engine.setBpm(bpm);
-  }, [previewing, dayan, bayan, bpm, steps, engine]);
+  }, [previewing, dayan, bayan, kartal, bpm, steps, engine]);
 
   const getPhase = () => engine.getPhase();
 
@@ -192,6 +207,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setGroups((g) => [...g, ...u]);
     setDayan((p) => [...p, ...pad]);
     setBayan((p) => [...p, ...pad]);
+    setKartal((p) => [...p, ...pad]);
     resetUndo();
   }
   function removeGroup() {
@@ -200,6 +216,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setGroups((g) => g.slice(0, -meter.unit.length));
     setDayan((p) => p.slice(0, -drop));
     setBayan((p) => p.slice(0, -drop));
+    setKartal((p) => p.slice(0, -drop));
     setCursor((c) => Math.min(c, steps - drop - 1));
     resetUndo();
   }
@@ -210,19 +227,21 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setGroups([...m.bar]);
     setDayan(emptyGrid(sum(m.bar)));
     setBayan(emptyGrid(sum(m.bar)));
+    setKartal(emptyGrid(sum(m.bar)));
     setCursor(0);
     resetUndo();
     setFeelOpen(false);
   }
 
+  // One setter per authorable lane — lets tapPad write any lane a pad names
+  // (a pad only ever writes the lanes in its `write`) without a branch each.
+  const laneSetters = { dayan: setDayan, bayan: setBayan, kartal: setKartal };
   function tapPad(pad) {
     pushUndo();
     const w = pad.write;
-    if ("dayan" in w) setDayan((p) => { const c = [...p]; c[cursor] = w.dayan; return c; });
-    if ("bayan" in w) setBayan((p) => { const c = [...p]; c[cursor] = w.bayan; return c; });
-    if (!previewing) {
-      if ("dayan" in w) { const n = soundName("dayan", w.dayan); if (n) engine.playStroke(n); }
-      if ("bayan" in w) { const n = soundName("bayan", w.bayan); if (n) engine.playStroke(n); }
+    for (const lane of Object.keys(w)) {
+      laneSetters[lane]?.((p) => { const c = [...p]; c[cursor] = w[lane]; return c; });
+      if (!previewing) { const n = soundName(lane, w[lane]); if (n) engine.playStroke(n); }
     }
     setCursor((c) => (c + 1) % steps);
   }
@@ -251,7 +270,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   async function handleSave() {
     if (saving) return;
     if (previewing) { engine.stop(); setPreviewing(false); }
-    const hasAnyHit = dayan.some((c) => c !== null) || bayan.some((c) => c !== null);
+    const hasAnyHit = dayan.some((c) => c !== null) || bayan.some((c) => c !== null) || kartal.some((c) => c !== null);
     if (!hasAnyHit) { alert("Add at least one stroke before saving."); return; }
     const finalName = name.trim() || "Custom Beat";
     // No id means "new" — the library mints one on save, and it is now the
@@ -259,16 +278,21 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     // keeps its id and so overwrites in place.
     const id = initialBeat?.id ?? null;
     const uniform = groups.every((g) => g === groups[0]);
+    // Only persist a kartal line when the user actually drew one, so a beat
+    // with no cymbals stays a two-lane beat (matches beats.js's convention and
+    // keeps the strip from carrying an all-rest brass row).
+    const hasKartal = kartal.some((c) => c !== null);
     setSaving(true);
     const saved = await onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar,
-      cellsPerGroup: uniform ? groups[0] : cpq, groups, dayan, bayan });
+      cellsPerGroup: uniform ? groups[0] : cpq, groups, dayan, bayan,
+      ...(hasKartal ? { kartal } : {}) });
     if (saved) { onClose(); return; }   // unmounts — no state to reset
     setSaving(false);
   }
 
   function clearGrid() {
     pushUndo();
-    setDayan(emptyGrid(steps)); setBayan(emptyGrid(steps)); setCursor(0);
+    setDayan(emptyGrid(steps)); setBayan(emptyGrid(steps)); setKartal(emptyGrid(steps)); setCursor(0);
   }
 
   function scrubTo(clientX) {
@@ -331,7 +355,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
                 <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
               ))}
             </div>
-            {[["dayan", "Dayan", dayan], ["bayan", "Bayan", bayan]].map(([end, label, arr]) => {
+            {[["dayan", "Dayan", dayan], ["bayan", "Bayan", bayan], ["kartal", "Kartal", kartal]].map(([end, label, arr]) => {
               const isolatedOut = editLane !== "both" && editLane !== end;
               const active = editLane === end;
               return (
@@ -354,7 +378,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
                             borderWidth: isCursor ? 2 : 1,
                             background: lit ? "var(--head-sunken)" : "var(--head)" }}>
                           <span aria-hidden="true"
-                            style={dotStyle(v, end === "dayan" ? "var(--lane-dayan)" : "var(--lane-bayan)", 18)} />
+                            style={dotStyle(v, `var(--lane-${end})`, 18)} />
                         </button>
                       );
                     })}
@@ -370,6 +394,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           {PAD_SETS[editLane].map((pad) => {
             const w = pad.write;
             const both = "dayan" in w && "bayan" in w;
+            // Isolated pads write exactly one lane; colour the dot from it.
+            const soleLane = Object.keys(w)[0];
             return (
               <button key={pad.key} onClick={() => tapPad(pad)}
                 aria-label={pad.rest ? "Rest" : pad.label}
@@ -377,9 +403,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
                 <span style={st.padLabel}>{pad.label}</span>
                 {!pad.rest && (both
                   ? <StrokeMark dayan={w.dayan} bayan={w.bayan} size={9} />
-                  : <span aria-hidden="true" style={dotStyle(
-                      "dayan" in w ? w.dayan : w.bayan,
-                      "dayan" in w ? "var(--lane-dayan)" : "var(--lane-bayan)", 11)} />
+                  : <span aria-hidden="true"
+                      style={dotStyle(w[soleLane], `var(--lane-${soleLane})`, 11)} />
                 )}
               </button>
             );

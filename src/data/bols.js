@@ -18,6 +18,10 @@
 export const BOLS = {
   dayan: { O: "Ta", X: "Te" },
   bayan: { O: "Ge", X: "Khe" },
+  // Karatalas aren't in the book's mridanga legend, so these are descriptive
+  // onomatopoeia rather than transcribed bols: "Ching" the open ring of the
+  // two discs, "Chip" the damped/choked strike.
+  kartal: { O: "Ching", X: "Chip" },
 };
 
 /**

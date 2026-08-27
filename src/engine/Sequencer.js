@@ -186,12 +186,19 @@ export class Sequencer extends EventEmitter {
 
     const dayanHit = this._beat.dayan[step];
     const bayanHit = this._beat.bayan[step];
+    // Optional lane: only some beats carry karatalas, so guard the read
+    // (an absent kartal array must not throw, and an unloaded kartal sample
+    // just no-ops in SoundPlayer.play).
+    const kartalHit = this._beat.kartal?.[step];
 
     if (dayanHit === "O") this._soundPlayer.play("dayan_open", time);
     else if (dayanHit === "X") this._soundPlayer.play("dayan_closed", time);
 
     if (bayanHit === "O") this._soundPlayer.play("bayan_open", time);
     else if (bayanHit === "X") this._soundPlayer.play("bayan_closed", time);
+
+    if (kartalHit === "O") this._soundPlayer.play("kartal_open", time);
+    else if (kartalHit === "X") this._soundPlayer.play("kartal_closed", time);
 
     this.emit("step", step);
   }

@@ -37,6 +37,15 @@ const STROKE_SAMPLES = {
     "/sounds/bayan/open_3.wav",
   ],
   bayan_closed: ["/sounds/bayan/closed_1.wav"],
+  // Karatalas — same layout convention (open = ringing strike, closed =
+  // damped/choked). Drop the real recordings in public/sounds/kartal/;
+  // until they exist, load() below skips them and the app still starts.
+  kartal_open: [
+    "/sounds/kartal/open_1.wav",
+    "/sounds/kartal/open_2.wav",
+    "/sounds/kartal/open_3.wav",
+  ],
+  kartal_closed: ["/sounds/kartal/closed_1.wav"],
 };
 
 export class SoundPlayer {
@@ -54,16 +63,20 @@ export class SoundPlayer {
     this._endGains = {
       dayan: new Tone.Gain(1).connect(this._masterGain),
       bayan: new Tone.Gain(1).connect(this._masterGain),
+      kartal: new Tone.Gain(1).connect(this._masterGain),
     };
 
     // Phone speakers reproduce the bayan's bass far more weakly than the
     // dayan's ring, so the bayan carries fixed MAKEUP gain: the mixer's
-    // "100%" means "balanced on a phone", not "raw sample level".
-    this._endMakeup = { dayan: 1, bayan: 1.25 };
+    // "100%" means "balanced on a phone", not "raw sample level". The
+    // karatalas are bright and cut through on their own, so they sit at 1;
+    // any end without an entry defaults to 1 (see _applyEnd).
+    this._endMakeup = { dayan: 1, bayan: 1.25, kartal: 1 };
 
     this._endState = {
       dayan: { volume: 1, muted: false },
       bayan: { volume: 1, muted: false },
+      kartal: { volume: 1, muted: false },
     };
     Object.keys(this._endState).forEach((end) => this._applyEnd(end));
   }
@@ -91,22 +104,35 @@ export class SoundPlayer {
       // Route every sample for this stroke to the right end's gain.
       const end = name.startsWith("dayan") ? "dayan"
                 : name.startsWith("bayan") ? "bayan"
+                : name.startsWith("kartal") ? "kartal"
                 : null;
       const destination = end ? this._endGains[end] : this._masterGain;
 
+      // A missing/failed sample RESOLVES to null rather than rejecting, so one
+      // absent file can't sink the whole load() (which would leave "ready"
+      // unfired and the app stuck on the loading screen). This is what lets us
+      // ship a stroke's manifest entry BEFORE its recordings exist — e.g. the
+      // karatalas: the app starts, that stroke is simply skipped below.
       const players = urls.map((url) => {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
           const player = new Tone.Player({
             url,
             onload: () => resolve(player),
-            onerror: (e) => reject(e),
+            onerror: () => {
+              console.warn(`SoundPlayer: failed to load "${url}"`);
+              resolve(null);
+            },
           });
           player.connect(destination);
         });
       });
 
       const entryPromise = Promise.all(players).then((loaded) => {
-        this._players.set(name, { players: loaded, lastIndex: -1 });
+        const ok = loaded.filter(Boolean);
+        // Register the stroke only if at least one sample loaded; otherwise
+        // play() would find an empty pool. A never-registered stroke just
+        // warns "no sound named ..." when played — harmless and silent.
+        if (ok.length) this._players.set(name, { players: ok, lastIndex: -1 });
       });
       loadingPromises.push(entryPromise);
     }
@@ -144,8 +170,8 @@ export class SoundPlayer {
   }
 
   /**
-   * Mute or unmute one drum end.
-   * @param {"dayan"|"bayan"} end
+   * Mute or unmute one instrument channel.
+   * @param {"dayan"|"bayan"|"kartal"} end
    * @param {boolean} muted
    */
   setEndMuted(end, muted) {
@@ -157,7 +183,7 @@ export class SoundPlayer {
 
   /**
    * Per-end volume (the mixer's track faders).
-   * @param {"dayan"|"bayan"} end
+   * @param {"dayan"|"bayan"|"kartal"} end
    * @param {number} value 0..1 (1 = balanced level incl. makeup gain)
    */
   setEndVolume(end, value) {
