@@ -8,10 +8,16 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { BEATS } from "../data/beats.js";
 import BeatStrip from "../BeatStrip.jsx";
-import ScrollFadeRow from "../ui/ScrollFadeRow.jsx";
 import * as sh from "../ui/styles.js";
-import { InfoIcon, StartIcon, ShareIcon, GlobeIcon, CheckIcon, CheckDot, RadioDot } from "../ui/icons.jsx";
+import {
+  InfoIcon, StartIcon, ShareIcon, GlobeIcon, CheckIcon, CheckDot, RadioDot,
+  ChevronRightIcon, SearchIcon, BackIcon,
+} from "../ui/icons.jsx";
 import { encodeBeat, encodeCategory, decodeShare, codeFromInput, shareUrl } from "../data/shareCodec.js";
+import {
+  browse as browseCommunity, publish as publishCommunity,
+  incrementCopies, toImportPayload,
+} from "../storage/communityClient.js";
 
 // Whether the platform has a native share sheet (iOS/Android do, most
 // desktop browsers don't). Checked once — it can't change mid-session.
@@ -38,22 +44,29 @@ function SortableRow({ id, children }) {
 }
 
 /**
- * BeatsView — the library.
+ * BeatsView — the library, as a stack of full-width section cards.
  *
- * Built-ins, the user's own beats, and each user category (a kirtan
- * progression) as tabs. Row tap = select, the fast path; the ⓘ opens an
- * info sheet with the full strip, the description, and Edit / Start. Rows
- * preview the real pattern via a mini strip.
+ * The page is a SHORT LIST OF SECTIONS the user drills into, not a tab bar
+ * over one long list:
+ *   - Search — a card with a live search box; matches from the whole library
+ *     appear inline as you type. Never leaves the landing.
+ *   - Browse — a card that opens the (future) community library; today it's
+ *     where a pasted share code comes in.
+ *   - Built in / Your beats / each user category — a card apiece that opens a
+ *     dedicated PAGE listing that category's beats, with its edit controls.
  *
- * STATE THIS SCREEN OWNS: which tab is browsed, which sheet is open, and
- * the pending confirmation. All of it is meaningless anywhere else and dies
- * with the screen, which is exactly why it lives here and not in App —
- * App only gets told the outcomes (select this beat, delete that one).
+ * Everything is one component because it's all one screen's worth of state:
+ * which page is open lives here (`page`) and dies with the screen, exactly
+ * like the old tab did. App only hears the outcomes (select this, delete that).
+ *
+ * ONE LAYOUT RULE, from the design brief: any control that ADDS or EDITS sits
+ * at the TOP of its page, above the list, so it's found without scrolling.
+ * The list — which can be long — scrolls beneath it.
  */
 function BeatsView({
   library, beat, beatId, ready,
-  onSelect, onStart, onStartBeat, onEdit, onDeleteBeat,
-  pendingShare, onImportShare, onDismissShare, nav,
+  onSelect, onStart, onStartBeat, onEdit, onNewBeat, onDeleteBeat,
+  pendingShare, onImportShare, onDismissShare, auth, onRequestAuth, nav,
 }) {
   const {
     allBeats, customBeats, isCustomBeat, categories, categoryBeats, catName,
@@ -61,14 +74,18 @@ function BeatsView({
     error, dismissError,
   } = library;
 
-  const [browseTab, setBrowseTab] = useState("builtin");
-  const [detailBeat, setDetailBeat] = useState(null);   // beat shown in the info sheet
+  // Which page of the Beats screen is showing. "landing" is the section list;
+  // "browse" is the paste/community page; "category" drills into one library
+  // (id is "builtin" | "custom" | a user category id).
+  const [page, setPage] = useState({ name: "landing" });
+  const [search, setSearch] = useState("");                 // library search box
+  const [detailBeat, setDetailBeat] = useState(null);       // beat shown in the info sheet
   const [createCatOpen, setCreateCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [addBeatsOpen, setAddBeatsOpen] = useState(false);
   // What's being shared out: { kind:"beat", beat } | { kind:"category", name, beats }.
   const [shareTarget, setShareTarget] = useState(null);
-  const [copied, setCopied] = useState(null);           // "link" | "code", briefly
+  const [copied, setCopied] = useState(null);               // "link" | "code", briefly
   const [codeInput, setCodeInput] = useState("");
   const [codeError, setCodeError] = useState("");
   // What's about to come IN, awaiting the user's yes. Seeded from a share
@@ -81,6 +98,69 @@ function BeatsView({
   const askConfirm = (message, label, onConfirm) =>
     setConfirmAction({ message, label, onConfirm });
 
+  // ── Community library (Browse page) ────────────────────────────────────
+  const signedIn = Boolean(auth?.configured && auth?.user);
+  const [community, setCommunity] = useState([]);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [communityError, setCommunityError] = useState("");
+  const [communityQuery, setCommunityQuery] = useState("");
+  const [copiedId, setCopiedId] = useState(null);       // "Added" flash on a card
+  // Publish-from-share state: null | "publishing" | "done" | an error string.
+  const [publishState, setPublishState] = useState(null);
+
+  // Load the community list when the Browse page is open and the user is
+  // signed in. Debounced so typing in the search box doesn't fire a request
+  // per keystroke; cancelled if the page changes or a newer query supersedes.
+  useEffect(() => {
+    if (page.name !== "browse" || !signedIn) return;
+    let cancelled = false;
+    // Everything runs inside the timer, so no state is set synchronously
+    // during the effect (which would cascade renders).
+    const t = setTimeout(() => {
+      if (cancelled) return;
+      setCommunityLoading(true);
+      setCommunityError("");
+      browseCommunity({ query: communityQuery })
+        .then((rows) => { if (!cancelled) setCommunity(rows); })
+        .catch((err) => { if (!cancelled) setCommunityError(err.message || "Couldn't load the community library."); })
+        .finally(() => { if (!cancelled) setCommunityLoading(false); });
+    }, communityQuery ? 300 : 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [page.name, signedIn, communityQuery]);
+
+  // Copy a community item into the library (an import), then best-effort bump
+  // its copy counter. The card flashes "Added" briefly.
+  async function copyCommunity(row) {
+    const result = await onImportShare(toImportPayload(row));
+    if (result?.beats?.length) {
+      incrementCopies(row.id);
+      setCopiedId(row.id);
+      setTimeout(() => setCopiedId((id) => (id === row.id ? null : id)), 1600);
+    }
+  }
+
+  // Publish whatever the share sheet is showing to the community library.
+  async function handlePublish() {
+    if (!signedIn) { onRequestAuth?.(); return; }
+    setPublishState("publishing");
+    try {
+      await publishCommunity(shareTarget, { authorId: auth.user.id, authorName: auth.displayName });
+      setPublishState("done");
+    } catch (err) {
+      setPublishState(err.message || "Couldn't publish that. Try again.");
+    }
+  }
+  // Opening the share sheet starts with a clean publish state — reset here
+  // rather than in an effect so no state is set synchronously on render.
+  const openShare = (target) => { setShareTarget(target); setPublishState(null); };
+
+  // The category the "category" page is showing, resolved to the live object
+  // (null on the two fixed pages and everywhere off a user category). The
+  // add-beats sheet and the top action row both read it, so it's derived once.
+  const browsedCat = page.name === "category"
+    ? categories.find(c => c.id === page.id) ?? null
+    : null;
+
   // The whole beat row is the drag surface AND the tap-to-select target, so
   // the sensor distinguishes the two by a HOLD: press ~220ms to pick up and
   // reorder; a quick tap stays a tap (selects); a swipe that moves past the
@@ -89,21 +169,33 @@ function BeatsView({
     useSensor(PointerSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
   );
 
-  // The sheet closes straight away and the new tab is opened once the
-  // library confirms the id — which it mints, so there's nothing to switch
-  // to until it comes back. A failed save leaves the user where they were,
-  // with the reason in the strip at the top of the screen.
+  const goLanding = () => setPage({ name: "landing" });
+  // Back steps up one level: a playlist's page returns to the Playlists hub;
+  // everything else (the hub, Browse, the two fixed libraries) returns to the
+  // landing.
+  const back = () => {
+    if (page.name === "category" && page.id !== "builtin" && page.id !== "custom") {
+      setPage({ name: "playlists" });
+    } else {
+      goLanding();
+    }
+  };
+
+  // The sheet closes straight away and the new category's page is opened once
+  // the library confirms the id — which it mints, so there's nothing to open
+  // until it comes back. A failed save leaves the user where they were, with
+  // the reason in the strip at the top of the screen.
   async function handleCreateCategory() {
     const name = newCatName.trim();
     if (!name) return;
     setNewCatName("");
     setCreateCatOpen(false);
     const id = await createCategory(name);
-    if (id) setBrowseTab(id);
+    if (id) setPage({ name: "category", id });
   }
   function handleDeleteCategory(catId) {
     deleteCategory(catId);
-    if (browseTab === catId) setBrowseTab("builtin");
+    setPage({ name: "playlists" });
   }
 
   // ── Sharing out ──────────────────────────────────────────────────────
@@ -142,6 +234,7 @@ function BeatsView({
   }
   function closeShare() {
     setShareTarget(null);
+    setPublishState(null);
     clearTimeout(copiedTimer.current);
     setCopied(null);
   }
@@ -160,36 +253,41 @@ function BeatsView({
   async function acceptImport() {
     const payload = importPreview;
     setImportPreview(null);
-    // Land the user where the beats actually went — a list gets its own tab,
+    // Land the user where the beats actually went — a list gets its own page,
     // a single beat goes to Your beats. The ids only exist after the import
-    // mints them, which is why the tab comes back from the call.
+    // mints them, which is why the id comes back from the call.
     const { catId } = (await onImportShare(payload)) ?? {};
-    setBrowseTab(catId ?? "custom");
+    setPage({ name: "category", id: catId ?? "custom" });
   }
   function dismissImport() {
     setImportPreview(null);
     onDismissShare();
   }
 
-  const inUserCat = categories.some(c => c.id === browseTab);
-
+  // ── Beat row ───────────────────────────────────────────────────────────
   // The row is a div, not a button: nesting the info/delete buttons inside a
   // row-button is invalid HTML and confuses screen readers. The whole row IS
-  // the control: tap (or Enter) selects; in a progression, press-and-hold
-  // picks it up to reorder. `drag` carries the sortable bits (empty on
-  // non-sortable tabs). The remove/info/delete buttons stop pointer-down so
-  // holding them never starts a drag, and stop click so tapping them never
-  // selects.
+  // the control: tap (or Enter) selects; inside a progression, press-and-hold
+  // picks it up to reorder.
+  //
+  // `context` is where the row is being shown — a category id, or "search" —
+  // and drives three things: whether selecting sets an active category (search
+  // sets none, since a match can come from anywhere), whether the − remove
+  // button shows (only inside a user category), and whether the × delete shows
+  // (only on the Your-beats page). `drag` carries the sortable bits (empty
+  // when the row can't be dragged).
   const stopPD = (e) => e.stopPropagation();
-  const rowBody = (b, drag = {}) => {
+  const rowBody = (b, context, drag = {}) => {
     const sel = b.id === beatId;
+    const inUserCat = categories.some(c => c.id === context);
+    const deletable = context === "custom" && isCustomBeat(b.id);
     const { setNodeRef, style, listeners, isDragging } = drag;
     return (
       <div ref={setNodeRef} {...listeners}
         role="button" tabIndex={0} aria-pressed={sel}
         aria-label={inUserCat ? `${b.name} — tap to select, hold to reorder` : b.name}
-        onClick={() => onSelect(b, browseTab)}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSelect(b, browseTab); } }}
+        onClick={() => onSelect(b, context === "search" ? undefined : context)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSelect(b, context === "search" ? undefined : context); } }}
         style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)",
           ...(listeners ? { cursor: isDragging ? "grabbing" : "grab", touchAction: "manipulation" } : null),
           ...style }}>
@@ -202,21 +300,21 @@ function BeatsView({
             <button onPointerDown={stopPD} onClick={(e) => {
                 e.stopPropagation();
                 askConfirm(
-                  `Remove “${b.name}” from “${catName(browseTab)}”? The beat itself is kept.`,
+                  `Remove “${b.name}” from “${catName(context)}”? The beat itself is kept.`,
                   "Remove",
-                  () => toggleBeatInCategory(browseTab, b.id)
+                  () => toggleBeatInCategory(context, b.id)
                 );
               }}
-              aria-label={`Remove ${b.name} from ${catName(browseTab)}`}
+              aria-label={`Remove ${b.name} from ${catName(context)}`}
               style={st.deleteBtn}>−</button>
           )}
           <button onPointerDown={stopPD} onClick={(e) => { e.stopPropagation(); setDetailBeat(b); }}
             aria-label={`About ${b.name}`} style={st.infoBtn}><InfoIcon /></button>
-          {!inUserCat && isCustomBeat(b.id) && (
+          {deletable && (
             <button onPointerDown={stopPD} onClick={(e) => {
                 e.stopPropagation();
                 askConfirm(
-                  `Delete the beat “${b.name}”? This can't be undone, and it also leaves any categories it's in.`,
+                  `Delete the beat “${b.name}”? This can't be undone, and it also leaves any playlists it's in.`,
                   "Delete",
                   () => onDeleteBeat(b.id)
                 );
@@ -229,23 +327,304 @@ function BeatsView({
       </div>
     );
   };
-  // Non-sortable tabs (built-in, custom) render the body directly.
-  const renderRow = (b) => <div key={b.id} style={{ display: "contents" }}>{rowBody(b)}</div>;
-  // User-category rows are draggable to reorder the progression.
-  const renderSortableRow = (b) => (
-    <SortableRow key={b.id} id={b.id}>
-      {(bits) => rowBody(b, bits)}
-    </SortableRow>
+  const renderRow = (b, context) => (
+    <div key={b.id} style={{ display: "contents" }}>{rowBody(b, context)}</div>
   );
 
-  const browsedCat = categories.find(c => c.id === browseTab);
-  const builtinGroups = [...new Set(BEATS.map(b => b.group))];
+  // ── Landing: the section cards ─────────────────────────────────────────
+  // A card the user opens into a page — name, a one-line count/hint, chevron.
+  const categoryCard = (id, desc) => {
+    const count = categoryBeats(id).length;
+    return (
+      <button key={id} onClick={() => setPage({ name: "category", id })}
+        aria-label={`Open ${catName(id)}, ${count} ${count === 1 ? "beat" : "beats"}`}
+        style={st.card}>
+        <div style={st.cardTitleWrap}>
+          <span style={st.cardTitle}>{catName(id)}</span>
+          <span style={sh.beatRowMeta}>
+            {desc ? `${desc} · ` : ""}{count} {count === 1 ? "beat" : "beats"}
+          </span>
+        </div>
+        <span style={st.chevron}><ChevronRightIcon /></span>
+      </button>
+    );
+  };
+
+  const q = search.trim().toLowerCase();
+  const results = q ? allBeats.filter(b => b.name.toLowerCase().includes(q)) : [];
+
+  function renderLanding() {
+    return (
+      <>
+        {/* Browse — the community library leads the page. */}
+        <button onClick={() => setPage({ name: "browse" })}
+          aria-label="Open Browse" style={st.card}>
+          <div style={st.cardTitleWrap}>
+            <span style={st.cardTitleRow}><GlobeIcon size={18} />Browse</span>
+            <span style={sh.beatRowMeta}>Beats and playlists shared by other devotees</span>
+          </div>
+          <span style={st.chevron}><ChevronRightIcon /></span>
+        </button>
+
+        {/* Search — matches unfurl beneath the box as you type. */}
+        <div style={st.searchCard}>
+          <span style={st.cardTitle}>Search</span>
+          <div style={st.searchField}>
+            <span style={st.searchIcon}><SearchIcon /></span>
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Find a beat by name" aria-label="Search your beats"
+              style={st.searchInput} />
+            {search && (
+              <button onClick={() => setSearch("")} aria-label="Clear search"
+                style={st.searchClear}>×</button>
+            )}
+          </div>
+          {!q && <p style={sh.emptyHint}>Search every beat in your library by name.</p>}
+          {q && results.length === 0 && (
+            <p style={sh.emptyHint}>No beats match “{search.trim()}”.</p>
+          )}
+          {results.length > 0 && (
+            <div style={st.results}>
+              {results.map(b => renderRow(b, "search"))}
+            </div>
+          )}
+        </div>
+
+        {categoryCard("builtin", "Ships with the app")}
+
+        {/* Playlists — the user's own progressions live behind one card, so
+            the landing stays short. It sits between the two fixed libraries.
+            (Internally these are still "categories"; "playlist" is the name
+            the user sees.) */}
+        <button onClick={() => setPage({ name: "playlists" })}
+          aria-label={`Open Playlists, ${categories.length} ${categories.length === 1 ? "playlist" : "playlists"}`}
+          style={st.card}>
+          <div style={st.cardTitleWrap}>
+            <span style={st.cardTitle}>Playlists</span>
+            <span style={sh.beatRowMeta}>
+              Your kirtan progressions · {categories.length} {categories.length === 1 ? "playlist" : "playlists"}
+            </span>
+          </div>
+          <span style={st.chevron}><ChevronRightIcon /></span>
+        </button>
+
+        {categoryCard("custom", "Built or saved by you")}
+      </>
+    );
+  }
+
+  // ── Playlists hub ──────────────────────────────────────────────────────
+  // Every user playlist, plus the add action at the top. Opening one drills
+  // into its own category page (which is why back from there returns here,
+  // not to the landing).
+  function renderPlaylists() {
+    return (
+      <>
+        <button onClick={() => setCreateCatOpen(true)} style={st.newCatBtn}>
+          + New playlist
+        </button>
+        {categories.length === 0
+          ? <p style={sh.emptyHint}>
+              No playlists yet. A playlist is a kirtan progression — an ordered
+              set of beats that Home's ‹ › moves through. Make one to start.
+            </p>
+          : categories.map(c => categoryCard(c.id, "Progression"))}
+      </>
+    );
+  }
+
+  // A published beat/playlist as a card — preview, author, copy count, and an
+  // Add button that imports it into the user's own library.
+  function communityCard(row) {
+    const added = copiedId === row.id;
+    const count = row.kind === "playlist" ? row.payload?.beats?.length ?? 0 : 0;
+    return (
+      <div key={row.id} style={st.beatRow}>
+        <div style={sh.beatRowTop}>
+          <div style={st.beatRowSelect}>
+            <span style={sh.beatRowName}>{row.name}</span>
+            <span style={sh.beatRowMeta}>
+              {row.kind === "beat" ? "Beat" : `Playlist · ${count} beats`} · by {row.author_name}
+              {row.copies ? ` · ${row.copies} ${row.copies === 1 ? "copy" : "copies"}` : ""}
+            </span>
+          </div>
+          <button onClick={() => copyCommunity(row)} disabled={added}
+            aria-label={`Add ${row.name} to your library`}
+            style={{ ...st.addChip, ...(added ? st.addChipDone : null) }}>
+            {added ? "Added" : "+ Add"}
+          </button>
+        </div>
+        {row.kind === "beat" && row.payload?.beat && <BeatStrip beat={row.payload.beat} mini />}
+      </div>
+    );
+  }
+
+  // ── Browse page ────────────────────────────────────────────────────────
+  function renderBrowse() {
+    return (
+      <>
+        {/* Account status leads the page — sign in is the gate to everything
+            community below it. */}
+        {auth?.configured && (
+          <div style={st.accountRow}>
+            {signedIn ? (
+              <>
+                <span style={sh.beatRowMeta}>Signed in as {auth.displayName}</span>
+                <button onClick={auth.signOut} style={st.linkBtn}>Sign out</button>
+              </>
+            ) : (
+              <button onClick={onRequestAuth} style={st.sheetStartBtn}>
+                Sign in to browse &amp; share
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* The community library — only when signed in. */}
+        {signedIn && (
+          <>
+            <div style={st.searchField}>
+              <span style={st.searchIcon}><SearchIcon /></span>
+              <input type="text" value={communityQuery}
+                onChange={(e) => setCommunityQuery(e.target.value)}
+                placeholder="Search the community" aria-label="Search the community library"
+                style={st.searchInput} />
+              {communityQuery && (
+                <button onClick={() => setCommunityQuery("")} aria-label="Clear search" style={st.searchClear}>×</button>
+              )}
+            </div>
+            {communityLoading && <p style={sh.emptyHint}>Loading…</p>}
+            {communityError && <p style={st.codeError} role="alert">{communityError}</p>}
+            {!communityLoading && !communityError && community.length === 0 && (
+              <p style={sh.emptyHint}>
+                {communityQuery
+                  ? `Nothing shared matches “${communityQuery.trim()}”.`
+                  : "Nothing shared yet — be the first. Open any beat, tap Share, and choose “Publish to community”."}
+              </p>
+            )}
+            {!communityLoading && community.map(communityCard)}
+          </>
+        )}
+
+        {/* Paste a code — always available, works signed out and offline. */}
+        <div style={st.pasteRow}>
+          <input type="text" value={codeInput}
+            onChange={(e) => { setCodeInput(e.target.value); setCodeError(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter") handlePastedCode(); }}
+            placeholder="Paste a share code or link"
+            aria-label="Share code" aria-invalid={!!codeError}
+            style={st.catNameInput} />
+          <button onClick={handlePastedCode} disabled={!codeInput.trim()}
+            style={{ ...st.sheetStartBtn, flex: "0 0 auto", padding: "0 22px", opacity: codeInput.trim() ? 1 : 0.5 }}>
+            Open
+          </button>
+        </div>
+        {codeError && <p style={st.codeError} role="alert">{codeError}</p>}
+        <p style={sh.emptyHint}>
+          {auth?.configured
+            ? "A beat someone sent you directly comes in here — paste their code or link. Opening a share link does the same thing."
+            : "This is where a beat someone sent you comes in — paste their code or link above. Opening a share link does the same thing."}
+        </p>
+      </>
+    );
+  }
+
+  // ── Category page ──────────────────────────────────────────────────────
+  function renderCategory() {
+    const id = page.id;
+    if (id === "builtin") {
+      const groups = [...new Set(BEATS.map(b => b.group))];
+      return (
+        <>
+          <p style={sh.emptyHint}>The beats that come with the app. Open any one to customize your own copy.</p>
+          {groups.map(g => (
+            <div key={g} style={{ display: "contents" }}>
+              <div style={st.sectionLabel}>{g}</div>
+              {categoryBeats("builtin").filter(b => b.group === g).map(b => renderRow(b, "builtin"))}
+            </div>
+          ))}
+        </>
+      );
+    }
+
+    if (id === "custom") {
+      return (
+        <>
+          {/* Add = make a new beat; the edit action leads the page. */}
+          <div style={st.pageActions}>
+            <button onClick={onNewBeat} style={st.addBeatsBtn}>+ New beat</button>
+          </div>
+          {customBeats.length === 0
+            ? <p style={sh.emptyHint}>Nothing here yet — beats you build or customize appear here.</p>
+            : customBeats.map(b => renderRow(b, "custom"))}
+        </>
+      );
+    }
+
+    // A user playlist (progression). If it vanished under us (deleted in
+    // another tab), fall back to the hub rather than render nothing.
+    if (!browsedCat) { setPage({ name: "playlists" }); return null; }
+    const beats = categoryBeats(browsedCat.id);
+    return (
+      <>
+        {/* Every edit control for the progression, at the top. */}
+        <div style={st.pageActions}>
+          <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>+ Add beats</button>
+          <button onClick={() => openShare({
+              kind: "category", name: browsedCat.name, beats,
+            })}
+            disabled={beats.length === 0}
+            aria-label={`Share the list ${browsedCat.name}`}
+            style={{ ...st.addBeatsBtn, ...st.iconLabel, flex: "0 0 auto", padding: "0 16px",
+              opacity: beats.length ? 1 : 0.5 }}>
+            <ShareIcon />Share
+          </button>
+          <button onClick={() => askConfirm(
+              `Delete the playlist “${browsedCat.name}”? The beats themselves are kept.`,
+              "Delete",
+              () => handleDeleteCategory(browsedCat.id)
+            )}
+            style={st.deleteCatBtn}>
+            Delete
+          </button>
+        </div>
+        {beats.length === 0 && (
+          <p style={sh.emptyHint}>
+            An empty progression. Add beats in the order you want the kirtan to
+            move through them — Home's ‹ › will follow that order. Press and hold
+            a beat to drag it into place.
+          </p>
+        )}
+        <DndContext sensors={dragSensors} collisionDetection={closestCenter}
+          onDragEnd={({ active, over }) => {
+            if (over) reorderCategory(browsedCat.id, active.id, over.id);
+          }}>
+          <SortableContext items={beats.map(b => b.id)} strategy={verticalListSortingStrategy}>
+            {beats.map(b => (
+              <SortableRow key={b.id} id={b.id}>
+                {(bits) => rowBody(b, browsedCat.id, bits)}
+              </SortableRow>
+            ))}
+          </SortableContext>
+        </DndContext>
+      </>
+    );
+  }
+
+  // Header title tracks the page; the fixed pages read their name from the
+  // library so a renamed category updates here too.
+  const title = page.name === "landing" ? "Beats"
+    : page.name === "browse" ? "Browse"
+    : page.name === "playlists" ? "Playlists"
+    : catName(page.id);
 
   return (
     <div className="kc-screen" style={sh.screenFixed}>
       <header style={sh.subHeader}>
-        <span style={{ width: 44 }} aria-hidden="true" />
-        <h1 style={sh.subTitle}>Beats</h1>
+        {page.name === "landing"
+          ? <span style={{ width: 44 }} aria-hidden="true" />
+          : <button onClick={back} aria-label="Back" style={sh.backBtn}><BackIcon /></button>}
+        <h1 style={sh.subTitle}>{title}</h1>
         <span style={{ width: 44 }} aria-hidden="true" />
       </header>
 
@@ -261,106 +640,13 @@ function BeatsView({
         </div>
       )}
 
-      {/* Category tabs: the three fixed ones, the user's own, and +.
-          Edge fades signal when the row scrolls.
-
-          "browse" is a BROWSE-ONLY pseudo-tab — the seat the community beat
-          library will take (PROJECT_PLAN §7); for now it's where a shared
-          code comes in. It is not a progression, so it must never reach
-          categoryBeats/catName/setActiveCat. It renders no beat rows, which
-          is what keeps it out of the only path that could send it there
-          (onSelect(b, browseTab)). */}
-      <ScrollFadeRow rowStyle={sh.catTabs}>
-        {["builtin", "browse", "custom", ...categories.map(c => c.id)].map(id => (
-          <button key={id} onClick={() => setBrowseTab(id)}
-            style={{ ...sh.catTab, ...(browseTab === id ? sh.catTabActive : null),
-              ...(id === "browse" ? st.browseTab : null) }}
-            aria-pressed={browseTab === id}>
-            {id === "browse" ? <><GlobeIcon />Browse</> : catName(id)}
-          </button>
-        ))}
-        <button onClick={() => setCreateCatOpen(true)} aria-label="New category"
-          style={{ ...sh.catTab, flexShrink: 0 }}>+</button>
-      </ScrollFadeRow>
-
-      <section style={st.beatList}>
-        {browseTab === "builtin" && builtinGroups.map(g => (
-          <div key={g} style={{ display: "contents" }}>
-            <div style={st.sectionLabel}>{g}</div>
-            {BEATS.filter(b => b.group === g).map(renderRow)}
-          </div>
-        ))}
-
-        {browseTab === "custom" && (
-          customBeats.length === 0
-            ? <p style={sh.emptyHint}>Nothing here yet — beats you build or customize will appear here.</p>
-            : customBeats.map(renderRow)
-        )}
-
-        {browseTab === "browse" && (
-          <>
-            <p style={sh.emptyHint}>
-              A library of beats shared by other devotees is coming. Until then,
-              this is where a beat someone sent you comes in — paste their code
-              or link below. Opening a share link does the same thing.
-            </p>
-            <div style={st.pasteRow}>
-              <input type="text" value={codeInput}
-                onChange={(e) => { setCodeInput(e.target.value); setCodeError(""); }}
-                onKeyDown={(e) => { if (e.key === "Enter") handlePastedCode(); }}
-                placeholder="Paste a share code or link"
-                aria-label="Share code" aria-invalid={!!codeError}
-                style={st.catNameInput} />
-              <button onClick={handlePastedCode} disabled={!codeInput.trim()}
-                style={{ ...st.sheetStartBtn, flex: "0 0 auto", padding: "0 22px", opacity: codeInput.trim() ? 1 : 0.5 }}>
-                Open
-              </button>
-            </div>
-            {codeError && <p style={st.codeError} role="alert">{codeError}</p>}
-          </>
-        )}
-
-        {browsedCat && (
-          <>
-            {categoryBeats(browsedCat.id).length === 0 && (
-              <p style={sh.emptyHint}>
-                An empty progression. Add beats in the order you want the kirtan
-                to move through them — Home's ‹ › will follow that order. Press and
-                hold a beat to drag it into place.
-              </p>
-            )}
-            <DndContext sensors={dragSensors} collisionDetection={closestCenter}
-              onDragEnd={({ active, over }) => {
-                if (over) reorderCategory(browsedCat.id, active.id, over.id);
-              }}>
-              <SortableContext items={categoryBeats(browsedCat.id).map(b => b.id)}
-                strategy={verticalListSortingStrategy}>
-                {categoryBeats(browsedCat.id).map(renderSortableRow)}
-              </SortableContext>
-            </DndContext>
-            <div style={st.catActions}>
-              <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>+ Add beats</button>
-              <button onClick={() => setShareTarget({
-                  kind: "category", name: browsedCat.name, beats: categoryBeats(browsedCat.id),
-                })}
-                disabled={categoryBeats(browsedCat.id).length === 0}
-                aria-label={`Share the list ${browsedCat.name}`}
-                style={{ ...st.addBeatsBtn, ...st.iconLabel, flex: "0 0 auto", padding: "0 16px",
-                  opacity: categoryBeats(browsedCat.id).length ? 1 : 0.5 }}>
-                <ShareIcon />Share
-              </button>
-              <button onClick={() => askConfirm(
-                  `Delete the category “${browsedCat.name}”? The beats themselves are kept.`,
-                  "Delete",
-                  () => handleDeleteCategory(browsedCat.id)
-                )}
-                style={st.deleteCatBtn}>
-                Delete category
-              </button>
-            </div>
-          </>
-        )}
+      <section style={st.scroll}>
+        {page.name === "landing" && renderLanding()}
+        {page.name === "playlists" && renderPlaylists()}
+        {page.name === "browse" && renderBrowse()}
+        {page.name === "category" && renderCategory()}
       </section>
+
       <button onClick={onStart} disabled={!ready} style={{ ...st.startBtn, opacity: ready ? 1 : 0.5 }}>
         <StartIcon />
         Start · {beat.name}
@@ -378,7 +664,7 @@ function BeatsView({
                   Edit/Start keep their 1:2 balance — three buttons squeezed
                   into one row makes "Customize" too narrow to read. */}
               <div style={st.sheetHeadBtns}>
-                <button onClick={() => setShareTarget({ kind: "beat", beat: detailBeat })}
+                <button onClick={() => openShare({ kind: "beat", beat: detailBeat })}
                   aria-label={`Share ${detailBeat.name}`} style={st.sheetHeadBtn}>
                   <ShareIcon />
                 </button>
@@ -407,17 +693,17 @@ function BeatsView({
         </div>
       )}
 
-      {/* New-category sheet — name it, create it, land in its tab. */}
+      {/* New-category sheet — name it, create it, land in its page. */}
       {createCatOpen && (
         <div style={sh.sheetBackdrop} onClick={() => setCreateCatOpen(false)}>
-          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="New category"
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="New playlist"
             onClick={(e) => e.stopPropagation()}>
             <div style={sh.sheetHead}>
-              <h2 style={sh.sheetName}>New category</h2>
+              <h2 style={sh.sheetName}>New playlist</h2>
               <button onClick={() => setCreateCatOpen(false)} aria-label="Close" style={sh.sheetClose}>×</button>
             </div>
             <p style={sh.emptyHint}>
-              A category is a kirtan progression: an ordered set of beats that
+              A playlist is a kirtan progression: an ordered set of beats that
               Home's ‹ › will move through.
             </p>
             <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
@@ -505,6 +791,28 @@ function BeatsView({
             <input ref={linkInputRef} type="text" readOnly value={shareLink}
               onFocus={(e) => e.target.select()} aria-label="Share link"
               style={{ ...st.catNameInput, marginTop: "var(--space-4)", width: "100%" }} />
+
+            {/* Publish to the community library — only when the backend is set
+                up. Signed out, it routes to sign-in first. */}
+            {auth?.configured && (
+              <div style={st.publishRow}>
+                <button onClick={handlePublish} disabled={publishState === "publishing" || publishState === "done"}
+                  style={{ ...st.sheetStartBtn, ...st.iconLabel, flex: "1 0 100%",
+                    opacity: publishState === "publishing" ? 0.6 : 1 }}>
+                  <GlobeIcon size={18} />
+                  {publishState === "publishing" ? "Publishing…"
+                    : publishState === "done" ? "Published to community"
+                    : signedIn ? "Publish to community" : "Sign in to publish"}
+                </button>
+                {typeof publishState === "string" && publishState !== "publishing" && publishState !== "done" && (
+                  <p style={st.codeError} role="alert">{publishState}</p>
+                )}
+                {publishState === "done" && (
+                  <p style={sh.emptyHint}>Anyone can now find this under Browse.</p>
+                )}
+              </div>
+            )}
+
             <div style={st.shareActions}>
               {/* Native share takes its own row (flexBasis 100%) so the two
                   copy buttons get half a sheet each rather than a third. */}
@@ -599,8 +907,32 @@ function BeatsView({
 }
 
 const st = {
-  beatList: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
+  // The single scrolling region, shared by every page. Cards on the landing,
+  // rows on a category page — same column, same gap.
+  scroll: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "2px" },
   sectionLabel: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--syahi-soft)" },
+
+  // ── Section cards (landing) ──
+  // Full-width, tappable, with the name and a one-line hint on the left and a
+  // chevron on the right that says "this opens a page".
+  card: { display: "flex", alignItems: "center", gap: "var(--space-3)", width: "100%", padding: "18px", borderRadius: 18, border: "var(--rule-hairline)", background: "var(--head-worn)", textAlign: "left", cursor: "pointer" },
+  cardTitleWrap: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
+  cardTitle: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, letterSpacing: "0.01em", color: "var(--ink-primary)" },
+  cardTitleRow: { display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, letterSpacing: "0.01em", color: "var(--ink-primary)" },
+  chevron: { flexShrink: 0, color: "var(--syahi-soft)", display: "grid", placeItems: "center" },
+  // New-category leads the category group; dashed so it reads as "add", not as
+  // one of the categories themselves.
+  newCatBtn: { width: "100%", minHeight: 52, borderRadius: 16, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
+
+  // ── Search card ──
+  searchCard: { display: "flex", flexDirection: "column", gap: "var(--space-3)", width: "100%", padding: "18px", borderRadius: 18, border: "var(--rule-hairline)", background: "var(--head-worn)" },
+  searchField: { display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "0 12px", borderRadius: 14, border: "var(--rule-hairline)", background: "var(--surface-paper)" },
+  searchIcon: { flexShrink: 0, color: "var(--syahi-soft)", display: "grid", placeItems: "center" },
+  searchInput: { flex: 1, minWidth: 0, padding: "12px 0", border: "none", background: "transparent", outline: "none", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)" },
+  searchClear: { flexShrink: 0, width: 28, height: 28, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },
+  results: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
+
+  // ── Beat rows ──
   beatRow: { display: "flex", flexDirection: "column", gap: "var(--space-2)", padding: "12px 14px", borderRadius: 16, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", textAlign: "left", width: "100%" },
   beatRowSelect: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, padding: 0, border: "none", background: "transparent", textAlign: "left", cursor: "pointer" },
   infoBtn: { flexShrink: 0, width: 40, height: 40, borderRadius: 12, border: "none", background: "transparent", color: "var(--syahi-soft)", display: "grid", placeItems: "center", cursor: "pointer" },
@@ -614,17 +946,24 @@ const st = {
   errorText: { flex: 1, minWidth: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--danger)", lineHeight: 1.45 },
   errorClose: { flexShrink: 0, width: 28, height: 28, marginTop: -2, border: "none", background: "transparent", color: "var(--danger)", fontSize: 20, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", borderRadius: 8 },
 
-  // ── Category actions ──
-  // Wraps since Share joined the row — three controls don't fit a narrow phone.
-  catActions: { display: "flex", flexWrap: "wrap", gap: "var(--space-3)", marginTop: "var(--space-2)" },
+  // ── Category page: top action row ──
+  // Wraps on a narrow phone — three controls (Add / Share / Delete) don't fit
+  // one line. This is the "actions at the top" row.
+  pageActions: { display: "flex", flexWrap: "wrap", gap: "var(--space-3)" },
   addBeatsBtn: { flex: 1, minHeight: 46, borderRadius: 14, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
   deleteCatBtn: { flexShrink: 0, minHeight: 46, padding: "0 14px", borderRadius: 14, border: "none", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 600, cursor: "pointer" },
   catNameInput: { flex: 1, minWidth: 0, padding: "12px 14px", borderRadius: 14, border: "var(--rule-hairline)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", color: "var(--ink-primary)", background: "var(--surface-paper)", outline: "none" },
 
+  // ── Community (Browse) ──
+  accountRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", minHeight: 44 },
+  linkBtn: { flexShrink: 0, border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  addChip: { flexShrink: 0, minHeight: 40, padding: "0 16px", borderRadius: 999, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  addChipDone: { background: "transparent", color: "var(--syahi-soft)", border: "var(--rule-hairline)", cursor: "default" },
+  publishRow: { display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-4)" },
+
   // ── Sharing ──
-  browseTab: { display: "inline-flex", alignItems: "center", gap: 6 },
-  pasteRow: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-2)" },
-  codeError: { margin: "var(--space-2) 0 0", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--clay)", lineHeight: 1.5 },
+  pasteRow: { display: "flex", gap: "var(--space-3)" },
+  codeError: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--clay)", lineHeight: 1.5 },
   // The head's controls as one cluster, so space-between keeps the title
   // left and both buttons right.
   sheetHeadBtns: { flexShrink: 0, display: "flex", alignItems: "center", gap: 2 },

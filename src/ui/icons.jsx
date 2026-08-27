@@ -121,6 +121,28 @@ export function BackIcon() {
   );
 }
 
+// Right chevron — the "opens a page" affordance on the Beats section cards.
+// Mirror of BackIcon so the two read as a matched pair (drill in / step back).
+export function ChevronRightIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 5 16 12l-7 7" stroke="currentColor" strokeWidth="1.8"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Magnifier for the library search field.
+export function SearchIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
 export function CheckIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
