@@ -6,7 +6,7 @@ import Wordmark from "../Wordmark.jsx";
 import ScrollFadeRow from "../ui/ScrollFadeRow.jsx";
 import * as sh from "../ui/styles.js";
 import {
-  LockIcon, PencilIcon, MixerIcon, SpeakerIcon, CheckIcon,
+  LockIcon, PencilIcon, MixerIcon, SpeakerIcon, EqIcon, CheckIcon,
   PlayIcon, PauseIcon, RadioDot,
 } from "../ui/icons.jsx";
 
@@ -60,6 +60,20 @@ function BpmWheel({ value, min, max, onChange }) {
   );
 }
 
+// Per-end EQ (epic #1): the band labels mirror the engine's fixed five-filter
+// table. The band gains and panel-open state live in the transport (eqBands /
+// eqOpen); EQ_FLAT is the render-safe fallback for reading them until the
+// hook side of the contract has landed.
+const EQ_BAND_LABELS = ["100 Hz", "300 Hz", "1 kHz", "3 kHz", "8 kHz"];
+const EQ_FLAT = [0, 0, 0, 0, 0];
+
+// Signed gain readout for the EQ bands: "+3 dB" / "0 dB" / "−3 dB" — the
+// explicit sign makes the cut/boost direction legible at a glance.
+function fmtDb(db) {
+  if (db === 0) return "0 dB";
+  return (db > 0 ? "+" : "−") + Math.abs(db) + " dB";
+}
+
 /**
  * HomeView — the playing screen, in two layouts.
  *
@@ -81,11 +95,17 @@ function HomeView({
   transport, beat, beatId, library, isLandscape,
   onSelect, onCycle, onEdit, nav,
 }) {
+  // The EQ fields default to flat/closed: the transport hook implements them
+  // in a parallel slice (epic #1), and a destructure default only applies
+  // while the field is still undefined — so this stays correct once it lands.
   const {
     ready, playing, step, getPhase,
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo,
     tempoLocked, setTempoLocked,
     volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
+    eqBands = { dayan: EQ_FLAT, bayan: EQ_FLAT },
+    eqOpen = { dayan: false, bayan: false },
+    changeEqBand, toggleEqPanel,
     togglePlay,
   } = transport;
   const { categories, activeCat, categoryBeats, catName, isCustomBeat } = library;
@@ -226,24 +246,64 @@ function HomeView({
             <input className="kc-range" type="range" min={0} max={100} value={Math.round(volume * 100)}
               onChange={(e) => changeVolume(Number(e.target.value) / 100)}
               style={{ "--fill": volume * 100 + "%", flex: 1 }} aria-label="Master volume" />
+            {/* Two spacers: the mute AND EQ columns now close every lane row,
+                so the master fader keeps its right edge aligned with theirs. */}
+            <span style={{ width: 44 }} aria-hidden="true" />
             <span style={{ width: 44 }} aria-hidden="true" />
           </div>
           {LANES.map(l => {
             const v = endVolumes[l.id] ?? 1;
             const muted = !!mutedEnds[l.id];
+            // EQ belongs to the two mridanga ends only — the frozen contract
+            // has no kartal key (eqOpen[kartal] would be undefined), so the
+            // Kartal row keeps just its fader + mute, plus a spacer that holds
+            // the fader column aligned with the EQ'd rows.
+            const isEqEnd = l.id === "dayan" || l.id === "bayan";
+            const open = !!eqOpen[l.id];
+            const bands = eqBands[l.id] ?? EQ_FLAT;
             return (
-              <div key={l.id} style={st.mixRow}>
-                <span style={{ ...st.mixLabel, color: l.color }}>{l.label}</span>
-                <input className="kc-range" type="range" min={0} max={100} value={Math.round(v * 100)}
-                  onChange={(e) => changeEndVolume(l.id, Number(e.target.value) / 100)}
-                  style={{ "--fill": v * 100 + "%", flex: 1, opacity: muted ? 0.35 : 1 }}
-                  aria-label={`${l.label} volume`} />
-                <button onClick={() => toggleMute(l.id)} aria-pressed={muted}
-                  aria-label={muted ? `Unmute ${l.label}` : `Mute ${l.label}`}
-                  style={{ ...st.muteBtn, background: muted ? "var(--head-sunken)" : "transparent",
-                    color: muted ? "var(--clay)" : "var(--syahi-soft)" }}>
-                  <SpeakerIcon muted={muted} />
-                </button>
+              <div key={l.id} style={st.mixLane}>
+                <div style={st.mixRow}>
+                  <span style={{ ...st.mixLabel, color: l.color }}>{l.label}</span>
+                  <input className="kc-range" type="range" min={0} max={100} value={Math.round(v * 100)}
+                    onChange={(e) => changeEndVolume(l.id, Number(e.target.value) / 100)}
+                    style={{ "--fill": v * 100 + "%", flex: 1, opacity: muted ? 0.35 : 1 }}
+                    aria-label={`${l.label} volume`} />
+                  <button onClick={() => toggleMute(l.id)} aria-pressed={muted}
+                    aria-label={muted ? `Unmute ${l.label}` : `Mute ${l.label}`}
+                    style={{ ...st.muteBtn, background: muted ? "var(--head-sunken)" : "transparent",
+                      color: muted ? "var(--clay)" : "var(--syahi-soft)" }}>
+                    <SpeakerIcon muted={muted} />
+                  </button>
+                  {isEqEnd ? (
+                    <button onClick={() => toggleEqPanel?.(l.id)}
+                      aria-pressed={open} aria-expanded={open} aria-label={`${l.label} EQ`}
+                      style={{ ...st.muteBtn, background: open ? "var(--head-sunken)" : "transparent",
+                        color: open ? l.color : "var(--syahi-soft)" }}>
+                      <EqIcon />
+                    </button>
+                  ) : (
+                    <span style={{ width: 44 }} aria-hidden="true" />
+                  )}
+                </div>
+                {isEqEnd && open && (
+                  <div style={st.eqPanel} role="group" aria-label={`${l.label} equalizer`}>
+                    {EQ_BAND_LABELS.map((bandLabel, i) => {
+                      const db = bands[i] ?? 0;
+                      return (
+                        <div key={bandLabel} style={st.mixRow}>
+                          <span style={{ ...st.mixLabel, textTransform: "none" }}>{bandLabel}</span>
+                          <input className="kc-range" type="range" min={-12} max={12} step={1} value={db}
+                            onChange={(e) => changeEqBand?.(l.id, i, Number(e.target.value))}
+                            style={{ "--fill": ((db + 12) / 24) * 100 + "%", "--accent-action": l.color, flex: 1 }}
+                            aria-label={`${l.label} ${bandLabel} gain`} />
+                          <span style={st.eqDb}>{fmtDb(db)}</span>
+                          <span style={{ width: 44 }} aria-hidden="true" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -446,6 +506,11 @@ const st = {
   mixRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   mixLabel: { flexShrink: 0, width: 64, fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
   muteBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
+  // A lane row plus its (optional) EQ panel — tighter gap than between lanes.
+  mixLane: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
+  eqPanel: { display: "flex", flexDirection: "column", gap: 2 },
+  // Fixed width + tabular digits so −12…+12 readouts never jitter the slider.
+  eqDb: { flexShrink: 0, width: 44, textAlign: "right", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-body-xs)", fontWeight: 600, color: "var(--syahi-soft)" },
 
   playBtn: { flexShrink: 0, width: "100%", minHeight: 58, borderRadius: 16, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
 

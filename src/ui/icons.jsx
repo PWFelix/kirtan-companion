@@ -100,6 +100,18 @@ export function MixerIcon() {
   );
 }
 
+// Per-end EQ — a frequency-response curve rather than faders (that's
+// MixerIcon), so the two buttons beside a lane read as distinct ideas:
+// loudness vs tone. The wiggle nods at the five bands it opens.
+export function EqIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 15c3 0 3.5-8 6.5-8 2.8 0 3.2 9 6 9 2.3 0 3.4-3.6 7.5-4.5" />
+    </svg>
+  );
+}
+
 export function SpeakerIcon({ muted }) {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
