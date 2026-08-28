@@ -2,12 +2,20 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { KirtanEngine } from "../engine/KirtanEngine.js";
 import { BEATS } from "../data/beats.js";
 import { MIN_BPM, MAX_BPM } from "../data/meter.js";
+import { EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 import { loadEqPrefs, saveEqPrefs } from "../storage/eqPrefs.js";
 
 // The bounds now live in data/meter.js so pure data modules (the share codec)
 // can clamp a BPM without importing React, Tone.js and the engine along with
 // it. Re-exported here because this is where the app has always found them.
 export { MIN_BPM, MAX_BPM };
+
+// EQ prefs persist DEBOUNCED: a slider drag fires changeEqBand many times a
+// second, and a synchronous localStorage write per event janks the drag on
+// slower devices/browsers. React state and the engine DSP still update
+// immediately — only the write coalesces (last change wins after a short
+// idle).
+const EQ_SAVE_DEBOUNCE_MS = 250;
 
 /**
  * useTransport — the engine and its React mirror, as one unit.
@@ -62,6 +70,7 @@ export function useTransport() {
   const lockedRef = useRef(tempoLocked);
   const eqBandsRef = useRef(eqBands);
   const eqOpenRef = useRef(eqOpen);
+  const eqSaveTimerRef = useRef(null);
   const tapTimesRef = useRef([]);
   useEffect(() => { lockedRef.current = tempoLocked; }, [tempoLocked]);
 
@@ -94,6 +103,17 @@ export function useTransport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Unmount only: flush a still-pending debounced EQ save so the last drag
+  // position isn't lost, then drop the timer.
+  useEffect(() => () => {
+    if (eqSaveTimerRef.current == null) return;
+    clearTimeout(eqSaveTimerRef.current);
+    saveEqPrefs({
+      dayan: { bands: eqBandsRef.current.dayan, open: eqOpenRef.current.dayan },
+      bayan: { bands: eqBandsRef.current.bayan, open: eqOpenRef.current.bayan },
+    });
+  }, []);
+
   // Stable identity so BeatStrip's rAF effect doesn't re-subscribe on
   // every render (the engine ref never changes).
   const getPhase = useCallback(() => engine.getPhase(), [engine]);
@@ -102,12 +122,12 @@ export function useTransport() {
 
   // Same contract the (unexported) bandOf helper in eqPrefs.js applies on
   // load and the engine applies on set: coerce to a finite number
-  // (non-finite flattens to 0), then clamp into [-12, 12]. Doing it HERE
-  // means React state, the persisted prefs and the engine's DSP can never
-  // disagree about the value.
+  // (non-finite flattens to 0), then clamp into the shared EQ range
+  // (data/eq.js). Doing it HERE means React state, the persisted prefs and
+  // the engine's DSP can never disagree about the value.
   const clampDb = (v) => {
     const num = Number(v);
-    return Math.min(12, Math.max(-12, Number.isFinite(num) ? num : 0));
+    return Math.min(EQ_MAX_DB, Math.max(EQ_MIN_DB, Number.isFinite(num) ? num : 0));
   };
 
   function changeBpm(value) {
@@ -153,8 +173,22 @@ export function useTransport() {
 
   // Per-end EQ, mirroring the volume/mute pattern above. The shape carries
   // dayan and bayan only — kartal has no equaliser — so an unknown end is
-  // dropped here exactly as the engine ignores it. Every change persists
-  // whole-object through eqPrefs.js (which warns, never throws, on failure).
+  // dropped here exactly as the engine ignores it.
+
+  // Debounced persistence of the WHOLE prefs object through eqPrefs.js
+  // (which warns, never throws, on failure). The save reads the refs when
+  // it FIRES, not when it's scheduled, so a fast drag or double toggle
+  // always persists the freshest state — never a stale closure's.
+  function scheduleEqSave() {
+    clearTimeout(eqSaveTimerRef.current);
+    eqSaveTimerRef.current = setTimeout(() => {
+      saveEqPrefs({
+        dayan: { bands: eqBandsRef.current.dayan, open: eqOpenRef.current.dayan },
+        bayan: { bands: eqBandsRef.current.bayan, open: eqOpenRef.current.bayan },
+      });
+    }, EQ_SAVE_DEBOUNCE_MS);
+  }
+
   function changeEqBand(end, bandIndex, db) {
     const bands = eqBandsRef.current;
     if (!bands[end]) return;
@@ -163,10 +197,7 @@ export function useTransport() {
     eqBandsRef.current = nextBands;
     setEqBands(nextBands);
     engine.setEqBand(end, bandIndex, gain);
-    saveEqPrefs({
-      dayan: { bands: nextBands.dayan, open: eqOpenRef.current.dayan },
-      bayan: { bands: nextBands.bayan, open: eqOpenRef.current.bayan },
-    });
+    scheduleEqSave();
   }
   function toggleEqPanel(end) {
     const open = eqOpenRef.current;
@@ -174,10 +205,7 @@ export function useTransport() {
     const nextOpen = { ...open, [end]: !open[end] };
     eqOpenRef.current = nextOpen;
     setEqOpen(nextOpen);
-    saveEqPrefs({
-      dayan: { bands: eqBandsRef.current.dayan, open: nextOpen.dayan },
-      bayan: { bands: eqBandsRef.current.bayan, open: nextOpen.bayan },
-    });
+    scheduleEqSave();
   }
 
   // Point the engine at a beat WITHOUT starting it. Adopts the beat's own

@@ -28,32 +28,32 @@
  * via mount hydration.
  */
 
-const KEY = "kirtan-eq-prefs";
+import { EQ_BAND_COUNT, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 
-const MIN_DB = -12;
-const MAX_DB = 12;
-const BAND_COUNT = 5;
+const KEY = "kirtan-eq-prefs";
 
 /**
  * The flat state every end starts in and falls back to. Built fresh per call
- * so callers never share (and mutate) one module-level object.
+ * so callers never share (and mutate) one module-level object; the band
+ * count comes from the shared EQ spec, so the engine, the mixer and this
+ * store can't drift apart.
  */
 function defaultPrefs() {
   return {
-    dayan: { bands: [0, 0, 0, 0, 0], open: false },
-    bayan: { bands: [0, 0, 0, 0, 0], open: false },
+    dayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), open: false },
+    bayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), open: false },
   };
 }
 
 /**
- * One band value coerced into a dB number in [-12, 12]. Numbers pass through
- * and numeric strings (e.g. "3.5") are coerced; anything non-finite flattens
- * to 0 before clamping, matching the load contract.
+ * One band value coerced into a dB number in the shared EQ range. Numbers
+ * pass through and numeric strings (e.g. "3.5") are coerced; anything
+ * non-finite flattens to 0 before clamping, matching the load contract.
  */
 function bandOf(value) {
   const num = Number(value);
   const db = Number.isFinite(num) ? num : 0;
-  return Math.min(MAX_DB, Math.max(MIN_DB, db));
+  return Math.min(EQ_MAX_DB, Math.max(EQ_MIN_DB, db));
 }
 
 /**
@@ -65,7 +65,7 @@ function endOf(value) {
   const end = value && typeof value === "object" ? value : {};
   const rawBands = Array.isArray(end.bands) ? end.bands : [];
   return {
-    bands: Array.from({ length: BAND_COUNT }, (_, i) => bandOf(rawBands[i])),
+    bands: Array.from({ length: EQ_BAND_COUNT }, (_, i) => bandOf(rawBands[i])),
     open: end.open === true,
   };
 }

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { LANES } from "../data/lanes.js";
+import { EQ_BANDS, EQ_BAND_COUNT, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 import { MIN_BPM, MAX_BPM } from "../hooks/useTransport.js";
 import BeatStrip from "../BeatStrip.jsx";
 import Wordmark from "../Wordmark.jsx";
@@ -60,12 +61,14 @@ function BpmWheel({ value, min, max, onChange }) {
   );
 }
 
-// Per-end EQ (epic #1): the band labels mirror the engine's fixed five-filter
-// table. The band gains and panel-open state live in the transport (eqBands /
-// eqOpen); EQ_FLAT is a render-safe fallback for reading them — a destructure
-// default only applies while a field is undefined.
-const EQ_BAND_LABELS = ["100 Hz", "300 Hz", "1 kHz", "3 kHz", "8 kHz"];
-const EQ_FLAT = [0, 0, 0, 0, 0];
+// Per-end EQ (epic #1): band labels and count come from the shared spec the
+// engine and persistence also read (data/eq.js), so the sliders can't drift
+// from the DSP chain. The band gains and panel-open state live in the
+// transport (eqBands / eqOpen); EQ_FLAT is a render-safe fallback for
+// reading them — a destructure default only applies while a field is
+// undefined.
+const EQ_BAND_LABELS = EQ_BANDS.map(band => band.label);
+const EQ_FLAT = Array.from({ length: EQ_BAND_COUNT }, () => 0);
 
 // Signed gain readout for the EQ bands: "+3 dB" / "0 dB" / "−3 dB" — the
 // explicit sign makes the cut/boost direction legible at a glance.
@@ -297,10 +300,10 @@ function HomeView({
                       return (
                         <div key={bandLabel} style={st.mixRow}>
                           <span style={{ ...st.mixLabel, textTransform: "none" }}>{bandLabel}</span>
-                          <input className="kc-range" type="range" min={-12} max={12} step={1} value={db}
+                          <input className="kc-range" type="range" min={EQ_MIN_DB} max={EQ_MAX_DB} step={1} value={db}
                             onChange={(e) => changeEqBand?.(l.id, i, Number(e.target.value))}
                             disabled={!changeEqBand}
-                            style={{ "--fill": ((db + 12) / 24) * 100 + "%", "--accent-action": l.color, flex: 1,
+                            style={{ "--fill": ((db - EQ_MIN_DB) / (EQ_MAX_DB - EQ_MIN_DB)) * 100 + "%", "--accent-action": l.color, flex: 1,
                               opacity: changeEqBand ? 1 : 0.5, cursor: changeEqBand ? "pointer" : "not-allowed" }}
                             aria-label={`${l.label} ${bandLabel} gain`} />
                           <span style={st.eqDb}>{fmtDb(db)}</span>

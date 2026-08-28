@@ -29,6 +29,7 @@
  * no code changes needed.
  */
 import * as Tone from "tone";
+import { EQ_BANDS, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 
 // Stroke name -> list of sample URLs. This is the single place that
 // knows the on-disk layout; load() keys off the manifest but pulls
@@ -57,16 +58,9 @@ const STROKE_SAMPLES = {
   kartal_closed: ["/sounds/kartal/closed_1.wav"],
 };
 
-// Fixed EQ design (frozen in epic #1) — five cascaded bands per mridanga
-// end. The shelves shape the extremes; the three peaking bands cover the
-// drums' body. Every band starts flat (0 dB); setEqBand clamps the gain.
-const EQ_BANDS = [
-  { type: "lowshelf", frequency: 100 },
-  { type: "peaking", frequency: 300, Q: 1 },
-  { type: "peaking", frequency: 1000, Q: 1 },
-  { type: "peaking", frequency: 3000, Q: 1 },
-  { type: "highshelf", frequency: 8000 },
-];
+// The EQ chain follows the shared five-band table in data/eq.js (frozen in
+// epic #1), which the mixer and persistence also read. Every band starts
+// flat (0 dB); setEqBand clamps the gain.
 
 export class SoundPlayer {
   constructor() {
@@ -246,13 +240,13 @@ export class SoundPlayer {
    * mridanga ends carry chains — an unknown end or band, including
    * "kartal", is ignored safely rather than throwing.
    * @param {"dayan"|"bayan"} end
-   * @param {number} bandIndex 0..4 (see EQ_BANDS)
-   * @param {number} db gain in dB, clamped to [-12, 12]
+   * @param {number} bandIndex index into the shared EQ_BANDS table
+   * @param {number} db gain in dB, clamped to the shared EQ range
    */
   setEqBand(end, bandIndex, db) {
     const chain = this._eqChains[end];
     const filter = chain && chain[bandIndex];
     if (!filter || !Number.isFinite(db)) return;
-    filter.gain.rampTo(Math.max(-12, Math.min(12, db)), 0.05);
+    filter.gain.rampTo(Math.max(EQ_MIN_DB, Math.min(EQ_MAX_DB, db)), 0.05);
   }
 }
