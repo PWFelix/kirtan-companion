@@ -276,10 +276,14 @@ function HomeView({
                     <SpeakerIcon muted={muted} />
                   </button>
                   {isEqEnd ? (
-                    <button onClick={() => toggleEqPanel?.(l.id)}
+                    // Gated on the handler: the transport's EQ slice (epic #1)
+                    // hasn't landed yet, so the toggle stays visibly disabled
+                    // instead of looking interactive while doing nothing.
+                    <button onClick={() => toggleEqPanel?.(l.id)} disabled={!toggleEqPanel}
                       aria-pressed={open} aria-expanded={open} aria-label={`${l.label} EQ`}
                       style={{ ...st.muteBtn, background: open ? "var(--head-sunken)" : "transparent",
-                        color: open ? l.color : "var(--syahi-soft)" }}>
+                        color: open ? l.color : "var(--syahi-soft)",
+                        opacity: toggleEqPanel ? 1 : 0.35, cursor: toggleEqPanel ? "pointer" : "not-allowed" }}>
                       <EqIcon />
                     </button>
                   ) : (
@@ -295,7 +299,9 @@ function HomeView({
                           <span style={{ ...st.mixLabel, textTransform: "none" }}>{bandLabel}</span>
                           <input className="kc-range" type="range" min={-12} max={12} step={1} value={db}
                             onChange={(e) => changeEqBand?.(l.id, i, Number(e.target.value))}
-                            style={{ "--fill": ((db + 12) / 24) * 100 + "%", "--accent-action": l.color, flex: 1 }}
+                            disabled={!changeEqBand}
+                            style={{ "--fill": ((db + 12) / 24) * 100 + "%", "--accent-action": l.color, flex: 1,
+                              opacity: changeEqBand ? 1 : 0.5, cursor: changeEqBand ? "pointer" : "not-allowed" }}
                             aria-label={`${l.label} ${bandLabel} gain`} />
                           <span style={st.eqDb}>{fmtDb(db)}</span>
                           <span style={{ width: 44 }} aria-hidden="true" />
