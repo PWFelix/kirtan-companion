@@ -5,8 +5,9 @@
  *
  * THIS FILE, migrate.js AND eqPrefs.js ARE THE ONLY PLACES IN THE APP THAT
  * MAY CALL THE localStorage API DIRECTLY. The word may appear in comments
- * elsewhere; what must not is a localStorage.getItem / .setItem call outside
- * src/storage/ — that is the layer failing at the one job it exists to do.
+ * elsewhere; what must not happen is a localStorage.getItem / .setItem call
+ * outside src/storage/ — that is the layer failing at the one job it exists
+ * to do.
  *
  * Two things worth knowing about the implementation:
  *
