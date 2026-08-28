@@ -2,8 +2,8 @@
  * eqPrefs.js
  * ----------
  * Persistence for the per-end EQ settings — band gains plus the panel
- * open/closed disclosure state — the third file allowed to say "localStorage"
- * alongside localStorageProvider.js and migrate.js.
+ * open/closed disclosure state — the third file allowed to call the
+ * localStorage API directly, alongside localStorageProvider.js and migrate.js.
  *
  * WHY A SEPARATE FILE INSTEAD OF A PROVIDER METHOD. localStorageProvider is
  * shaped like the database the beat library becomes: rows, read-modify-write
@@ -45,9 +45,14 @@ function defaultPrefs() {
   };
 }
 
-/** One band value coerced into a dB number in [-12, 12]; junk flattens to 0. */
+/**
+ * One band value coerced into a dB number in [-12, 12]. Numbers pass through
+ * and numeric strings (e.g. "3.5") are coerced; anything non-finite flattens
+ * to 0 before clamping, matching the load contract.
+ */
 function bandOf(value) {
-  const db = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const num = Number(value);
+  const db = Number.isFinite(num) ? num : 0;
   return Math.min(MAX_DB, Math.max(MIN_DB, db));
 }
 
