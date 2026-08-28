@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { KirtanEngine } from "../engine/KirtanEngine.js";
 import { BEATS } from "../data/beats.js";
 import { MIN_BPM, MAX_BPM } from "../data/meter.js";
+import { loadEqPrefs, saveEqPrefs } from "../storage/eqPrefs.js";
 
 // The bounds now live in data/meter.js so pure data modules (the share codec)
 // can clamp a BPM without importing React, Tone.js and the engine along with
@@ -13,10 +14,11 @@ export { MIN_BPM, MAX_BPM };
  *
  * The UI must talk to the engine only through KirtanEngine (see CLAUDE.md);
  * this hook is the single place that does. It owns the engine instance, the
- * React state that MIRRORS it (playing, step, bpm, volumes, mutes) and every
- * command that writes to it. Nothing else in the app calls engine.* — the
- * one exception is BeatEditor, which is handed the engine outright because
- * it takes the transport over entirely while it's open.
+ * React state that MIRRORS it (playing, step, bpm, volumes, mutes, per-end
+ * EQ bands/panels) and every command that writes to it. Nothing else in the
+ * app calls engine.* — the one exception is BeatEditor, which is handed the
+ * engine outright because it takes the transport over entirely while it's
+ * open.
  *
  * WHY A HOOK AND NOT PROPS: these ~8 pieces of state are meaningless apart
  * from each other and from the engine. Split across App they read as eight
@@ -41,6 +43,18 @@ export function useTransport() {
   const [endVolumes, setEndVolumes] = useState({});  // per-lane faders, default 1
   const [mutedEnds, setMutedEnds] = useState({});
   const [tempoLocked, setTempoLocked] = useState(false);
+  // Per-end EQ: five band gains in dB plus each panel's open/closed state.
+  // Hydrated once at mount from stored prefs via eqPrefs.js (which falls
+  // back to flat/closed and never throws) — this hook never touches
+  // localStorage itself. The mount effect brings the engine to match.
+  const [eqBands, setEqBands] = useState(() => {
+    const prefs = loadEqPrefs();
+    return { dayan: prefs.dayan.bands, bayan: prefs.bayan.bands };
+  });
+  const [eqOpen, setEqOpen] = useState(() => {
+    const prefs = loadEqPrefs();
+    return { dayan: prefs.dayan.open, bayan: prefs.bayan.open };
+  });
 
   const bpmRef = useRef(bpm);
   const lockedRef = useRef(tempoLocked);
@@ -64,8 +78,15 @@ export function useTransport() {
     engine.on("stopped", () => setPlaying(false));
     engine.on("step",    (s) => setStep(s));
     engine.setVolume(volume);
-    // Mount only: the engine is a stable singleton and `volume` is read here
-    // purely as the initial value. Re-running this would double-subscribe.
+    // Push the hydrated EQ gains into the engine so its chains match the
+    // sliders from the first sound on (the state itself hydrates in the
+    // lazy initialisers above).
+    for (const end of ["dayan", "bayan"]) {
+      eqBands[end].forEach((db, i) => engine.setEqBand(end, i, db));
+    }
+    // Mount only: the engine is a stable singleton; `volume` and `eqBands`
+    // are read here purely as initial values. Re-running this would
+    // double-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -116,6 +137,30 @@ export function useTransport() {
     });
   }
 
+  // Per-end EQ, mirroring the volume/mute pattern above. The shape carries
+  // dayan and bayan only — kartal has no equaliser — so an unknown end is
+  // dropped here exactly as the engine ignores it. Every change persists
+  // whole-object through eqPrefs.js (which warns, never throws, on failure).
+  function changeEqBand(end, bandIndex, db) {
+    if (!eqBands[end]) return;
+    const nextBands = { ...eqBands, [end]: eqBands[end].map((v, i) => (i === bandIndex ? db : v)) };
+    setEqBands(nextBands);
+    engine.setEqBand(end, bandIndex, db);
+    saveEqPrefs({
+      dayan: { bands: nextBands.dayan, open: eqOpen.dayan },
+      bayan: { bands: nextBands.bayan, open: eqOpen.bayan },
+    });
+  }
+  function toggleEqPanel(end) {
+    if (!(end in eqOpen)) return;
+    const nextOpen = { ...eqOpen, [end]: !eqOpen[end] };
+    setEqOpen(nextOpen);
+    saveEqPrefs({
+      dayan: { bands: eqBands.dayan, open: nextOpen.dayan },
+      bayan: { bands: eqBands.bayan, open: nextOpen.bayan },
+    });
+  }
+
   // Point the engine at a beat WITHOUT starting it. Adopts the beat's own
   // suggested tempo unless the user has locked the tempo — the "keep this
   // speed while I change beats mid-kirtan" affordance.
@@ -152,6 +197,7 @@ export function useTransport() {
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo, clampBpm,
     tempoLocked, setTempoLocked,
     volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
+    eqBands, eqOpen, changeEqBand, toggleEqPanel,
     loadBeat, togglePlay, play, stop, unlock,
   };
 }
