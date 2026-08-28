@@ -62,8 +62,8 @@ function BpmWheel({ value, min, max, onChange }) {
 
 // Per-end EQ (epic #1): the band labels mirror the engine's fixed five-filter
 // table. The band gains and panel-open state live in the transport (eqBands /
-// eqOpen); EQ_FLAT is the render-safe fallback for reading them until the
-// hook side of the contract has landed.
+// eqOpen); EQ_FLAT is a render-safe fallback for reading them — a destructure
+// default only applies while a field is undefined.
 const EQ_BAND_LABELS = ["100 Hz", "300 Hz", "1 kHz", "3 kHz", "8 kHz"];
 const EQ_FLAT = [0, 0, 0, 0, 0];
 
@@ -95,9 +95,9 @@ function HomeView({
   transport, beat, beatId, library, isLandscape,
   onSelect, onCycle, onEdit, nav,
 }) {
-  // The EQ fields default to flat/closed: the transport hook implements them
-  // in a parallel slice (epic #1), and a destructure default only applies
-  // while the field is still undefined — so this stays correct once it lands.
+  // The EQ fields arrive from the transport hook (epic #1); the flat/closed
+  // defaults are render-safety only — a destructure default applies just
+  // while a field is undefined, so they never shadow the live values.
   const {
     ready, playing, step, getPhase,
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo,
@@ -276,9 +276,9 @@ function HomeView({
                     <SpeakerIcon muted={muted} />
                   </button>
                   {isEqEnd ? (
-                    // Gated on the handler: the transport's EQ slice (epic #1)
-                    // hasn't landed yet, so the toggle stays visibly disabled
-                    // instead of looking interactive while doing nothing.
+                    // The optional call + disabled gate are render-safety only:
+                    // the transport supplies toggleEqPanel, and they degrade an
+                    // absent handler to an inert button instead of a dead click.
                     <button onClick={() => toggleEqPanel?.(l.id)} disabled={!toggleEqPanel}
                       aria-pressed={open} aria-expanded={open} aria-label={`${l.label} EQ`}
                       style={{ ...st.muteBtn, background: open ? "var(--head-sunken)" : "transparent",
