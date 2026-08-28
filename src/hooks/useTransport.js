@@ -100,10 +100,11 @@ export function useTransport() {
 
   const clampBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
 
-  // Same contract eqPrefs.bandOf applies on load and the engine applies on
-  // set: coerce to a finite number (non-finite flattens to 0), then clamp
-  // into [-12, 12]. Doing it HERE means React state, the persisted prefs
-  // and the engine's DSP can never disagree about the value.
+  // Same contract the (unexported) bandOf helper in eqPrefs.js applies on
+  // load and the engine applies on set: coerce to a finite number
+  // (non-finite flattens to 0), then clamp into [-12, 12]. Doing it HERE
+  // means React state, the persisted prefs and the engine's DSP can never
+  // disagree about the value.
   const clampDb = (v) => {
     const num = Number(v);
     return Math.min(12, Math.max(-12, Number.isFinite(num) ? num : 0));
