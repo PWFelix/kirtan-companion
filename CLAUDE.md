@@ -64,3 +64,10 @@ Split by **state ownership**, not by screen count. If a piece of state is only m
   3. Name the sound files with the matching prefix (e.g. `kartal_open.wav`) so `SoundPlayer` routes them through their own gain.
 - **CSS** lives in `src/index.css` only (design tokens are CSS variables in `:root`). Component styles are inline-style objects in each `.jsx` — conventionally a module-level `const st = {...}` below the component. `src/ui/styles.js` is the one deliberate exception, for chrome that two or more screens share; anything a single screen draws stays in that screen's file.
 - The codebase intentionally favours small, well-commented files that explain *why* (see the headers of `Sequencer.js`, `SoundPlayer.js`, `strokes.js`). New files should follow the same tone.
+
+## Gotchas
+
+Hard-won rules that are easy to violate and expensive to debug — read these before touching hooks or the engine.
+
+- **`useTransport()` is call-once — a second call builds a phantom audio graph.** Every call constructs its own `KirtanEngine` (a fresh `SoundPlayer` + `Sequencer`), so the hook is invoked exactly once — in `App.jsx` — and the returned object is handed down as the `transport` prop; views destructure what they need from that prop. Calling `useTransport()` again inside a view spins up a second, disconnected audio graph, and every engine write then lands on the engine nobody listens to: the control goes **silently inert while `npm run lint` and `npm run build` both stay green**. Consume the prop — never re-call the hook. Self-check: `grep -rn "useTransport(" src` must show exactly one call site besides the definition.
+- **Hydrating state at mount — don't `setState` synchronously in the effect body.** The `react-hooks` config **errors** (not warns) on a synchronous `setState` directly in a `useEffect` body (`react-hooks/set-state-in-effect`), so the "obvious" `useEffect(() => setState(load()), [])` fails `npm run lint`. Read the stored value in a **lazy `useState` initialiser** instead — it runs once, at mount — and keep only the external-system sync (e.g. pushing loaded values into the engine) inside the effect.
