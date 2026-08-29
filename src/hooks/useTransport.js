@@ -182,6 +182,10 @@ export function useTransport() {
   function scheduleEqSave() {
     clearTimeout(eqSaveTimerRef.current);
     eqSaveTimerRef.current = setTimeout(() => {
+      // The handle is stale once we fire: null it FIRST so the unmount
+      // flush only runs for a genuinely pending save, never re-writing
+      // prefs this callback just persisted.
+      eqSaveTimerRef.current = null;
       saveEqPrefs({
         dayan: { bands: eqBandsRef.current.dayan, open: eqOpenRef.current.dayan },
         bayan: { bands: eqBandsRef.current.bayan, open: eqOpenRef.current.bayan },
