@@ -15,6 +15,8 @@
  *   setVolume(value)      - set master volume (0..1)
  *   setEndVolume(end, v)  - per-end volume 0..1 (mixer track faders)
  *   setEndMuted(end, b)   - mute/unmute a drum end
+ *   setEqBand(end, i, dB) - set one EQ band's gain, -12..12 dB
+ *                           (dayan/bayan only; kartal has no EQ chain)
  *   start()               - begin playing
  *   stop()                - stop playing
  *   getPhase()            - bar phase in [0, 1) for the UI playhead
@@ -100,6 +102,18 @@ export class KirtanEngine extends EventEmitter {
    */
   setEndVolume(end, value) {
     this._soundPlayer.setEndVolume(end, value);
+  }
+
+  /**
+   * One band of an end's EQ — the mixer's per-end equalizers. Delegates
+   * to the SoundPlayer, where unknown ends/bands (including kartal,
+   * which has no chain) are ignored safely.
+   * @param {"dayan"|"bayan"} end
+   * @param {number} bandIndex 0..4
+   * @param {number} db -12..12 dB
+   */
+  setEqBand(end, bandIndex, db) {
+    this._soundPlayer.setEqBand(end, bandIndex, db);
   }
 
   /**

@@ -4,12 +4,21 @@
  * Loads sound files using Tone.js and plays them on command.
  *
  * Routing (the signal path each sound takes to the speakers):
- *   each player -> its END's gain -> master gain -> speakers
+ *   dayan/bayan: player -> that end's EQ chain -> end gain -+
+ *   kartal:      player -------------------------> end gain +-> master gain
+ *   other:       player ----------------------------------------> master gain
  *
- * The "end" gains (dayan / bayan) let us mute or solo a drum end —
- * used by the practice view to isolate top or bottom. Sounds whose
- * name starts with "dayan" route through the dayan gain; "bayan"
- * through the bayan gain; anything else goes straight to master.
+ * The "end" gains (dayan / bayan / kartal) let us mute or solo an
+ * instrument — used by the practice view to isolate top or bottom.
+ * Sounds whose name starts with "dayan" enter the dayan EQ chain,
+ * "bayan" the bayan chain, and "kartal" goes straight to its end
+ * gain — the karatalas carry NO EQ (out of scope by design, so their
+ * path stays untouched). Anything with no recognised end prefix goes
+ * straight to master.
+ *
+ * The EQ chains sit PRE-FADER — between the players and the end
+ * gains — so tone shaping never disturbs volume, mute, or the bayan
+ * makeup gain, which are all applied on the end gain (see _applyEnd).
  *
  * Round-robin: a real drum never sounds identical twice in a row, so
  * each stroke maps to an ARRAY of samples. Playing a stroke picks a
@@ -20,6 +29,7 @@
  * no code changes needed.
  */
 import * as Tone from "tone";
+import { EQ_BANDS, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 
 // Stroke name -> list of sample URLs. This is the single place that
 // knows the on-disk layout; load() keys off the manifest but pulls
@@ -48,6 +58,10 @@ const STROKE_SAMPLES = {
   kartal_closed: ["/sounds/kartal/closed_1.wav"],
 };
 
+// The EQ chain follows the shared five-band table in data/eq.js (frozen in
+// epic #1), which the mixer and persistence also read. Every band starts
+// flat (0 dB); setEqBand clamps the gain.
+
 export class SoundPlayer {
   constructor() {
     // name -> { players: Tone.Player[], lastIndex: number }
@@ -65,6 +79,29 @@ export class SoundPlayer {
       bayan: new Tone.Gain(1).connect(this._masterGain),
       kartal: new Tone.Gain(1).connect(this._masterGain),
     };
+
+    // Per-end EQ chains for the two MRIDANGA ends only — kartal gets no
+    // chain (it's a separate instrument and stays on its straight path).
+    // Each chain cascades the five EQ_BANDS filters and hangs its tail on
+    // the end's gain, so the EQ sits PRE-FADER: tone shaping can never
+    // disturb the volume/mute/makeup math that _applyEnd applies there.
+    this._eqChains = {};
+    for (const end of ["dayan", "bayan"]) {
+      const filters = EQ_BANDS.map((band) => {
+        const filter = new Tone.Filter({
+          type: band.type,
+          frequency: band.frequency,
+          gain: 0, // flat by default
+        });
+        if (band.Q !== undefined) filter.Q.value = band.Q;
+        return filter;
+      });
+      for (let i = 1; i < filters.length; i++) {
+        filters[i - 1].connect(filters[i]);
+      }
+      filters[filters.length - 1].connect(this._endGains[end]);
+      this._eqChains[end] = filters;
+    }
 
     // Phone speakers reproduce the bayan's bass far more weakly than the
     // dayan's ring, so the bayan carries fixed MAKEUP gain: the mixer's
@@ -101,12 +138,17 @@ export class SoundPlayer {
         continue;
       }
 
-      // Route every sample for this stroke to the right end's gain.
+      // Route every sample for this stroke into the right end's chain.
       const end = name.startsWith("dayan") ? "dayan"
                 : name.startsWith("bayan") ? "bayan"
                 : name.startsWith("kartal") ? "kartal"
                 : null;
-      const destination = end ? this._endGains[end] : this._masterGain;
+      // Dayan and bayan enter their EQ chain's head (pre-fader); kartal
+      // keeps its straight path to its end gain, and anything with no
+      // recognised end prefix goes straight to master.
+      const destination = end === "dayan" || end === "bayan"
+        ? this._eqChains[end][0]
+        : end ? this._endGains[end] : this._masterGain;
 
       // A missing/failed sample RESOLVES to null rather than rejecting, so one
       // absent file can't sink the whole load() (which would leave "ready"
@@ -191,5 +233,20 @@ export class SoundPlayer {
     if (!s) return;
     s.volume = Math.max(0, Math.min(1, value));
     this._applyEnd(end);
+  }
+
+  /**
+   * One band of an end's EQ (the mixer's per-end equalizers). Only the
+   * mridanga ends carry chains — an unknown end or band, including
+   * "kartal", is ignored safely rather than throwing.
+   * @param {"dayan"|"bayan"} end
+   * @param {number} bandIndex index into the shared EQ_BANDS table
+   * @param {number} db gain in dB, clamped to the shared EQ range
+   */
+  setEqBand(end, bandIndex, db) {
+    const chain = this._eqChains[end];
+    const filter = chain && chain[bandIndex];
+    if (!filter || !Number.isFinite(db)) return;
+    filter.gain.rampTo(Math.max(EQ_MIN_DB, Math.min(EQ_MAX_DB, db)), 0.05);
   }
 }
