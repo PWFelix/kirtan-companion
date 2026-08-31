@@ -17,6 +17,8 @@
  *   setEndMuted(end, b)   - mute/unmute a drum end
  *   setEqBand(end, i, dB) - set one EQ band's gain, -12..12 dB
  *                           (dayan/bayan only; kartal has no EQ chain)
+ *   setEndPitch(end, c)   - retune an end by cents, -600..600
+ *                           (dayan/bayan only; kartal is never tuned)
  *   start()               - begin playing
  *   stop()                - stop playing
  *   getPhase()            - bar phase in [0, 1) for the UI playhead
@@ -114,6 +116,17 @@ export class KirtanEngine extends EventEmitter {
    */
   setEqBand(end, bandIndex, db) {
     this._soundPlayer.setEqBand(end, bandIndex, db);
+  }
+
+  /**
+   * Per-end tuning — the mixer's pitch sliders. Delegates to the
+   * SoundPlayer, which retunes every player under the end's prefix and
+   * ignores unknown ends (including kartal) safely.
+   * @param {"dayan"|"bayan"} end
+   * @param {number} cents -600..600
+   */
+  setEndPitch(end, cents) {
+    this._soundPlayer.setEndPitch(end, cents);
   }
 
   /**

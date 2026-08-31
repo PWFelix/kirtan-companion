@@ -12,6 +12,7 @@ Kirtan Companion — a browser-based accompaniment and learning tool for ISKCON 
 - `npm run build` — production build to `dist/`.
 - `npm run lint` — ESLint flat config (`eslint.config.js`).
 - `npm run preview` — preview the production build.
+- `npm run analyze-tuning` — re-measure the dayan/bayan sample pitches and regenerate `src/data/tuning.js` (run when sample files change).
 
 No test script exists yet.
 
@@ -27,7 +28,7 @@ UI  ◀──events──  KirtanEngine  ◀──  Sequencer/SoundPlayer
 ```
 
 Files:
-- `src/engine/KirtanEngine.js` — the facade. Public surface: `loadSounds`, `unlock`, `setBeat`, `setBpm`, `setVolume`, `setEndMuted`, `start`, `stop`, plus `on/off` for `"ready" | "started" | "stopped" | "step"`.
+- `src/engine/KirtanEngine.js` — the facade. Public surface: `loadSounds`, `unlock`, `setBeat`, `setBpm`, `setVolume`, `setEndVolume`, `setEndMuted`, `setEqBand`, `setEndPitch`, `start`, `stop`, plus `on/off` for `"ready" | "started" | "stopped" | "step"`.
 - `src/engine/SoundPlayer.js` — loads/plays audio. **Routes each player by name prefix** into per-end gain channels: a sound named `dayan_*` goes through the dayan gain, `bayan_*` through bayan, anything else straight to master. This is what makes `setEndMuted("dayan", true)` work and is the contract you must honour when adding new instruments.
 - `src/engine/Sequencer.js` — owns `Tone.Transport`, schedules `_tick` via `scheduleRepeat(..., _stepInterval())`. `_stepInterval()` is currently hard-coded to `"8n"`; the comment in that file is the marker for where 12/16-step timing should be added.
 - `src/engine/EventEmitter.js` — tiny pub-sub used as the base class for the engine and sequencer.

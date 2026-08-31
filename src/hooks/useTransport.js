@@ -3,6 +3,7 @@ import { KirtanEngine } from "../engine/KirtanEngine.js";
 import { BEATS } from "../data/beats.js";
 import { MIN_BPM, MAX_BPM } from "../data/meter.js";
 import { EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
+import { TUNE_MIN_CENTS, TUNE_MAX_CENTS } from "../data/tuning.js";
 import { loadEqPrefs, saveEqPrefs } from "../storage/eqPrefs.js";
 
 // The bounds now live in data/meter.js so pure data modules (the share codec)
@@ -23,8 +24,8 @@ const EQ_SAVE_DEBOUNCE_MS = 250;
  * The UI must talk to the engine only through KirtanEngine (see CLAUDE.md);
  * this hook is the single place that does. It owns the engine instance, the
  * React state that MIRRORS it (playing, step, bpm, volumes, mutes, per-end
- * EQ bands/panels) and every command that writes to it. Nothing else in the
- * app calls engine.* — the one exception is BeatEditor, which is handed the
+ * EQ bands/tuning/panels) and every command that writes to it. Nothing else
+ * in the app calls engine.* — the one exception is BeatEditor, which is handed the
  * engine outright because it takes the transport over entirely while it's
  * open.
  *
@@ -36,10 +37,10 @@ const EQ_SAVE_DEBOUNCE_MS = 250;
  * every command. Rapid taps on ± then stack correctly (plain `bpm + delta`
  * reuses a stale value, so fast clicks did nothing / bounced), and a
  * play() in the same tick as a loadBeat() sees the new tempo, not the old.
- * The EQ bands/panels get the same treatment (eqBandsRef, eqOpenRef): the
- * handlers persist the WHOLE prefs object, so computing it from a stale
- * render closure would resurrect a just-changed band or panel when two
- * changes land before a re-render (fast drags, double-clicks).
+ * The EQ bands/tuning/panels get the same treatment (eqBandsRef, eqTuneRef,
+ * eqOpenRef): the handlers persist the WHOLE prefs object, so computing it
+ * from a stale render closure would resurrect a just-changed band or panel
+ * when two changes land before a re-render (fast drags, double-clicks).
  */
 export function useTransport() {
   // Lazy initialiser, not a ref: the engine is constructed exactly once and
@@ -55,20 +56,23 @@ export function useTransport() {
   const [endVolumes, setEndVolumes] = useState({});  // per-lane faders, default 1
   const [mutedEnds, setMutedEnds] = useState({});
   const [tempoLocked, setTempoLocked] = useState(false);
-  // Per-end EQ: five band gains in dB plus each panel's open/closed state.
+  // Per-end EQ: five band gains in dB, the tuning offset in cents, plus
+  // each panel's open/closed state.
   // Hydrated once at mount from stored prefs via eqPrefs.js (which falls
-  // back to flat/closed and never throws) — this hook never touches
-  // localStorage itself. The prefs are read ONCE and both slices derive
+  // back to flat/centred/closed and never throws) — this hook never touches
+  // localStorage itself. The prefs are read ONCE and all slices derive
   // from that single snapshot: two reads would double the localStorage
   // access + JSON parse and could disagree if storage changed between
   // them. The mount effect brings the engine to match.
   const [eqPrefs] = useState(() => loadEqPrefs());
   const [eqBands, setEqBands] = useState({ dayan: eqPrefs.dayan.bands, bayan: eqPrefs.bayan.bands });
+  const [eqTune, setEqTune] = useState({ dayan: eqPrefs.dayan.tune, bayan: eqPrefs.bayan.tune });
   const [eqOpen, setEqOpen] = useState({ dayan: eqPrefs.dayan.open, bayan: eqPrefs.bayan.open });
 
   const bpmRef = useRef(bpm);
   const lockedRef = useRef(tempoLocked);
   const eqBandsRef = useRef(eqBands);
+  const eqTuneRef = useRef(eqTune);
   const eqOpenRef = useRef(eqOpen);
   const eqSaveTimerRef = useRef(null);
   const tapTimesRef = useRef([]);
@@ -96,9 +100,10 @@ export function useTransport() {
     // lazy initialisers above).
     for (const end of ["dayan", "bayan"]) {
       eqBands[end].forEach((db, i) => engine.setEqBand(end, i, db));
+      engine.setEndPitch(end, eqTune[end]);
     }
-    // Mount only: the engine is a stable singleton; `volume` and `eqBands`
-    // are read here purely as initial values. Re-running this would
+    // Mount only: the engine is a stable singleton; `volume`, `eqBands` and
+    // `eqTune` are read here purely as initial values. Re-running this would
     // double-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -109,8 +114,8 @@ export function useTransport() {
     if (eqSaveTimerRef.current == null) return;
     clearTimeout(eqSaveTimerRef.current);
     saveEqPrefs({
-      dayan: { bands: eqBandsRef.current.dayan, open: eqOpenRef.current.dayan },
-      bayan: { bands: eqBandsRef.current.bayan, open: eqOpenRef.current.bayan },
+      dayan: { bands: eqBandsRef.current.dayan, tune: eqTuneRef.current.dayan, open: eqOpenRef.current.dayan },
+      bayan: { bands: eqBandsRef.current.bayan, tune: eqTuneRef.current.bayan, open: eqOpenRef.current.bayan },
     });
   }, []);
 
@@ -128,6 +133,14 @@ export function useTransport() {
   const clampDb = (v) => {
     const num = Number(v);
     return Math.min(EQ_MAX_DB, Math.max(EQ_MIN_DB, Number.isFinite(num) ? num : 0));
+  };
+
+  // The tuning offset's version of clampDb: same contract, the shared TUNE
+  // range from data/tuning.js, so a drag, a stored pref and the engine's
+  // playbackRate can never disagree about the value.
+  const clampCents = (v) => {
+    const num = Number(v);
+    return Math.min(TUNE_MAX_CENTS, Math.max(TUNE_MIN_CENTS, Number.isFinite(num) ? num : 0));
   };
 
   function changeBpm(value) {
@@ -187,8 +200,8 @@ export function useTransport() {
       // prefs this callback just persisted.
       eqSaveTimerRef.current = null;
       saveEqPrefs({
-        dayan: { bands: eqBandsRef.current.dayan, open: eqOpenRef.current.dayan },
-        bayan: { bands: eqBandsRef.current.bayan, open: eqOpenRef.current.bayan },
+        dayan: { bands: eqBandsRef.current.dayan, tune: eqTuneRef.current.dayan, open: eqOpenRef.current.dayan },
+        bayan: { bands: eqBandsRef.current.bayan, tune: eqTuneRef.current.bayan, open: eqOpenRef.current.bayan },
       });
     }, EQ_SAVE_DEBOUNCE_MS);
   }
@@ -201,6 +214,18 @@ export function useTransport() {
     eqBandsRef.current = nextBands;
     setEqBands(nextBands);
     engine.setEqBand(end, bandIndex, gain);
+    scheduleEqSave();
+  }
+  // Per-end tuning, same shape as changeEqBand: ref + state + engine +
+  // debounced save. The shape carries dayan and bayan only — kartal is
+  // never tuned — so an unknown end drops here as the engine ignores it.
+  function changeEqTune(end, cents) {
+    const tune = eqTuneRef.current;
+    if (!(end in tune)) return;
+    const nextTune = { ...tune, [end]: clampCents(cents) };
+    eqTuneRef.current = nextTune;
+    setEqTune(nextTune);
+    engine.setEndPitch(end, nextTune[end]);
     scheduleEqSave();
   }
   function toggleEqPanel(end) {
@@ -248,7 +273,7 @@ export function useTransport() {
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo, clampBpm,
     tempoLocked, setTempoLocked,
     volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
-    eqBands, eqOpen, changeEqBand, toggleEqPanel,
+    eqBands, eqOpen, changeEqBand, toggleEqPanel, eqTune, changeEqTune,
     loadBeat, togglePlay, play, stop, unlock,
   };
 }
