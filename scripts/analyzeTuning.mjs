@@ -66,7 +66,11 @@ function readWav(filePath) {
   return { mono, rate: fmt.rate };
 }
 
-/** Normalized autocorrelation power at one lag. */
+/**
+ * Autocorrelation power at one lag, averaged over the overlap length (divided
+ * by sample count, not window energy). This is not energy-normalized, which is
+ * fine here: it is only ever compared relatively to pick the strongest lag.
+ */
 function acf(w, lag, len) {
   let sum = 0;
   for (let i = 0; i < len - lag; i++) sum += w[i] * w[i + lag];
@@ -99,7 +103,8 @@ function estimateWindow(x, rate, start, len) {
 
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
 /** Median fundamental across the sample's analysis windows. */
