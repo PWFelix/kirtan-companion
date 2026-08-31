@@ -82,6 +82,24 @@ export function useTransport() {
   useEffect(() => { lockedRef.current = tempoLocked; }, [tempoLocked]);
 
   useEffect(() => {
+    // Attach listeners BEFORE kicking off the async load so "ready" can't be
+    // missed, and push the hydrated EQ gains + per-end tuning from inside the
+    // "ready" handler. setEndPitch walks SoundPlayer's registered player pool,
+    // which stays empty until load() resolves — applying it here (rather than
+    // synchronously after loadSounds) is what keeps persisted tuning from
+    // being silently dropped on first load. The state itself hydrates in the
+    // lazy initialisers above.
+    engine.on("ready", () => {
+      for (const end of ["dayan", "bayan"]) {
+        eqBands[end].forEach((db, i) => engine.setEqBand(end, i, db));
+        engine.setEndPitch(end, eqTune[end]);
+      }
+      setReady(true);
+    });
+    engine.on("started", () => setPlaying(true));
+    engine.on("stopped", () => setPlaying(false));
+    engine.on("step",    (s) => setStep(s));
+    engine.setVolume(volume);
     engine.loadSounds({
       dayan_open:   "/sounds/dayan_open.wav",
       dayan_closed: "/sounds/dayan_closed.wav",
@@ -93,18 +111,6 @@ export function useTransport() {
       kartal_open:   "/sounds/kartal_open.wav",
       kartal_closed: "/sounds/kartal_closed.wav",
     });
-    engine.on("ready",   () => setReady(true));
-    engine.on("started", () => setPlaying(true));
-    engine.on("stopped", () => setPlaying(false));
-    engine.on("step",    (s) => setStep(s));
-    engine.setVolume(volume);
-    // Push the hydrated EQ gains into the engine so its chains match the
-    // sliders from the first sound on (the state itself hydrates in the
-    // lazy initialisers above).
-    for (const end of ["dayan", "bayan"]) {
-      eqBands[end].forEach((db, i) => engine.setEqBand(end, i, db));
-      engine.setEndPitch(end, eqTune[end]);
-    }
     // Mount only: the engine is a stable singleton; `volume`, `eqBands` and
     // `eqTune` are read here purely as initial values. Re-running this would
     // double-subscribe.
