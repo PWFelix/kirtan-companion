@@ -112,6 +112,18 @@ export function EqIcon() {
   );
 }
 
+// Per-end tuning — a tuning fork, so the three lane buttons read as three
+// distinct ideas: loudness (speaker), tone (EQ curve), pitch (fork).
+export function TuneIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 3v6a4 4 0 0 0 8 0V3" />
+      <path d="M12 13v8" />
+    </svg>
+  );
+}
+
 export function SpeakerIcon({ muted }) {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"

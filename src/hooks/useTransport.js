@@ -38,9 +38,10 @@ const EQ_SAVE_DEBOUNCE_MS = 250;
  * reuses a stale value, so fast clicks did nothing / bounced), and a
  * play() in the same tick as a loadBeat() sees the new tempo, not the old.
  * The EQ bands/tuning/panels get the same treatment (eqBandsRef, eqTuneRef,
- * eqOpenRef): the handlers persist the WHOLE prefs object, so computing it
- * from a stale render closure would resurrect a just-changed band or panel
- * when two changes land before a re-render (fast drags, double-clicks).
+ * eqOpenRef, tuneOpenRef): the handlers persist the WHOLE prefs object, so
+ * computing it from a stale render closure would resurrect a just-changed
+ * band or panel when two changes land before a re-render (fast drags,
+ * double-clicks).
  */
 export function useTransport() {
   // Lazy initialiser, not a ref: the engine is constructed exactly once and
@@ -68,12 +69,14 @@ export function useTransport() {
   const [eqBands, setEqBands] = useState({ dayan: eqPrefs.dayan.bands, bayan: eqPrefs.bayan.bands });
   const [eqTune, setEqTune] = useState({ dayan: eqPrefs.dayan.tune, bayan: eqPrefs.bayan.tune });
   const [eqOpen, setEqOpen] = useState({ dayan: eqPrefs.dayan.open, bayan: eqPrefs.bayan.open });
+  const [tuneOpen, setTuneOpen] = useState({ dayan: eqPrefs.dayan.tuneOpen, bayan: eqPrefs.bayan.tuneOpen });
 
   const bpmRef = useRef(bpm);
   const lockedRef = useRef(tempoLocked);
   const eqBandsRef = useRef(eqBands);
   const eqTuneRef = useRef(eqTune);
   const eqOpenRef = useRef(eqOpen);
+  const tuneOpenRef = useRef(tuneOpen);
   const eqSaveTimerRef = useRef(null);
   const tapTimesRef = useRef([]);
   useEffect(() => { lockedRef.current = tempoLocked; }, [tempoLocked]);
@@ -114,8 +117,8 @@ export function useTransport() {
     if (eqSaveTimerRef.current == null) return;
     clearTimeout(eqSaveTimerRef.current);
     saveEqPrefs({
-      dayan: { bands: eqBandsRef.current.dayan, tune: eqTuneRef.current.dayan, open: eqOpenRef.current.dayan },
-      bayan: { bands: eqBandsRef.current.bayan, tune: eqTuneRef.current.bayan, open: eqOpenRef.current.bayan },
+      dayan: { bands: eqBandsRef.current.dayan, tune: eqTuneRef.current.dayan, open: eqOpenRef.current.dayan, tuneOpen: tuneOpenRef.current.dayan },
+      bayan: { bands: eqBandsRef.current.bayan, tune: eqTuneRef.current.bayan, open: eqOpenRef.current.bayan, tuneOpen: tuneOpenRef.current.bayan },
     });
   }, []);
 
@@ -200,8 +203,8 @@ export function useTransport() {
       // prefs this callback just persisted.
       eqSaveTimerRef.current = null;
       saveEqPrefs({
-        dayan: { bands: eqBandsRef.current.dayan, tune: eqTuneRef.current.dayan, open: eqOpenRef.current.dayan },
-        bayan: { bands: eqBandsRef.current.bayan, tune: eqTuneRef.current.bayan, open: eqOpenRef.current.bayan },
+        dayan: { bands: eqBandsRef.current.dayan, tune: eqTuneRef.current.dayan, open: eqOpenRef.current.dayan, tuneOpen: tuneOpenRef.current.dayan },
+        bayan: { bands: eqBandsRef.current.bayan, tune: eqTuneRef.current.bayan, open: eqOpenRef.current.bayan, tuneOpen: tuneOpenRef.current.bayan },
       });
     }, EQ_SAVE_DEBOUNCE_MS);
   }
@@ -234,6 +237,17 @@ export function useTransport() {
     const nextOpen = { ...open, [end]: !open[end] };
     eqOpenRef.current = nextOpen;
     setEqOpen(nextOpen);
+    scheduleEqSave();
+  }
+  // The tuning panel's disclosure, mirroring toggleEqPanel — the two are
+  // independent surfaces (three lane buttons: mute / EQ / tuning), so each
+  // persists its own open state.
+  function toggleTunePanel(end) {
+    const open = tuneOpenRef.current;
+    if (!(end in open)) return;
+    const nextOpen = { ...open, [end]: !open[end] };
+    tuneOpenRef.current = nextOpen;
+    setTuneOpen(nextOpen);
     scheduleEqSave();
   }
 
@@ -274,6 +288,7 @@ export function useTransport() {
     tempoLocked, setTempoLocked,
     volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
     eqBands, eqOpen, changeEqBand, toggleEqPanel, eqTune, changeEqTune,
+    tuneOpen, toggleTunePanel,
     loadBeat, togglePlay, play, stop, unlock,
   };
 }

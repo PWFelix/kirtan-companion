@@ -8,7 +8,7 @@ import Wordmark from "../Wordmark.jsx";
 import ScrollFadeRow from "../ui/ScrollFadeRow.jsx";
 import * as sh from "../ui/styles.js";
 import {
-  LockIcon, PencilIcon, MixerIcon, SpeakerIcon, EqIcon, CheckIcon,
+  LockIcon, PencilIcon, MixerIcon, SpeakerIcon, EqIcon, TuneIcon, CheckIcon,
   PlayIcon, PauseIcon, RadioDot,
 } from "../ui/icons.jsx";
 
@@ -111,6 +111,7 @@ function HomeView({
     eqOpen = { dayan: false, bayan: false },
     changeEqBand, toggleEqPanel,
     eqTune = { dayan: 0, bayan: 0 }, changeEqTune,
+    tuneOpen = { dayan: false, bayan: false }, toggleTunePanel,
     togglePlay,
   } = transport;
   const { categories, activeCat, categoryBeats, catName, isCustomBeat } = library;
@@ -251,20 +252,24 @@ function HomeView({
             <input className="kc-range" type="range" min={0} max={100} value={Math.round(volume * 100)}
               onChange={(e) => changeVolume(Number(e.target.value) / 100)}
               style={{ "--fill": volume * 100 + "%", flex: 1 }} aria-label="Master volume" />
-            {/* Two spacers: the mute AND EQ columns now close every lane row,
-                so the master fader keeps its right edge aligned with theirs. */}
+            {/* Three spacers: the mute, EQ and tuning columns close every
+                lane row, so the master fader keeps its right edge aligned
+                with theirs. */}
+            <span style={{ width: 44 }} aria-hidden="true" />
             <span style={{ width: 44 }} aria-hidden="true" />
             <span style={{ width: 44 }} aria-hidden="true" />
           </div>
           {LANES.map(l => {
             const v = endVolumes[l.id] ?? 1;
             const muted = !!mutedEnds[l.id];
-            // EQ belongs to the two mridanga ends only — the frozen contract
-            // has no kartal key (eqOpen[kartal] would be undefined), so the
-            // Kartal row keeps just its fader + mute, plus a spacer that holds
-            // the fader column aligned with the EQ'd rows.
+            // EQ and tuning belong to the two mridanga ends only — the
+            // frozen contract has no kartal keys (eqOpen/tuneOpen[kartal]
+            // would be undefined), so the Kartal row keeps just its fader +
+            // mute, plus spacers that hold the fader column aligned with
+            // the three-button rows.
             const isEqEnd = l.id === "dayan" || l.id === "bayan";
             const open = !!eqOpen[l.id];
+            const tuning = !!tuneOpen[l.id];
             const bands = eqBands[l.id] ?? EQ_FLAT;
             const cents = eqTune[l.id] ?? 0;
             return (
@@ -295,24 +300,21 @@ function HomeView({
                   ) : (
                     <span style={{ width: 44 }} aria-hidden="true" />
                   )}
+                  {isEqEnd ? (
+                    // Same render-safety posture as the EQ button beside it.
+                    <button onClick={() => toggleTunePanel?.(l.id)} disabled={!toggleTunePanel}
+                      aria-pressed={tuning} aria-expanded={tuning} aria-label={`${l.label} tuning`}
+                      style={{ ...st.muteBtn, background: tuning ? "var(--head-sunken)" : "transparent",
+                        color: tuning ? l.color : "var(--syahi-soft)",
+                        opacity: toggleTunePanel ? 1 : 0.35, cursor: toggleTunePanel ? "pointer" : "not-allowed" }}>
+                      <TuneIcon />
+                    </button>
+                  ) : (
+                    <span style={{ width: 44 }} aria-hidden="true" />
+                  )}
                 </div>
                 {isEqEnd && open && (
-                  <div style={st.eqPanel} role="group" aria-label={`${l.label} EQ and tuning`}>
-                    {/* The tune row comes first: it names the pitch actually
-                        sounding — the measured base freq (data/tuning.js)
-                        shifted by the user's cents — so it doubles as the
-                        "what note am I on" display. */}
-                    <div style={st.mixRow}>
-                      <span style={st.mixLabel}>Tune</span>
-                      <input className="kc-range" type="range" min={TUNE_MIN_CENTS} max={TUNE_MAX_CENTS} step={1} value={cents}
-                        onChange={(e) => changeEqTune?.(l.id, Number(e.target.value))}
-                        disabled={!changeEqTune}
-                        style={{ "--fill": ((cents - TUNE_MIN_CENTS) / (TUNE_MAX_CENTS - TUNE_MIN_CENTS)) * 100 + "%", "--accent-action": l.color, flex: 1,
-                          opacity: changeEqTune ? 1 : 0.5, cursor: changeEqTune ? "pointer" : "not-allowed" }}
-                        aria-label={`${l.label} tuning in cents`} />
-                      <span style={st.tuneNote}>{freqToNoteName((END_BASE_FREQ[l.id] ?? 440) * centsToRate(cents))}</span>
-                      <span style={{ width: 44 }} aria-hidden="true" />
-                    </div>
+                  <div style={st.eqPanel} role="group" aria-label={`${l.label} equalizer`}>
                     {EQ_BAND_LABELS.map((bandLabel, i) => {
                       const db = bands[i] ?? 0;
                       return (
@@ -329,6 +331,26 @@ function HomeView({
                         </div>
                       );
                     })}
+                  </div>
+                )}
+                {isEqEnd && tuning && (
+                  // Tuning is its own surface from the EQ panel: a separate
+                  // button, a separate disclosure. The readout names the
+                  // pitch actually sounding — the measured base freq
+                  // (data/tuning.js) shifted by the user's cents — so it
+                  // doubles as the "what note am I on" display.
+                  <div style={st.eqPanel} role="group" aria-label={`${l.label} tuning`}>
+                    <div style={st.mixRow}>
+                      <span style={st.mixLabel}>Tune</span>
+                      <input className="kc-range" type="range" min={TUNE_MIN_CENTS} max={TUNE_MAX_CENTS} step={1} value={cents}
+                        onChange={(e) => changeEqTune?.(l.id, Number(e.target.value))}
+                        disabled={!changeEqTune}
+                        style={{ "--fill": ((cents - TUNE_MIN_CENTS) / (TUNE_MAX_CENTS - TUNE_MIN_CENTS)) * 100 + "%", "--accent-action": l.color, flex: 1,
+                          opacity: changeEqTune ? 1 : 0.5, cursor: changeEqTune ? "pointer" : "not-allowed" }}
+                        aria-label={`${l.label} tuning in cents`} />
+                      <span style={st.tuneNote}>{freqToNoteName((END_BASE_FREQ[l.id] ?? 440) * centsToRate(cents))}</span>
+                      <span style={{ width: 44 }} aria-hidden="true" />
+                    </div>
                   </div>
                 )}
               </div>

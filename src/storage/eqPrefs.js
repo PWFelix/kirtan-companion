@@ -2,9 +2,9 @@
  * eqPrefs.js
  * ----------
  * Persistence for the per-end mixer sound-shaping settings — EQ band gains,
- * the tuning offset, plus the panel open/closed disclosure state — the third
- * file allowed to call the localStorage API directly, alongside
- * localStorageProvider.js and migrate.js.
+ * the tuning offset, plus the EQ and tuning panels' open/closed disclosure
+ * state — the third file allowed to call the localStorage API directly,
+ * alongside localStorageProvider.js and migrate.js.
  *
  * WHY A SEPARATE FILE INSTEAD OF A PROVIDER METHOD. localStorageProvider is
  * shaped like the database the beat library becomes: rows, read-modify-write
@@ -43,8 +43,8 @@ const KEY = "kirtan-eq-prefs";
  */
 function defaultPrefs() {
   return {
-    dayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), tune: 0, open: false },
-    bayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), tune: 0, open: false },
+    dayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), tune: 0, open: false, tuneOpen: false },
+    bayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), tune: 0, open: false, tuneOpen: false },
   };
 }
 
@@ -82,6 +82,7 @@ function endOf(value) {
     bands: Array.from({ length: EQ_BAND_COUNT }, (_, i) => bandOf(rawBands[i])),
     tune: tuneOf(end.tune),
     open: end.open === true,
+    tuneOpen: end.tuneOpen === true,
   };
 }
 
