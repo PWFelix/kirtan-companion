@@ -96,16 +96,24 @@ export function useTransport() {
     // pre-ready — no players yet), so hydrating from the refs replays the
     // freshest values into the engine. Using the stale closure values would
     // clobber those pre-ready adjustments the moment loading finished.
-    engine.on("ready", () => {
+    // Named handlers so the cleanup below can unsubscribe the exact same
+    // references. Under React StrictMode (src/main.jsx) this effect runs
+    // mount→unmount→mount in dev; without cleanup the listeners would
+    // accumulate and fire setState after unmount.
+    const onReady = () => {
       for (const end of ["dayan", "bayan"]) {
         eqBandsRef.current[end].forEach((db, i) => engine.setEqBand(end, i, db));
         engine.setEndPitch(end, eqTuneRef.current[end]);
       }
       setReady(true);
-    });
-    engine.on("started", () => setPlaying(true));
-    engine.on("stopped", () => setPlaying(false));
-    engine.on("step",    (s) => setStep(s));
+    };
+    const onStarted = () => setPlaying(true);
+    const onStopped = () => setPlaying(false);
+    const onStep = (s) => setStep(s);
+    engine.on("ready", onReady);
+    engine.on("started", onStarted);
+    engine.on("stopped", onStopped);
+    engine.on("step", onStep);
     engine.setVolume(volume);
     engine.loadSounds({
       // Only the KEYS matter here — SoundPlayer resolves the real files from
@@ -124,6 +132,14 @@ export function useTransport() {
     // Mount only: the engine is a stable singleton; `volume` is read here
     // purely as an initial value, and EQ/tuning hydrate from their refs
     // inside the "ready" handler. Re-running this would double-subscribe.
+    // The cleanup unsubscribes the exact handler references so StrictMode's
+    // dev remount can't leak listeners or setState after unmount.
+    return () => {
+      engine.off("ready", onReady);
+      engine.off("started", onStarted);
+      engine.off("stopped", onStopped);
+      engine.off("step", onStep);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -46,7 +46,8 @@ const WINDOW = 4096;  // samples per analysis window (~93 ms at 44.1 kHz)
 const STEP_MS = 50;   // hop between windows
 const MAX_WINDOWS = 6;
 
-/** Minimal RIFF/WAVE reader: walks chunks, returns mono float samples. */
+/** Minimal RIFF/WAVE reader: walks chunks, returns mono float samples
+ *  (multi-channel input is downmixed by averaging all channels per frame). */
 function readWav(filePath) {
   const buf = fs.readFileSync(filePath);
   if (buf.toString("ascii", 0, 4) !== "RIFF") throw new Error(`${filePath}: not a RIFF file`);
@@ -60,9 +61,16 @@ function readWav(filePath) {
   }
   if (!fmt || !data) throw new Error(`${filePath}: missing fmt or data chunk`);
   if (fmt.bits !== 16) throw new Error(`${filePath}: expected 16-bit PCM, got ${fmt.bits}`);
-  const frames = data.length / (fmt.bits / 8) / fmt.channels;
+  const bytesPerSample = fmt.bits / 8;
+  const frames = Math.floor(data.length / bytesPerSample / fmt.channels);
   const mono = new Float64Array(frames);
-  for (let i = 0; i < frames; i++) mono[i] = data.readInt16LE(i * 2 * fmt.channels) / 32768;
+  for (let i = 0; i < frames; i++) {
+    let sum = 0;
+    for (let ch = 0; ch < fmt.channels; ch++) {
+      sum += data.readInt16LE((i * fmt.channels + ch) * bytesPerSample) / 32768;
+    }
+    mono[i] = sum / fmt.channels;
+  }
   return { mono, rate: fmt.rate };
 }
 
