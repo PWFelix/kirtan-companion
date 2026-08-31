@@ -89,10 +89,17 @@ export function useTransport() {
     // synchronously after loadSounds) is what keeps persisted tuning from
     // being silently dropped on first load. The state itself hydrates in the
     // lazy initialisers above.
+    //
+    // Read from the REFS, not the mount-time closure: the mixer UI is live
+    // before "ready", so a user can nudge EQ/tuning while samples are still
+    // loading. Those changes land in eqBandsRef/eqTuneRef (setEndPitch no-ops
+    // pre-ready — no players yet), so hydrating from the refs replays the
+    // freshest values into the engine. Using the stale closure values would
+    // clobber those pre-ready adjustments the moment loading finished.
     engine.on("ready", () => {
       for (const end of ["dayan", "bayan"]) {
-        eqBands[end].forEach((db, i) => engine.setEqBand(end, i, db));
-        engine.setEndPitch(end, eqTune[end]);
+        eqBandsRef.current[end].forEach((db, i) => engine.setEqBand(end, i, db));
+        engine.setEndPitch(end, eqTuneRef.current[end]);
       }
       setReady(true);
     });
@@ -111,9 +118,9 @@ export function useTransport() {
       kartal_open:   "/sounds/kartal_open.wav",
       kartal_closed: "/sounds/kartal_closed.wav",
     });
-    // Mount only: the engine is a stable singleton; `volume`, `eqBands` and
-    // `eqTune` are read here purely as initial values. Re-running this would
-    // double-subscribe.
+    // Mount only: the engine is a stable singleton; `volume` is read here
+    // purely as an initial value, and EQ/tuning hydrate from their refs
+    // inside the "ready" handler. Re-running this would double-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
