@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "analyze-tuning": "node scripts/analyzeTuning.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

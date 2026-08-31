@@ -1,9 +1,10 @@
 /**
  * eqPrefs.js
  * ----------
- * Persistence for the per-end EQ settings — band gains plus the panel
- * open/closed disclosure state — the third file allowed to call the
- * localStorage API directly, alongside localStorageProvider.js and migrate.js.
+ * Persistence for the per-end mixer sound-shaping settings — EQ band gains,
+ * the tuning offset, plus the EQ and tuning panels' open/closed disclosure
+ * state — the third file allowed to call the localStorage API directly,
+ * alongside localStorageProvider.js and migrate.js.
  *
  * WHY A SEPARATE FILE INSTEAD OF A PROVIDER METHOD. localStorageProvider is
  * shaped like the database the beat library becomes: rows, read-modify-write
@@ -16,19 +17,21 @@
  * JSON.parse throws whenever something unexpected lands under our key — a
  * future schema change, devtools, a sync bug. A corrupt EQ setting must
  * degrade to flat, not brick the mixer on mount, so every failure path below
- * arrives at the defaults: all bands 0 dB, panels closed. By the same
+ * arrives at the defaults: all bands 0 dB, tuning centred, panels closed.
+ * By the same
  * reasoning a failed SAVE is only a warning: the sliders keep working for
  * this session, the browser just won't remember. This is deliberately not
  * the beat provider's "errors are the point" stance — a lost EQ is re-set in
  * seconds, a lost beat is not.
  *
  * THE SHAPE carries dayan and bayan only. Kartal is the mixer's third lane
- * but has no equaliser, so it gets no entry here — do not add one. Bands are
- * clamped to [-12, 12] on load so a poisoned value cannot reach the engine
- * via mount hydration.
+ * but has no equaliser and no tuning, so it gets no entry here — do not add
+ * one. Bands are clamped to [-12, 12] and the tuning offset to ±600 cents on
+ * load so a poisoned value cannot reach the engine via mount hydration.
  */
 
 import { EQ_BAND_COUNT, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
+import { TUNE_MIN_CENTS, TUNE_MAX_CENTS } from "../data/tuning.js";
 
 const KEY = "kirtan-eq-prefs";
 
@@ -40,8 +43,8 @@ const KEY = "kirtan-eq-prefs";
  */
 function defaultPrefs() {
   return {
-    dayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), open: false },
-    bayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), open: false },
+    dayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), tune: 0, open: false, tuneOpen: false },
+    bayan: { bands: Array.from({ length: EQ_BAND_COUNT }, () => 0), tune: 0, open: false, tuneOpen: false },
   };
 }
 
@@ -57,6 +60,17 @@ function bandOf(value) {
 }
 
 /**
+ * The tuning offset coerced into cents in the shared TUNE range — same
+ * coerce-then-clamp contract as bandOf, so a poisoned value can't reach
+ * the engine via mount hydration.
+ */
+function tuneOf(value) {
+  const num = Number(value);
+  const cents = Number.isFinite(num) ? num : 0;
+  return Math.min(TUNE_MAX_CENTS, Math.max(TUNE_MIN_CENTS, cents));
+}
+
+/**
  * Rebuild one end's settings from whatever the store held. Every wrong shape
  * — missing, null, wrong type, short or long bands array — falls back per
  * field, so even a half-corrupt blob yields a complete, valid end.
@@ -66,7 +80,9 @@ function endOf(value) {
   const rawBands = Array.isArray(end.bands) ? end.bands : [];
   return {
     bands: Array.from({ length: EQ_BAND_COUNT }, (_, i) => bandOf(rawBands[i])),
+    tune: tuneOf(end.tune),
     open: end.open === true,
+    tuneOpen: end.tuneOpen === true,
   };
 }
 

@@ -20,6 +20,11 @@
  * gains — so tone shaping never disturbs volume, mute, or the bayan
  * makeup gain, which are all applied on the end gain (see _applyEnd).
  *
+ * Tuning: each end's pitch offset lives on the players themselves as
+ * playbackRate (setEndPitch), not as a node in the chain — one-shots
+ * retune cleanly by rate, and the property rides along whichever
+ * destination the player feeds.
+ *
  * Round-robin: a real drum never sounds identical twice in a row, so
  * each stroke maps to an ARRAY of samples. Playing a stroke picks a
  * random sample that isn't the one we just played. Single-sample
@@ -30,6 +35,7 @@
  */
 import * as Tone from "tone";
 import { EQ_BANDS, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
+import { TUNE_MIN_CENTS, TUNE_MAX_CENTS, centsToRate } from "../data/tuning.js";
 
 // Stroke name -> list of sample URLs. This is the single place that
 // knows the on-disk layout; load() keys off the manifest but pulls
@@ -248,5 +254,24 @@ export class SoundPlayer {
     const filter = chain && chain[bandIndex];
     if (!filter || !Number.isFinite(db)) return;
     filter.gain.rampTo(Math.max(EQ_MIN_DB, Math.min(EQ_MAX_DB, db)), 0.05);
+  }
+
+  /**
+   * Per-end pitch offset — the mixer's tune sliders ("tuning the drum").
+   * Retunes by setting playbackRate on every player registered under the
+   * end's prefix, closed strokes included: they ride the same head. Like
+   * real head tension, a higher pitch also shortens the decay a touch.
+   * Unknown ends (including kartal, which is never tuned) are ignored.
+   * Applies to the NEXT trigger of each sample, mid-loop included.
+   * @param {"dayan"|"bayan"} end
+   * @param {number} cents offset, clamped to the shared TUNE range
+   */
+  setEndPitch(end, cents) {
+    if (!Number.isFinite(cents)) return;
+    const rate = centsToRate(Math.max(TUNE_MIN_CENTS, Math.min(TUNE_MAX_CENTS, cents)));
+    for (const [name, entry] of this._players) {
+      if (!name.startsWith(`${end}_`)) continue;
+      for (const player of entry.players) player.playbackRate = rate;
+    }
   }
 }
