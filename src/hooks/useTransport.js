@@ -108,15 +108,18 @@ export function useTransport() {
     engine.on("step",    (s) => setStep(s));
     engine.setVolume(volume);
     engine.loadSounds({
-      dayan_open:   "/sounds/dayan_open.wav",
-      dayan_closed: "/sounds/dayan_closed.wav",
-      bayan_open:   "/sounds/bayan_open.wav",
-      bayan_closed: "/sounds/bayan_closed.wav",
       // Only the KEYS matter here — SoundPlayer resolves the real files from
-      // its own STROKE_SAMPLES map. Registering the kartal strokes is what
-      // makes them audible once the recordings land in public/sounds/kartal/.
-      kartal_open:   "/sounds/kartal_open.wav",
-      kartal_closed: "/sounds/kartal_closed.wav",
+      // its own STROKE_SAMPLES map (each stroke may map to several samples).
+      // The values are illustrative representative paths that mirror the real
+      // on-disk layout under public/sounds/, kept accurate to avoid confusion.
+      dayan_open:   "/sounds/dayan/open_1.wav",
+      dayan_closed: "/sounds/dayan/closed_1.wav",
+      bayan_open:   "/sounds/bayan/open_1.wav",
+      bayan_closed: "/sounds/bayan/closed_1.wav",
+      // Registering the kartal strokes is what makes them audible once the
+      // recordings land in public/sounds/kartal/.
+      kartal_open:   "/sounds/kartal/open_1.wav",
+      kartal_closed: "/sounds/kartal/closed_1.wav",
     });
     // Mount only: the engine is a stable singleton; `volume` is read here
     // purely as an initial value, and EQ/tuning hydrate from their refs
