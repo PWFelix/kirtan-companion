@@ -27,6 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,10 +45,12 @@ import androidx.compose.ui.unit.sp
 import com.kirtan.companion.container
 import com.kirtan.companion.data.PaletteToken
 import com.kirtan.companion.data.ShareIntake
+import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.storage.EqPrefsSnapshot
 import com.kirtan.companion.ui.beats.BeatsScreen
 import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.components.SectionLabel
+import com.kirtan.companion.ui.editor.BeatEditorScreen
 import com.kirtan.companion.ui.home.HomeScreen
 import com.kirtan.companion.ui.icons.CheckDot
 import com.kirtan.companion.ui.library.LibraryViewModel
@@ -97,6 +101,34 @@ internal fun KirtanApp(
 
     var entered by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(Tab.HOME) }
+
+    // ── Editor session ─────────────────────────────────────────────────────
+    // The editor is opened with an optional seed beat (from Home's or Beats'
+    // pencil) and remembers where to go back to. `editorSession` is a key: the
+    // draft is `remember`ed inside the screen, so a new session must force a new
+    // composition or the previous draft would survive into the next opening —
+    // the Compose equivalent of the web editor unmounting on close.
+    var editorInitial by remember { mutableStateOf<Beat?>(null) }
+    var editorReturn by remember { mutableStateOf<Tab?>(null) }
+    var editorSession by remember { mutableIntStateOf(0) }
+    var prevTab by remember { mutableStateOf(Tab.HOME) }
+
+    fun openEditor(beat: Beat?, from: Tab?) {
+        editorInitial = beat
+        editorReturn = from
+        editorSession++
+        tab = Tab.EDITOR
+    }
+
+    // Leaving the editor hands the transport back to whatever beat is loaded:
+    // the preview replaced the engine's beat with the draft, and walking away
+    // must not leave the draft sounding — or loaded — under the play screen.
+    LaunchedEffect(tab) {
+        if (prevTab == Tab.EDITOR && tab != Tab.EDITOR) {
+            selectedBeat?.let { transport.loadBeat(it) }
+        }
+        prevTab = tab
+    }
 
     // Immersive from the moment the user enters, and NOT immersive on the splash.
     // The splash is the one screen where an accidental launch must be escapable
@@ -164,7 +196,7 @@ internal fun KirtanApp(
                     transport = transport,
                     library = library,
                     beat = selectedBeat,
-                    onEditBeat = { tab = Tab.EDITOR },
+                    onEditBeat = { openEditor(it, Tab.HOME) },
                 )
 
                 Tab.BEATS -> BeatsScreen(
@@ -177,10 +209,19 @@ internal fun KirtanApp(
                         selectedBeat?.let { transport.play(it) }
                         tab = Tab.HOME
                     },
-                    onEditBeat = { tab = Tab.EDITOR },
+                    onEditBeat = { openEditor(it, Tab.BEATS) },
                 )
 
-                Tab.EDITOR -> EditorPlaceholder(onClose = { tab = Tab.HOME })
+                Tab.EDITOR -> key(editorSession) {
+                    BeatEditorScreen(
+                        engine = transport.engine,
+                        transport = transport,
+                        initialBeat = editorInitial,
+                        onSave = { beat, callback -> library.saveBeat(beat, callback) },
+                        onBack = editorReturn?.let { from -> { tab = from } },
+                        onClose = { tab = editorReturn ?: Tab.HOME },
+                    )
+                }
 
                 Tab.LEARN -> LearnScreen()
 
@@ -203,54 +244,12 @@ internal fun KirtanApp(
             onHome = { tab = Tab.HOME },
             onBeats = { tab = Tab.BEATS },
             // The editor is a tab, so the pill parks on it while editing — but
-            // opening it means a BLANK draft, not whatever was loaded last.
-            onOpenEditor = { tab = Tab.EDITOR },
+            // opening it from the nav means a BLANK draft, not whatever was
+            // loaded last, and nowhere to go back to.
+            onOpenEditor = { openEditor(null, null) },
             onLearn = { tab = Tab.LEARN },
             onSettings = { tab = Tab.SETTINGS },
         )
-    }
-}
-
-/**
- * The beat editor is NOT YET PORTED.
- *
- * Stating that plainly rather than shipping a stub that looks finished: the web
- * editor is 551 lines of intricate draft state — a meter-group model that supports
- * uneven signatures like 7/8, a 60-deep undo stack, zoom paging over the grid,
- * lane isolation for authoring the cymbal row, and pads that write-sound-advance
- * in one gesture. Everything it depends on is already here and tested: the meter
- * and label derivation, the bol names, the share codec it round-trips through, and
- * `KirtanEngine.playStroke` for the pads. What is missing is this screen.
- */
-@Composable
-private fun EditorPlaceholder(onClose: () -> Unit) {
-    val dimens = KirtanTheme.dimens
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .widthIn(max = dimens.screenMaxWidth)
-            .padding(dimens.screenPaddingSide),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-    ) {
-        Text(
-            text = "Beat editor",
-            color = PaletteToken.SYAHI.color,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(dimens.space3))
-        Text(
-            text = "Not ported yet. Custom beats can still arrive by share link, " +
-                "and everything the editor needs — the meter model, the bol names, " +
-                "the pad sounds — is already in place behind this screen.",
-            color = PaletteToken.SYAHI_SOFT.color,
-            fontSize = 13.4.sp,
-            lineHeight = 20.sp,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(dimens.space5))
-        com.kirtan.companion.ui.components.SecondaryButton(label = "Back to Home", onClick = onClose)
     }
 }
 

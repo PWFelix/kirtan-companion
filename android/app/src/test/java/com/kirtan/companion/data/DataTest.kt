@@ -8,6 +8,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
 import kotlin.math.pow
 
 /**
@@ -32,7 +33,7 @@ class DataTest {
             val id = beat.id ?: error("a built-in beat must have an id")
 
             assertEquals("$id: beatsPerBar × cellsPerGroup must equal steps",
-                beat.steps, beat.beatsPerBar * beat.cellsPerGroup)
+                beat.steps, (beat.beatsPerBar * beat.cellsPerGroup).roundToInt())
 
             assertTrue("$id: steps out of the shareable range", beat.steps in 1..ShareCodec.MAX_STEPS)
             assertTrue("$id: bpm out of range", beat.bpm in MIN_BPM..MAX_BPM)
@@ -93,8 +94,8 @@ class DataTest {
             assertEquals("${beat.id}: the first pulse must ring", Stroke.OPEN, kartal[0])
             assertEquals(
                 "${beat.id}: the downbeats must ring",
-                beat.beatsPerBar - 1,
-                (0 until beat.beatsPerBar).count { pulse ->
+                beat.beatsPerBar.toInt() - 1,
+                (0 until beat.beatsPerBar.toInt()).count { pulse ->
                     kartal[pulse * beat.cellsPerGroup] == Stroke.OPEN
                 },
             )
@@ -137,7 +138,7 @@ class DataTest {
         // editor saves cellsPerGroup 3 while cpq is 2, so reading cellsPerGroup
         // would make the beat play half again too fast.
         val sixEight = BEATS.first().copy(
-            id = null, steps = 12, beatsPerBar = 6, cellsPerGroup = 3, groups = listOf(3, 3),
+            id = null, steps = 12, beatsPerBar = 6.0, cellsPerGroup = 3, groups = listOf(3, 3),
         )
         assertEquals(2, cpqFor(sixEight))
         assertEquals(3, sixEight.cellsPerGroup)
@@ -149,7 +150,7 @@ class DataTest {
         for (beat in BEATS) {
             assertNull("${beat.id} is a built-in and should carry no groups", beat.groups)
             val groups = groupsFor(beat)
-            assertEquals("${beat.id}: group count", beat.beatsPerBar, groups.size)
+            assertEquals("${beat.id}: group count", beat.beatsPerBar.toInt(), groups.size)
             assertEquals("${beat.id}: groups must sum to steps", beat.steps, sumGroups(groups))
             assertTrue("${beat.id}: reconstruction should be uniform", groups.all { it == groups[0] })
             assertEquals(beat.cellsPerGroup, groups[0])
@@ -159,7 +160,7 @@ class DataTest {
     @Test
     fun `stored groups win over reconstruction`() {
         val uneven = BEATS.first().copy(
-            id = null, steps = 7, beatsPerBar = 3, cellsPerGroup = 2, groups = listOf(2, 2, 3),
+            id = null, steps = 7, beatsPerBar = 3.5, cellsPerGroup = 2, groups = listOf(2, 2, 3),
         )
         assertEquals(listOf(2, 2, 3), groupsFor(uneven))
         assertEquals(7, sumGroups(groupsFor(uneven)))

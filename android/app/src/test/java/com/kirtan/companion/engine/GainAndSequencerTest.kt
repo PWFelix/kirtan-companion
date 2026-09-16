@@ -235,12 +235,12 @@ class GainAndSequencerTest {
         // from 16 cells to 8 mid-play must not index past the end of the new
         // pattern, and must not lurch back to the downbeat either.
         val clock = MusicalClock(rate).apply {
-            setBpm(140.0, 0); setMeter(16, 4); start(0)
+            setBpm(140.0, 0); setMeter(16, 4.0); start(0)
         }
         val at = 40_000L
         val phaseBefore = clock.phaseAt(at)
 
-        clock.setMeter(8, 4)
+        clock.setMeter(8, 4.0)
 
         assertEquals("the position moved on a meter change", phaseBefore, clock.phaseAt(at), 1e-12)
         assertTrue("the derived step escaped the new grid", clock.stepAt(at) in 0 until 8)
@@ -248,7 +248,7 @@ class GainAndSequencerTest {
 
     @Test
     fun `no events are collected while stopped`() {
-        val clock = MusicalClock(rate).apply { setBpm(90.0, 0); setMeter(8, 4) }
+        val clock = MusicalClock(rate).apply { setBpm(90.0, 0); setMeter(8, 4.0) }
         val sequencer = Sequencer(clock).apply { beat = BEATS.first() }
         val out = ArrayList<StepEvent>()
         sequencer.collectStepEvents(0, 100_000, out)
@@ -257,7 +257,7 @@ class GainAndSequencerTest {
 
     @Test
     fun `no events are collected with no beat loaded`() {
-        val clock = MusicalClock(rate).apply { setBpm(90.0, 0); setMeter(8, 4); start(0) }
+        val clock = MusicalClock(rate).apply { setBpm(90.0, 0); setMeter(8, 4.0); start(0) }
         val sequencer = Sequencer(clock)
         val out = ArrayList<StepEvent>()
         sequencer.collectStepEvents(0, 100_000, out)

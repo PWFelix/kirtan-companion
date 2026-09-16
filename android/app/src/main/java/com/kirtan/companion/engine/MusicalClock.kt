@@ -80,14 +80,20 @@ class MusicalClock(val sampleRate: Int) {
         private set
 
     @Volatile
-    var beatsPerBar: Int = 4
+    var beatsPerBar: Double = 4.0
         private set
 
     @Volatile
     var steps: Int = 8
         private set
 
-    val ticksPerBar: Int get() = PPQ * beatsPerBar
+    /**
+     * One bar in whole ticks. Rounded because ticks are indivisible, and for every
+     * meter this app can author the product is exact: 4/4 eighths 768, 12/8 768,
+     * sixteenths 768, 6/8 576, and 7/8 672 — the last being exactly why
+     * [beatsPerBar] is fractional and this rounds rather than truncates.
+     */
+    val ticksPerBar: Int get() = (PPQ * beatsPerBar).roundToInt()
 
     /**
      * One step in ticks. Rounded because a non-dividing steps/beatsPerBar ratio
@@ -131,9 +137,9 @@ class MusicalClock(val sampleRate: Int) {
     }
 
     /** A beat or meter switch changes the grid; the position survives it. */
-    fun setMeter(newSteps: Int, newBeatsPerBar: Int) {
+    fun setMeter(newSteps: Int, newBeatsPerBar: Double) {
         steps = newSteps.coerceAtLeast(1)
-        beatsPerBar = newBeatsPerBar.coerceAtLeast(1)
+        beatsPerBar = newBeatsPerBar.coerceAtLeast(0.25)
     }
 
     /** The absolute tick at an absolute frame. */

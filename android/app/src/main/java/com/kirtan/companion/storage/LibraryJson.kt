@@ -163,6 +163,18 @@ internal object LibraryJson {
     }
 
     /**
+     * A fractional field, for meters that need one: 7/8 at eighth-note subdivision
+     * is 3.5 quarters to the bar, and the web app stores exactly that. Reading it
+     * through [intField] would round it to 4 and silently retime every uneven
+     * meter a shared or cloud beat carries.
+     */
+    private fun JsonObject.doubleField(key: String): Double? {
+        val value = (this[key] as? JsonPrimitive)?.doubleOrNull ?: return null
+        if (!value.isFinite()) return null
+        return value
+    }
+
+    /**
      * An optional `groups` array. Every entry must be a sane group size and the
      * array a sane length; the SUM is not required to equal `steps`, because a
      * mismatch there mislabels a bar rather than hanging the app, and refusing the
@@ -236,7 +248,7 @@ internal object LibraryJson {
         val note = obj.stringField(KEY_NOTE) ?: return null
         val bpm = obj.intField(KEY_BPM) ?: return null
         val steps = obj.intField(KEY_STEPS) ?: return null
-        val beatsPerBar = obj.intField(KEY_BEATS_PER_BAR) ?: return null
+        val beatsPerBar = obj.doubleField(KEY_BEATS_PER_BAR) ?: return null
         val cellsPerGroup = obj.intField(KEY_CELLS_PER_GROUP) ?: return null
 
         if (bpm !in MIN_BPM..MAX_BPM) return null

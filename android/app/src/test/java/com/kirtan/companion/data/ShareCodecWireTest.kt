@@ -98,7 +98,7 @@ class ShareCodecWireTest {
             assertEquals(expected["note"]!!.jsonPrimitive.content, beat.note)
             assertEquals(expected["bpm"]!!.jsonPrimitive.int, beat.bpm)
             assertEquals(expected["steps"]!!.jsonPrimitive.int, beat.steps)
-            assertEquals(expected["beatsPerBar"]!!.jsonPrimitive.int, beat.beatsPerBar)
+            assertEquals(expected["beatsPerBar"]!!.jsonPrimitive.int.toDouble(), beat.beatsPerBar, 0.0)
             assertEquals(expected["cellsPerGroup"]!!.jsonPrimitive.int, beat.cellsPerGroup)
 
             val expectedGroups = expected["groups"]!!.jsonArray.map { it.jsonPrimitive.int }
@@ -150,7 +150,7 @@ class ShareCodecWireTest {
             assertEquals(beat.name, round.name)
             assertEquals(beat.bpm, round.bpm)
             assertEquals(beat.steps, round.steps)
-            assertEquals(beat.beatsPerBar, round.beatsPerBar)
+            assertEquals(beat.beatsPerBar, round.beatsPerBar, 0.0)
             assertEquals(groupsFor(beat), round.groups)
             for (lane in LaneId.ORDERED) {
                 assertEquals(

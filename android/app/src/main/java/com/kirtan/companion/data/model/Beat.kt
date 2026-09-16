@@ -88,7 +88,18 @@ data class Beat(
     val note: String,
     val bpm: Int,
     val steps: Int,
-    val beatsPerBar: Int,
+    /**
+     * How many quarter-note pulses make one bar.
+     *
+     * A [Double] because uneven meters are fractional: 7/8 at eighth-note
+     * subdivision is 3.5 quarters to the bar. The web app stores exactly this, and
+     * the beat editor's seven-eight preset produces it, so an Int here would
+     * silently retime every uneven meter the editor can author. Timing itself
+     * never divides by this — [com.kirtan.companion.engine.MusicalClock] turns
+     * `PPQ × beatsPerBar` into whole ticks — it is the declaration of the meter,
+     * not the arithmetic of the loop.
+     */
+    val beatsPerBar: Double,
     val cellsPerGroup: Int,
     val groups: List<Int>?,
     val description: String?,

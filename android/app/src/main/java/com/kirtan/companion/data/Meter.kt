@@ -58,4 +58,4 @@ fun groupsFor(beat: Beat): List<Int> {
  * reading cellsPerGroup here would make the beat play half again too fast.
  */
 fun cpqFor(beat: Beat): Int =
-    max(1, (beat.steps.toDouble() / if (beat.beatsPerBar > 0) beat.beatsPerBar else 4).roundToInt())
+    max(1, (beat.steps.toDouble() / if (beat.beatsPerBar > 0.0) beat.beatsPerBar else 4.0).roundToInt())

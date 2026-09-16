@@ -27,7 +27,7 @@ class EngineTest {
 
     @Test
     fun `tick and frame conversions are exact inverses`() {
-        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(8, 4); start(0) }
+        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(8, 4.0); start(0) }
         for (frame in listOf(0L, 1L, 12_000L, 96_000L, 1_234_567L)) {
             assertEquals(
                 "frame $frame did not survive a tick round trip",
@@ -39,7 +39,7 @@ class EngineTest {
 
     @Test
     fun `one bar is two seconds at 120bpm in four beats`() {
-        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(8, 4); start(0) }
+        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(8, 4.0); start(0) }
         // 4 beats at 120bpm = 2s; PPQ 192 → 768 ticks per bar.
         assertEquals(768, clock.ticksPerBar)
         assertEquals(96, clock.ticksPerStep)
@@ -53,7 +53,7 @@ class EngineTest {
         // fractional step interval is what would make a loop drift.
         val cases = listOf(8 to 96, 12 to 64, 16 to 48)
         for ((steps, expected) in cases) {
-            val clock = MusicalClock(rate).apply { setMeter(steps, 4) }
+            val clock = MusicalClock(rate).apply { setMeter(steps, 4.0) }
             assertEquals("steps=$steps", expected, clock.ticksPerStep)
             assertEquals(
                 "steps=$steps does not divide the bar evenly",
@@ -69,7 +69,7 @@ class EngineTest {
         // by frame yields each step index in order, with no gaps and no
         // repeats — for every shipped grid.
         for (steps in listOf(8, 12, 16)) {
-            val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(steps, 4); start(0) }
+            val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(steps, 4.0); start(0) }
             val barFrames = clock.frameAt(clock.ticksPerBar.toDouble())
 
             val seen = ArrayList<Int>()
@@ -89,7 +89,7 @@ class EngineTest {
 
     @Test
     fun `a step boundary lands on the exact frame the clock predicts`() {
-        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(8, 4); start(0) }
+        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(8, 4.0); start(0) }
         // Step 3 begins at tick 3*96 = 288 → frame 288*125 = 36000.
         val frame = clock.frameAt(3 * clock.ticksPerStep.toDouble())
         assertEquals(36_000L, frame)
@@ -99,7 +99,7 @@ class EngineTest {
 
     @Test
     fun `a tempo change moves the position continuously, not by jumping`() {
-        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(8, 4); start(0) }
+        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(8, 4.0); start(0) }
         val at = 50_000L
         val tickBefore = clock.tickAt(at)
 
@@ -118,11 +118,11 @@ class EngineTest {
 
     @Test
     fun `switching to a shorter grid mid-bar keeps the phase valid`() {
-        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(16, 4); start(0) }
+        val clock = MusicalClock(rate).apply { setBpm(120.0, 0); setMeter(16, 4.0); start(0) }
         val at = 40_000L
         val tick = clock.tickAt(at)
 
-        clock.setMeter(8, 4)
+        clock.setMeter(8, 4.0)
 
         // The bug this guards: a stored step counter would still read e.g. 12,
         // which is out of range for an 8-cell pattern. Deriving from phase
@@ -134,7 +134,7 @@ class EngineTest {
 
     @Test
     fun `phase is zero while stopped`() {
-        val clock = MusicalClock(rate).apply { setMeter(8, 4) }
+        val clock = MusicalClock(rate).apply { setMeter(8, 4.0) }
         assertEquals(0.0, clock.phaseAt(100_000L), 0.0)
     }
 

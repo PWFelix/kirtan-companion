@@ -85,7 +85,7 @@ class LibraryJsonTest {
         val beat = testBeat(
             id = "seven",
             steps = 7,
-            beatsPerBar = 7,
+            beatsPerBar = 7.0,
             cellsPerGroup = 1,
             groups = listOf(2, 2, 3),
             dayan = "X-OOX-O",

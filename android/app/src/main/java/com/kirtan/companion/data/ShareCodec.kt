@@ -319,7 +319,7 @@ object ShareCodec {
             note = "Custom",
             bpm = bpm,
             steps = steps,
-            beatsPerBar = steps / q,
+            beatsPerBar = steps.toDouble() / q,
             cellsPerGroup = if (uniform) groups[0] else q,
             groups = groups,
             description = null,      // dropped, not validated; see rule 5
