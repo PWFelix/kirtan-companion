@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Cloud beats, community library and Supabase auth. The app is fully
+         usable offline without any of it. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- The point of going native: keep the drum playing through morning arti
+         with the screen off. Android 14+ requires the specific FGS type, and
+         Android 17 requires it be started while in use. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".KirtanApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.KirtanCompanion"
+        tools:targetApi="36">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.KirtanCompanion"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Inbound share links. The web app packs a beat into the URL
+                 FRAGMENT (`#b=<code>`) so it never reaches a server; on Android
+                 the same payload arrives as a deep link and is read from the
+                 intent, then cleared, preserving the "one chance only" rule in
+                 shareCodec.js. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kirtan" android:host="beat" />
+                <!-- The OAuth PKCE redirect. GoTrue bounces the browser back here
+                     after the identity provider; without this element the callback
+                     has nowhere to land and the flow dies silently. The matching
+                     URL must also be allow-listed in the Supabase dashboard. -->
+                <data android:scheme="kirtan" android:host="auth" android:pathPrefix="/callback" />
+            </intent-filter>
+        </activity>
+
+        <!-- Media3 session service: owns playback, the media notification and
+             the lock-screen controls, and is what keeps audio alive in the
+             background. Declared with the matching FGS type. -->
+        <service
+            android:name=".playback.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+    </application>
+
+</manifest>

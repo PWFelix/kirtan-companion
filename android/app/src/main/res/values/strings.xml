@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kirtan Companion</string>
+
+    <!-- Playback notification -->
+    <string name="notif_channel_name">Playback</string>
+    <string name="notif_channel_desc">Keeps the drum playing while the screen is off</string>
+    <string name="notif_title">Kirtan Companion</string>
+
+    <!-- Tabs -->
+    <string name="tab_home">Home</string>
+    <string name="tab_beats">Beats</string>
+    <string name="tab_editor">Editor</string>
+    <string name="tab_learn">Learn</string>
+    <string name="tab_settings">Settings</string>
+</resources>

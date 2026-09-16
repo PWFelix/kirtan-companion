@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher icon is the drumhead itself: rawhide, with the black syahi
+     tuning paste at the centre — the same inversion the app uses for a
+     sounding step. minSdk is 26, so an adaptive icon alone is enough. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- head -->
+    <path
+        android:fillColor="#F0EBDC"
+        android:pathData="M54,20 A34,34 0 1,1 53.99,20 Z" />
+    <!-- strap ring -->
+    <path
+        android:strokeColor="#B38A50"
+        android:strokeWidth="4"
+        android:pathData="M54,20 A34,34 0 1,1 53.99,20 Z" />
+    <!-- syahi -->
+    <path
+        android:fillColor="#261D16"
+        android:pathData="M54,41 A13,13 0 1,1 53.99,41 Z" />
+</vector>
