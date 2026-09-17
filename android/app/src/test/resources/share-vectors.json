@@ -1,0 +1,651 @@
+{
+  "generatedFrom": "src/data/shareCodec.js (the web encoder)",
+  "beats": [
+    {
+      "id": "te_ta",
+      "name": "Te Ta",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJUZSBUYSIsIm0iOjgwLCJnIjpbMiwyLDIsMl0sInEiOjIsInAiOnsiZGF5YW4iOiJYT1hPWE9YTyIsImJheWFuIjoiTy0tWC1PTy0iLCJrYXJ0YWwiOiJPLU8tTy0tLSJ9fQ",
+      "decoded": {
+        "kind": "beat",
+        "beat": {
+          "name": "Te Ta",
+          "note": "Custom",
+          "bpm": 80,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O"
+          ],
+          "bayan": [
+            "O",
+            null,
+            null,
+            "X",
+            null,
+            "O",
+            "O",
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    {
+      "id": "forward",
+      "name": "Forward",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJGb3J3YXJkIiwibSI6OTAsImciOlsyLDIsMiwyXSwicSI6MiwicCI6eyJkYXlhbiI6IlgtT09YLU9PIiwiYmF5YW4iOiJPLS1YLU9PLSIsImthcnRhbCI6Ik8tTy1PLS0tIn19",
+      "decoded": {
+        "kind": "beat",
+        "beat": {
+          "name": "Forward",
+          "note": "Custom",
+          "bpm": 90,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "X",
+            null,
+            "O",
+            "O",
+            "X",
+            null,
+            "O",
+            "O"
+          ],
+          "bayan": [
+            "O",
+            null,
+            null,
+            "X",
+            null,
+            "O",
+            "O",
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    {
+      "id": "backward",
+      "name": "Backward",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJCYWNrd2FyZCIsIm0iOjkwLCJnIjpbMiwyLDIsMl0sInEiOjIsInAiOnsiZGF5YW4iOiJPT09PWE8tLSIsImJheWFuIjoiTy1YLU8tTy0iLCJrYXJ0YWwiOiJPLU8tTy0tLSJ9fQ",
+      "decoded": {
+        "kind": "beat",
+        "beat": {
+          "name": "Backward",
+          "note": "Custom",
+          "bpm": 90,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "O",
+            "O",
+            "O",
+            "O",
+            "X",
+            "O",
+            null,
+            null
+          ],
+          "bayan": [
+            "O",
+            null,
+            "X",
+            null,
+            "O",
+            null,
+            "O",
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    {
+      "id": "funky_swing",
+      "name": "Funky Swing",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJGdW5reSBTd2luZyIsIm0iOjk1LCJnIjpbMiwyLDIsMl0sInEiOjIsInAiOnsiZGF5YW4iOiJPWFhPWFgtLSIsImJheWFuIjoiTy1YLU8tTy0iLCJrYXJ0YWwiOiJPLU8tTy0tLSJ9fQ",
+      "decoded": {
+        "kind": "beat",
+        "beat": {
+          "name": "Funky Swing",
+          "note": "Custom",
+          "bpm": 95,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "O",
+            "X",
+            "X",
+            "O",
+            "X",
+            "X",
+            null,
+            null
+          ],
+          "bayan": [
+            "O",
+            null,
+            "X",
+            null,
+            "O",
+            null,
+            "O",
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    {
+      "id": "da_ge_te_te",
+      "name": "Da Ge Te Te",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJEYSBHZSBUZSBUZSIsIm0iOjExMCwiZyI6WzIsMiwyLDJdLCJxIjoyLCJwIjp7ImRheWFuIjoiWE9YT1hPWE8iLCJiYXlhbiI6Ik9PWC1PLU8tIiwia2FydGFsIjoiTy1PLU8tLS0ifX0",
+      "decoded": {
+        "kind": "beat",
+        "beat": {
+          "name": "Da Ge Te Te",
+          "note": "Custom",
+          "bpm": 110,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O"
+          ],
+          "bayan": [
+            "O",
+            "O",
+            "X",
+            null,
+            "O",
+            null,
+            "O",
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    {
+      "id": "prabhupada",
+      "name": "Prabhupada",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJQcmFiaHVwYWRhIiwibSI6NjUsImciOlsyLDIsMiwyXSwicSI6MiwicCI6eyJkYXlhbiI6IlhPWE9YT1hPIiwiYmF5YW4iOiItLS0tWFhPTyIsImthcnRhbCI6Ik8tTy1PLS0tIn19",
+      "decoded": {
+        "kind": "beat",
+        "beat": {
+          "name": "Prabhupada",
+          "note": "Custom",
+          "bpm": 65,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O"
+          ],
+          "bayan": [
+            null,
+            null,
+            null,
+            null,
+            "X",
+            "X",
+            "O",
+            "O"
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    {
+      "id": "double_time",
+      "name": "Double Time",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJEb3VibGUgVGltZSIsIm0iOjE0MCwiZyI6WzQsNCw0LDRdLCJxIjo0LCJwIjp7ImRheWFuIjoiWC1PT1gtT09YLU9PWC1PTyIsImJheWFuIjoiTy0tWC1PTy1PLS1YLU9PLSIsImthcnRhbCI6Ik8tLS1PLS0tTy0tLS0tLS0ifX0",
+      "decoded": {
+        "kind": "beat",
+        "beat": {
+          "name": "Double Time",
+          "note": "Custom",
+          "bpm": 140,
+          "steps": 16,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 4,
+          "groups": [
+            4,
+            4,
+            4,
+            4
+          ],
+          "dayan": [
+            "X",
+            null,
+            "O",
+            "O",
+            "X",
+            null,
+            "O",
+            "O",
+            "X",
+            null,
+            "O",
+            "O",
+            "X",
+            null,
+            "O",
+            "O"
+          ],
+          "bayan": [
+            "O",
+            null,
+            null,
+            "X",
+            null,
+            "O",
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            "X",
+            null,
+            "O",
+            "O",
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            null,
+            null,
+            "O",
+            null,
+            null,
+            null,
+            "O",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    },
+    {
+      "id": "dadra",
+      "name": "Dadra Taal",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJEYWRyYSBUYWFsIiwibSI6MTA1LCJnIjpbMywzLDMsM10sInEiOjMsInAiOnsiZGF5YW4iOiJYLU8tTy1YLU8tTy0iLCJiYXlhbiI6Ik8tLVgtLS0tLU8tLSIsImthcnRhbCI6Ik8tLU8tLU8tLS0tLSJ9fQ",
+      "decoded": {
+        "kind": "beat",
+        "beat": {
+          "name": "Dadra Taal",
+          "note": "Custom",
+          "bpm": 105,
+          "steps": 12,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 3,
+          "groups": [
+            3,
+            3,
+            3,
+            3
+          ],
+          "dayan": [
+            "X",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            "X",
+            null,
+            "O",
+            null,
+            "O",
+            null
+          ],
+          "bayan": [
+            "O",
+            null,
+            null,
+            "X",
+            null,
+            null,
+            null,
+            null,
+            null,
+            "O",
+            null,
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            null,
+            "O",
+            null,
+            null,
+            "O",
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        }
+      }
+    }
+  ],
+  "category": {
+    "name": "Morning Programme",
+    "code": "eyJ2IjoxLCJ0IjoiYyIsIm4iOiJNb3JuaW5nIFByb2dyYW1tZSIsImIiOlt7Im4iOiJUZSBUYSIsIm0iOjgwLCJnIjpbMiwyLDIsMl0sInEiOjIsInAiOnsiZGF5YW4iOiJYT1hPWE9YTyIsImJheWFuIjoiTy0tWC1PTy0iLCJrYXJ0YWwiOiJPLU8tTy0tLSJ9fSx7Im4iOiJGb3J3YXJkIiwibSI6OTAsImciOlsyLDIsMiwyXSwicSI6MiwicCI6eyJkYXlhbiI6IlgtT09YLU9PIiwiYmF5YW4iOiJPLS1YLU9PLSIsImthcnRhbCI6Ik8tTy1PLS0tIn19LHsibiI6IlByYWJodXBhZGEiLCJtIjo2NSwiZyI6WzIsMiwyLDJdLCJxIjoyLCJwIjp7ImRheWFuIjoiWE9YT1hPWE8iLCJiYXlhbiI6Ii0tLS1YWE9PIiwia2FydGFsIjoiTy1PLU8tLS0ifX1dfQ",
+    "decoded": {
+      "kind": "category",
+      "name": "Morning Programme",
+      "beats": [
+        {
+          "name": "Te Ta",
+          "note": "Custom",
+          "bpm": 80,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O"
+          ],
+          "bayan": [
+            "O",
+            null,
+            null,
+            "X",
+            null,
+            "O",
+            "O",
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "name": "Forward",
+          "note": "Custom",
+          "bpm": 90,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "X",
+            null,
+            "O",
+            "O",
+            "X",
+            null,
+            "O",
+            "O"
+          ],
+          "bayan": [
+            "O",
+            null,
+            null,
+            "X",
+            null,
+            "O",
+            "O",
+            null
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        },
+        {
+          "name": "Prabhupada",
+          "note": "Custom",
+          "bpm": 65,
+          "steps": 8,
+          "beatsPerBar": 4,
+          "cellsPerGroup": 2,
+          "groups": [
+            2,
+            2,
+            2,
+            2
+          ],
+          "dayan": [
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O",
+            "X",
+            "O"
+          ],
+          "bayan": [
+            null,
+            null,
+            null,
+            null,
+            "X",
+            "X",
+            "O",
+            "O"
+          ],
+          "kartal": [
+            "O",
+            null,
+            "O",
+            null,
+            "O",
+            null,
+            null,
+            null
+          ]
+        }
+      ]
+    }
+  },
+  "hostile": [
+    {
+      "why": "wrong version",
+      "code": "eyJ2IjoyLCJ0IjoiYiIsIm4iOiJ4IiwibSI6OTAsImciOlsyLDJdLCJxIjoyLCJwIjp7fX0"
+    },
+    {
+      "why": "steps far beyond MAX_STEPS",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6OTAsImciOlsxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMiwxMl0sInEiOjEyLCJwIjp7fX0"
+    },
+    {
+      "why": "group cell count out of range",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6OTAsImciOls5OV0sInEiOjIsInAiOnt9fQ"
+    },
+    {
+      "why": "pattern length disagrees with steps",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6OTAsImciOlsyLDJdLCJxIjoyLCJwIjp7ImRheWFuIjoiWE8ifX0"
+    },
+    {
+      "why": "q out of range",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6OTAsImciOlsyLDJdLCJxIjo5OSwicCI6e319"
+    },
+    {
+      "why": "empty groups",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6OTAsImciOltdLCJxIjoyLCJwIjp7fX0"
+    },
+    {
+      "why": "not JSON at all",
+      "code": "bm90LWpzb24"
+    },
+    {
+      "why": "bpm absurd, must clamp not reject",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6MTAwMDAwMDAwMCwiZyI6WzIsMl0sInEiOjIsInAiOnt9fQ",
+      "expectClampedBpm": 200
+    },
+    {
+      "why": "name with control + format chars",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJFdmls4oCuXHUwMDAwTmFtZSIsIm0iOjkwLCJnIjpbMiwyXSwicSI6MiwicCI6e319",
+      "expectName": "EvilName"
+    },
+    {
+      "why": "unknown lane key must be ignored",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6OTAsImciOlsyLDJdLCJxIjoyLCJwIjp7ImRheWFuIjoiWE9YTyIsIl9fcHJvdG9fXyI6eyJhZG1pbiI6dHJ1ZX0sIm1lbG9keSI6IlhYWFgifX0"
+    },
+    {
+      "why": "smuggled description and group must be dropped",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6OTAsImciOlsyLDJdLCJxIjoyLCJwIjp7fSwiZGVzY3JpcHRpb24iOiJ2aXNpdCBldmlsLmV4YW1wbGUiLCJncm91cCI6IkhhY2tlZCJ9"
+    },
+    {
+      "why": "smuggled id must not be honoured",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsImlkIjoidGVfdGEiLCJuIjoieCIsIm0iOjkwLCJnIjpbMiwyXSwicSI6MiwicCI6e319"
+    }
+  ]
+}
