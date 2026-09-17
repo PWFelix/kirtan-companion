@@ -1,5 +1,11 @@
 package com.kirtan.companion.data
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+private typealias SharePayload = ShareCodec.SharePayload
+
 /**
  * Turning an inbound Android link into a share payload, EXACTLY ONCE.
  *
@@ -43,10 +49,20 @@ object ShareIntake {
     /** The fragment marker the web app uses. */
     const val FRAGMENT_MARKER = "#b="
 
-    private var pending: ShareCodec.SharePayload? = null
+    /**
+     * The decoded payload waiting to be collected, as a flow.
+     *
+     * A flow rather than a plain field because a link can arrive at ANY time: on
+     * cold start (through `onCreate`) and warm (through `onNewIntent`, with the
+     * app already composed and running). A UI that read this once at composition
+     * would handle the first case and silently drop every later one — the user
+     * taps a shared link, nothing happens, and the app looks broken.
+     */
+    private val _pending = MutableStateFlow<SharePayload?>(null)
+    val pending: StateFlow<SharePayload?> = _pending.asStateFlow()
 
     /** Is a decoded payload waiting to be collected? */
-    val hasPending: Boolean get() = pending != null
+    val hasPending: Boolean get() = _pending.value != null
 
     /**
      * Decode [text] and hold the result.
@@ -61,23 +77,22 @@ object ShareIntake {
      */
     fun offer(text: String?) {
         val code = codeFrom(text) ?: return
-        val decoded = ShareCodec.decodeShare(code)
-        pending = decoded ?: ShareCodec.SharePayload.Invalid
+        _pending.value = ShareCodec.decodeShare(code) ?: ShareCodec.SharePayload.Invalid
     }
 
     /**
      * Take the pending payload and clear it. The SECOND call returns null — that
      * is the whole point, and the property the web app gets by clearing the hash.
      */
-    fun consume(): ShareCodec.SharePayload? {
-        val payload = pending
-        pending = null
+    fun consume(): SharePayload? {
+        val payload = _pending.value
+        _pending.value = null
         return payload
     }
 
     /** Drop anything pending without reporting it — e.g. the user dismissed it. */
     fun clear() {
-        pending = null
+        _pending.value = null
     }
 
     /**

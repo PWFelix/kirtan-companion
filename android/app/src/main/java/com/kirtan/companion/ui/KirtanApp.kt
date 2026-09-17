@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kirtan.companion.container
 import com.kirtan.companion.data.PaletteToken
+import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.ShareIntake
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.storage.EqPrefsSnapshot
@@ -113,6 +114,9 @@ internal fun KirtanApp(
     var editorSession by remember { mutableIntStateOf(0) }
     var prevTab by remember { mutableStateOf(Tab.HOME) }
 
+    /** A decoded share payload awaiting the library screen's confirmation. */
+    var pendingImport by remember { mutableStateOf<ShareCodec.SharePayload?>(null) }
+
     fun openEditor(beat: Beat?, from: Tab?) {
         editorInitial = beat
         editorReturn = from
@@ -133,18 +137,27 @@ internal fun KirtanApp(
     // Immersive from the moment the user enters, and NOT immersive on the splash.
     // The splash is the one screen where an accidental launch must be escapable
     // with an ordinary Back press; once Begin is tapped the system bars retire and
-    // an edge swipe brings them back transiently (see MainActivity.setImmersive).
+    // an edge swipe brings them back transiently (see MainActivity.applyImmersive).
     LaunchedEffect(entered) { onImmersiveChange(entered) }
 
     // ── Inbound share links ────────────────────────────────────────────────
-    // MainActivity has already pushed any link it received into ShareIntake.
-    // Consuming it here — once — is what enforces the trust boundary's rule that
-    // a payload gets exactly one chance: the intent is redelivered on every
-    // onNewIntent and replayed across a process restart, so reading it twice
-    // would re-import the same stranger's beat on every launch.
-    LaunchedEffect(Unit) {
-        val payload = ShareIntake.consume() ?: return@LaunchedEffect
-        library.importShared(payload)
+    // MainActivity pushes any link it receives into ShareIntake. Collected here
+    // as a FLOW rather than read once at composition, because links arrive warm
+    // too: `onNewIntent` fires on every re-tap while the app is already open, and
+    // a one-shot read would silently drop all of them.
+    //
+    // Consuming immediately is what enforces the trust boundary's one-chance rule:
+    // the intent is redelivered on relaunch, so a payload left pending would be
+    // re-imported every time the user opens the app.
+    val inbound by ShareIntake.pending.collectAsState()
+    LaunchedEffect(inbound) {
+        val payload = inbound ?: return@LaunchedEffect
+        ShareIntake.consume()
+        // Hand it to the library screen for PREVIEW rather than writing it
+        // straight in: an inbound link is untrusted input, and the confirmation
+        // step is the last part of that boundary. Writing here would import a
+        // stranger's beat with nothing the user ever saw.
+        pendingImport = payload
         // A shared link lands the user in the library so they can see what
         // arrived, rather than on Home with an unexplained beat loaded.
         tab = Tab.BEATS
@@ -210,6 +223,8 @@ internal fun KirtanApp(
                         tab = Tab.HOME
                     },
                     onEditBeat = { openEditor(it, Tab.BEATS) },
+                    pendingImport = pendingImport,
+                    onPendingImportHandled = { pendingImport = null },
                 )
 
                 Tab.EDITOR -> key(editorSession) {

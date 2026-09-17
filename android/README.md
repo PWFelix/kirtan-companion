@@ -174,22 +174,48 @@ permanently disabled), a dropped `ready = true` in the event handler, and
 `SimpleBasePlayer` throwing `IllegalStateException` when touched off the main
 thread. None of these is visible to a compiler or a JVM test.
 
+## Sharing and importing
+
+Outbound: a beat's detail sheet and a list's page both offer Share, which gives
+the same payload three ways — the system share sheet, a copyable link, and a
+copyable bare code (the code is what survives a messenger that mangles URLs).
+Nothing is uploaded; the whole beat travels inside the link.
+
+Inbound: the library landing has an Import card, and `kirtan://beat?c=…` deep
+links arrive through `MainActivity`. **Both routes converge on the same
+preview-then-confirm sheet**, so an inbound link can never write to the library
+without the user first seeing the beat and its strip. The payload is consumed
+exactly once — the intent is redelivered on every `onNewIntent` and replayed
+across a process restart, so one left pending would re-import on every launch.
+
+Links point at the **web** origin (`SHARE_WEB_BASE`, a build property in
+`local.properties`), because a recipient almost certainly has the site rather than
+this app. With it unset, links fall back to the `kirtan://` scheme and the sheet
+says so.
+
+### Exporting a corrected beat back into the built-ins
+
+`BeatSourceExport` — reached from Share → **Export source…** — emits a beat as
+ready-to-paste source for **both** `android/…/data/Beats.kt` and
+`src/data/beats.js`, preserving `id`, `group` and `description`.
+
+That is deliberately NOT the share format. `ShareCodec` strips those three fields
+because it is a trust boundary: an id from a stranger's link could silently
+overwrite one of your beats, and a description renders as prose in the info sheet.
+Those same fields are exactly what replacing a baked-in entry needs, so the export
+is a separate, explicit path reachable only from a beat you already have.
+
+The workflow: open the beat in the editor, correct the cells, export, and paste
+over the entry in **both files**. They must stay in sync — a shared link carries no
+id, so each client resolves built-in ids against its own compiled list, and
+divergent patterns mean the same link plays a different beat on each platform.
+
 ## What is NOT ported
 
 Stated plainly, so nothing here reads as more finished than it is:
 
-- **The beat editor.** `BeatEditor.jsx` is 551 lines of intricate draft state — a
-  meter-group model supporting uneven signatures like 7/8, a 60-deep undo stack,
-  zoom paging over the grid, lane isolation for authoring the cymbal row, and pads
-  that write-sound-advance in one gesture. The Editor tab currently shows an
-  honest placeholder. Everything it depends on is already here and tested: the
-  meter and label derivation, the bol names, the share codec it round-trips
-  through, and `KirtanEngine.playStroke` for the pads.
 - **Community / Browse UI.** The client exists in `storage/CommunityClient.kt`;
-  only its screen is missing.
-- **Share and import sheets.** The codec and the deep-link intake are complete and
-  tested; inbound `kirtan://beat?c=…` links ARE handled in `MainActivity`. What is
-  missing is the sheet that shares a beat and the field that pastes a code.
+  only its screen is missing. Publishing from the share sheet is likewise absent.
 - **The sign-in sheet.** The PKCE client, session persistence, the
   `kirtan://auth/callback` manifest route and its one-chance-only handling in
   `MainActivity` are all wired; `AppContainer` follows the session and swaps the
@@ -200,4 +226,5 @@ Stated plainly, so nothing here reads as more finished than it is:
   Redirect URLs, or GoTrue refuses the flow before the provider is reached.
 - **The landscape Home layout** (transport collapsed into one 44dp rail), the
   tempo sheet's snapping BPM wheel, and the strip's loop-position bar.
+- **Drag-to-reorder** within a playlist, which the web does with dnd-kit.
 

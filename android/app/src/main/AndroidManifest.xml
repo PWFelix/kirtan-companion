@@ -42,15 +42,28 @@
                  the same payload arrives as a deep link and is read from the
                  intent, then cleared, preserving the "one chance only" rule in
                  shareCodec.js. -->
+            <!-- TWO SEPARATE FILTERS, and this is not stylistic. Multiple <data>
+                 elements inside one <intent-filter> MERGE their attributes rather
+                 than forming alternatives: putting the auth callback here alongside
+                 host="beat" produced a single spec requiring pathPrefix="/callback",
+                 so `kirtan://beat?c=…` stopped resolving at all (the intent came
+                 back with result code -91). Each distinct URI shape needs its own
+                 filter. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="kirtan" android:host="beat" />
-                <!-- The OAuth PKCE redirect. GoTrue bounces the browser back here
-                     after the identity provider; without this element the callback
-                     has nowhere to land and the flow dies silently. The matching
-                     URL must also be allow-listed in the Supabase dashboard. -->
+            </intent-filter>
+
+            <!-- The OAuth PKCE redirect. GoTrue bounces the browser back here
+                 after the identity provider; without this the callback has
+                 nowhere to land and the flow dies silently. The matching URL must
+                 also be allow-listed in the Supabase dashboard. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="kirtan" android:host="auth" android:pathPrefix="/callback" />
             </intent-filter>
         </activity>

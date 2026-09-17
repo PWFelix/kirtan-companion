@@ -121,8 +121,16 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repository.reorderCategory(categoryId, activeId, overId) }
     }
 
-    fun importShared(payload: com.kirtan.companion.data.ShareCodec.SharePayload?) {
-        viewModelScope.launch { repository.importShared(payload) }
+    /**
+     * Import a shared payload. The callback reports what landed, including the id
+     * of a newly created category, so the caller can navigate there and say "added
+     * 3 beats to the list X" rather than silently switching tabs.
+     */
+    fun importShared(
+        payload: com.kirtan.companion.data.ShareCodec.SharePayload?,
+        onDone: (LibraryRepository.ImportResult) -> Unit = {},
+    ) {
+        viewModelScope.launch { onDone(repository.importShared(payload)) }
     }
 
     fun dismissError() = repository.dismissError()

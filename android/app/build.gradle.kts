@@ -42,6 +42,13 @@ android {
 
         buildConfigField("String", "SUPABASE_URL", "\"${secret("SUPABASE_URL")}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${secret("SUPABASE_ANON_KEY")}\"")
+
+        // Origin of the hosted WEB app, which is where an outbound share link
+        // should point: a recipient almost certainly has the site, not this app.
+        // The web build derives its own links from `location.origin`, so nothing
+        // in the repo records the URL — hence it is configured here rather than
+        // hard-coded. Empty falls back to the native `kirtan://` scheme.
+        buildConfigField("String", "SHARE_WEB_BASE", "\"${secret("SHARE_WEB_BASE")}\"")
     }
 
     buildTypes {

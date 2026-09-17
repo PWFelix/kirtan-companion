@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.kirtan.companion.data.BUILT_IN_GROUPS
 import com.kirtan.companion.data.BEATS
 import com.kirtan.companion.data.PaletteToken
+import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.storage.BUILTIN_CATEGORY
 import com.kirtan.companion.storage.CUSTOM_CATEGORY
@@ -46,9 +48,14 @@ import com.kirtan.companion.storage.LibraryRepository
 import com.kirtan.companion.ui.components.HairlineIconButton
 import com.kirtan.companion.ui.components.PrimaryButton
 import com.kirtan.companion.ui.components.ScreenFrame
+import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.components.SectionLabel
 import com.kirtan.companion.ui.icons.KcIcons
 import com.kirtan.companion.ui.library.LibraryViewModel
+import com.kirtan.companion.ui.share.ImportConfirmSheet
+import com.kirtan.companion.ui.share.ImportSheet
+import com.kirtan.companion.ui.share.ShareSheet
+import com.kirtan.companion.ui.share.ShareTarget
 import com.kirtan.companion.ui.strip.BeatStrip
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
@@ -87,6 +94,14 @@ internal fun BeatsScreen(
     onStart: () -> Unit,
     onEditBeat: (Beat) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * A share payload that arrived through a deep link, to be previewed here
+     * rather than written straight to the library. Handed over by
+     * [com.kirtan.companion.ui.KirtanApp], which consumes it from
+     * [com.kirtan.companion.data.ShareIntake] exactly once.
+     */
+    pendingImport: ShareCodec.SharePayload? = null,
+    onPendingImportHandled: () -> Unit = {},
 ) {
     val state by library.state.collectAsState()
     val allBeats by library.allBeats.collectAsState()
@@ -94,6 +109,37 @@ internal fun BeatsScreen(
     var page by remember { mutableStateOf<BeatsPage>(BeatsPage.Landing) }
     var search by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf<Beat?>(null) }
+    var shareTarget by remember { mutableStateOf<ShareTarget?>(null) }
+    var importOpen by remember { mutableStateOf(false) }
+    var importPreview by remember { mutableStateOf<ShareCodec.SharePayload?>(null) }
+    var importResult by remember { mutableStateOf<String?>(null) }
+
+    // A deep-linked payload joins the same confirm-then-write path as a pasted
+    // one, so an inbound link can never land in the library unreviewed.
+    LaunchedEffect(pendingImport) {
+        pendingImport?.let {
+            importPreview = it
+            onPendingImportHandled()
+        }
+    }
+
+    fun acceptImport(payload: ShareCodec.SharePayload) {
+        importPreview = null
+        library.importShared(payload) { result ->
+            importResult = when {
+                result.beats.isEmpty() -> "Nothing was imported."
+                result.categoryId != null ->
+                    "Added ${result.beats.size} " +
+                        (if (result.beats.size == 1) "beat" else "beats") +
+                        " as a new list."
+
+                else -> "Added to Your beats."
+            }
+            // A shared list arrives as its own playlist; land the user on it so
+            // they can see what came in rather than guessing where it went.
+            result.categoryId?.let { page = BeatsPage.Category(it) }
+        }
+    }
 
     ScreenFrame(modifier = modifier) {
         // The sub-header: a back button on drilled-in pages, a spacer on the
@@ -130,6 +176,10 @@ internal fun BeatsScreen(
             ErrorStrip(message = message, onDismiss = { library.dismissError() })
         }
 
+        importResult?.let { message ->
+            ResultStrip(message = message, onDismiss = { importResult = null })
+        }
+
         when (val p = page) {
             BeatsPage.Landing -> LandingPage(
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -140,13 +190,19 @@ internal fun BeatsScreen(
                 allBeats = allBeats,
                 onOpenCategory = { page = BeatsPage.Category(it) },
                 onOpenDetail = { detail = it },
+                onOpenImport = { importOpen = true },
             )
 
             is BeatsPage.Category -> CategoryPage(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 categoryId = p.id,
+                categoryName = library.categoryName(p.id),
+                beats = remember(p.id, state) { library.categoryBeats(p.id) },
                 library = library,
                 onOpenDetail = { detail = it },
+                onShareList = { name, beats ->
+                    shareTarget = ShareTarget.CategoryTarget(name, beats)
+                },
             )
         }
 
@@ -175,6 +231,32 @@ internal fun BeatsScreen(
                 onEditBeat(target)
                 detail = null
             },
+            onShare = {
+                shareTarget = ShareTarget.BeatTarget(target)
+                detail = null
+            },
+        )
+    }
+
+    shareTarget?.let { target ->
+        ShareSheet(target = target, onDismiss = { shareTarget = null })
+    }
+
+    if (importOpen) {
+        ImportSheet(
+            onDismiss = { importOpen = false },
+            onDecoded = { payload ->
+                importOpen = false
+                importPreview = payload
+            },
+        )
+    }
+
+    importPreview?.let { payload ->
+        ImportConfirmSheet(
+            payload = payload,
+            onDismiss = { importPreview = null },
+            onAccept = { acceptImport(payload) },
         )
     }
 }
@@ -189,6 +271,7 @@ private fun LandingPage(
     allBeats: List<Beat>,
     onOpenCategory: (String) -> Unit,
     onOpenDetail: (Beat) -> Unit,
+    onOpenImport: () -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
 
@@ -222,6 +305,14 @@ private fun LandingPage(
                     "${state.customBeats.size} saved"
                 },
                 onClick = { onOpenCategory(CUSTOM_CATEGORY) },
+            )
+        }
+
+        item {
+            SectionCard(
+                title = "Import",
+                meta = "Paste a code or link someone sent you",
+                onClick = onOpenImport,
             )
         }
 
@@ -383,16 +474,31 @@ private fun SectionCard(title: String, meta: String, onClick: () -> Unit) {
 private fun CategoryPage(
     modifier: Modifier = Modifier,
     categoryId: String,
+    categoryName: String,
+    beats: List<Beat>,
     library: LibraryViewModel,
     onOpenDetail: (Beat) -> Unit,
+    onShareList: (String, List<Beat>) -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
-    val beats = remember(categoryId) { library.categoryBeats(categoryId) }
 
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(dimens.space2),
     ) {
+        // Sharing a progression is what turns it into something a friend can
+        // actually play. The built-in set is excluded: everyone already has it,
+        // and its link would be enormous for nothing.
+        if (categoryId != BUILTIN_CATEGORY && beats.isNotEmpty()) {
+            item(key = "share-list") {
+                SecondaryButton(
+                    label = "Share list",
+                    icon = KcIcons.Share,
+                    onClick = { onShareList(categoryName, beats) },
+                )
+            }
+        }
+
         if (categoryId == BUILTIN_CATEGORY) {
             // The built-ins are sub-divided by their `group` heading, in the order
             // the beats first declare them. Headings need not be contiguous in the
@@ -467,6 +573,7 @@ private fun BeatDetailSheet(
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
     onEdit: () -> Unit,
+    onShare: () -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
     com.kirtan.companion.ui.components.KcSheet(title = beat.name, onDismiss = onDismiss) {
@@ -492,6 +599,11 @@ private fun BeatDetailSheet(
                 icon = KcIcons.Pencil,
                 onClick = onEdit,
             )
+            com.kirtan.companion.ui.components.SecondaryButton(
+                label = "Share",
+                icon = KcIcons.Share,
+                onClick = onShare,
+            )
             if (!beat.isBuiltIn && beat.id != null) {
                 com.kirtan.companion.ui.components.SecondaryButton(
                     label = "Delete",
@@ -502,6 +614,44 @@ private fun BeatDetailSheet(
                 )
             }
         }
+    }
+}
+
+/**
+ * A success strip, shown after an import lands.
+ *
+ * Separate from [ErrorStrip] rather than reusing it with a different colour: an
+ * import writes to the user's library, and saying nothing about it leaves them
+ * guessing whether the paste worked. Clay rather than danger, same shape and
+ * dismissal as the error case so the two read as one family.
+ */
+@Composable
+private fun ResultStrip(message: String, onDismiss: () -> Unit) {
+    val dimens = KirtanTheme.dimens
+    val shape = RoundedCornerShape(dimens.radiusPad)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(PaletteToken.CLAY.color.copy(alpha = 0.10f))
+            .border(BorderStroke(dimens.hairline, PaletteToken.CLAY.color), shape)
+            .padding(dimens.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = message,
+            color = PaletteToken.CLAY.color,
+            fontSize = 13.4.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(dimens.space2))
+        HairlineIconButton(
+            icon = KcIcons.Check,
+            contentDescription = "Dismiss",
+            onClick = onDismiss,
+            size = 28.dp,
+            tint = PaletteToken.CLAY.color,
+        )
     }
 }
 
