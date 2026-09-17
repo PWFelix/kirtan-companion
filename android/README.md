@@ -34,6 +34,41 @@ beyond AGP 8.13's supported maximum.
 `minSdk 26` is not arbitrary: it is where `AudioTrack.Builder` exposes
 `PERFORMANCE_MODE_LOW_LATENCY`, which the mixer's buffer sizing depends on.
 
+### Release build and signing
+
+```bash
+./gradlew assembleRelease        # → app/build/outputs/apk/release/app-release.apk
+```
+
+The release build is minified (`isMinifyEnabled`) and resource-shrunk: **5.0 MB
+versus 27.1 MB for debug**, with no R8 warnings.
+
+Signing is read from `keystore.properties` (git-ignored, mode 600), which points
+at a keystore kept OUTSIDE the repo at `~/.android/kirtan-release.keystore`.
+**If that file is absent the build still succeeds and produces an UNSIGNED APK** —
+deliberately, so a contributor without the key can compile, lint and test
+everything; they just cannot produce an installable release.
+
+Two things worth knowing before you rely on it:
+
+- **Back the keystore and `keystore.properties` up.** Android refuses to replace
+  an app signed by a different certificate, so losing the key means every existing
+  install must be uninstalled — taking the user's saved beats with it — before it
+  can take an update.
+- **A minified build fails at RUNTIME, not at build time.** R8 breakage shows up
+  as a crash on the first reflection or serialization call, so `assembleRelease`
+  succeeding proves almost nothing. Before sending a release to anyone, drive it:
+  start playback (Media3 + foreground service), save a beat in the editor, kill the
+  process and relaunch to confirm it reads back (kotlinx-serialization + DataStore),
+  and fire a `kirtan://beat?c=…` deep link (Base64 + the share decoder). Those four
+  are the paths that touch reflection.
+
+Sharing a preview with someone else: send the APK and have them tap it, allowing
+"install unknown apps" for that source. Play Protect will warn about an unknown
+developer — that is normal for any sideload. Updates install in place as long as
+they are signed with the same key; switching from a debug build to this release
+build requires an uninstall first, which discards local data.
+
 ---
 
 ## Architecture

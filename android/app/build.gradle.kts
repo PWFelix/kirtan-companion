@@ -25,6 +25,27 @@ fun secret(key: String): String =
         ?: System.getenv(key)
         ?: ""
 
+/**
+ * Release signing, read from `keystore.properties` (git-ignored, mode 600).
+ *
+ * An ABSENT file means no release signing, and `assembleRelease` then produces an
+ * unsigned APK rather than failing the build: a contributor without the key can
+ * still compile, lint and test everything, they just cannot produce an
+ * installable release. Failing outright would make the key mandatory for anyone
+ * touching the project.
+ *
+ * The keystore itself lives outside the repo at `~/.android/kirtan-release.keystore`.
+ * Back it up along with `keystore.properties` — losing the key means every
+ * existing install must be uninstalled before it can take an update, because
+ * Android refuses to replace an app signed by a different certificate.
+ */
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
+}
+val hasReleaseSigning = keystorePropsFile.exists() &&
+    keystoreProps.getProperty("storeFile")?.isNotBlank() == true
+
 android {
     namespace = "com.kirtan.companion"
     compileSdk = 36
@@ -51,6 +72,17 @@ android {
         buildConfigField("String", "SHARE_WEB_BASE", "\"${secret("SHARE_WEB_BASE")}\"")
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -62,8 +94,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Unsigned on purpose: the release keystore is the maintainer's to
-            // create. `assembleRelease` still compiles and shrinks.
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
