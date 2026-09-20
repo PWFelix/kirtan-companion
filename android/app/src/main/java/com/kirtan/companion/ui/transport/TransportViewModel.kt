@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 /**
@@ -414,6 +415,48 @@ class TransportViewModel(
     }
 
     fun stop() = connection.setPlayWhenReady(false)
+
+    /**
+     * Start the editor's preview loop.
+     *
+     * The sequencing here is the fix for "preview is silent". The naive version
+     * called [stop] — an ASYNCHRONOUS binder round-trip through Media3 — and then
+     * started the engine synchronously. The controller's stop reaches the engine
+     * whenever the binder delivers it, which on a real device is after our start,
+     * so it killed the preview a few milliseconds after it began. The emulator
+     * raced the other way often enough to hide it; the phone did not.
+     *
+     * So: ask the controller to stop, then WAIT for the engine to actually be
+     * stopped before starting. The wait is bounded; if the binder never delivers
+     * we start anyway rather than hanging the tap.
+     */
+    suspend fun startPreview(beat: Beat, previewBpm: Int) {
+        if (!_state.value.ready) return
+        if (_state.value.playing) {
+            connection.setPlayWhenReady(false)
+            withTimeoutOrNull(1_000) {
+                while (engine.isPlaying) delay(16)
+            }
+        }
+        engine.setBeat(beat)
+        engine.setBpm(previewBpm)
+        engine.start()
+        _state.value = _state.value.copy(playing = true, beatName = beat.name)
+    }
+
+    /**
+     * End the preview. Synchronous, unlike [stop]: nothing needs to round-trip,
+     * and the editor's unmount path cannot suspend.
+     *
+     * Also why Home's Play stays safe afterwards: [play] no-ops while the mirror
+     * says playing, so leaving the editor MUST call this or the first Play tap on
+     * Home would appear dead.
+     */
+    fun stopPreview() {
+        if (!_state.value.playing) return
+        engine.stop()
+        _state.value = _state.value.copy(playing = false)
+    }
 
     /**
      * The splash's Begin tap. On the web this exists to satisfy the browser's "no

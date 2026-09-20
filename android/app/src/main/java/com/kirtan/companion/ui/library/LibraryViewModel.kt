@@ -58,8 +58,19 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             allBeats.collect { beats ->
                 val current = _selectedBeat.value
-                if (current == null || beats.none { it.id == current.id }) {
-                    _selectedBeat.value = beats.firstOrNull()
+                when {
+                    current == null -> _selectedBeat.value = beats.firstOrNull()
+                    // A beat that vanished (deleted, or filtered out) falls back
+                    // to the head of the list.
+                    beats.none { it.id == current.id } -> _selectedBeat.value = beats.firstOrNull()
+                    // Otherwise REFRESH to the newest object with the same id.
+                    // Without this, saving an edit left the selection pointing at
+                    // the STALE instance: the library list showed the new pattern
+                    // while Home's strip and the engine — both fed by the
+                    // selection — kept the old one, which read as "my edits didn't
+                    // hold".
+                    else -> beats.firstOrNull { it.id == current.id }
+                        ?.let { _selectedBeat.value = it }
                 }
             }
         }

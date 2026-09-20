@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +70,7 @@ import com.kirtan.companion.ui.strip.BeatStrip
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import com.kirtan.companion.ui.transport.TransportViewModel
+import kotlinx.coroutines.launch
 
 /**
  * The beat editor: overview, zoom and pads in one scrolling region.
@@ -108,6 +110,7 @@ internal fun BeatEditorScreen(
 ) {
     val dimens = KirtanTheme.dimens
     val colors = KirtanTheme.colors
+    val scope = rememberCoroutineScope()
 
     var draft by remember { mutableStateOf(EditorDraft.from(initialBeat)) }
     var previewing by remember { mutableStateOf(false) }
@@ -126,10 +129,16 @@ internal fun BeatEditorScreen(
         }
     }
     DisposableEffect(engine) {
-        onDispose { engine.stop() }
+        // stopPreview, not engine.stop(): the preview sets the transport's playing
+        // mirror, and Home's Play no-ops while that mirror is set. Stopping the
+        // engine directly would leave the mirror claiming playback and make the
+        // first Play tap on Home look dead.
+        onDispose { transport.stopPreview() }
     }
 
-    // Keep the preview in step with the draft while it is running.
+    // Keep the preview in step with the draft while it is running. setBeat and
+    // setBpm are synchronous engine calls with no start/stop involved, so there
+    // is no binder race here — unlike starting, which goes through startPreview.
     LaunchedEffect(previewing, draft, engine) {
         if (previewing) {
             engine.setBeat(draft.toPreviewBeat())
@@ -139,15 +148,13 @@ internal fun BeatEditorScreen(
 
     fun togglePreview() {
         if (previewing) {
-            engine.stop()
+            transport.stopPreview()
             previewing = false
         } else {
-            // The editor owns the transport while it is open; make sure nothing
-            // else is driving the engine underneath the preview.
-            transport.stop()
-            engine.setBeat(draft.toPreviewBeat())
-            engine.setBpm(draft.bpm)
-            engine.start()
+            // startPreview sequences the controller stop against the engine start;
+            // doing both inline here was the race that made preview silent on a
+            // real device. See TransportViewModel.startPreview.
+            scope.launch { transport.startPreview(draft.toPreviewBeat(), draft.bpm) }
             previewing = true
         }
     }

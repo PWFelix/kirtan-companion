@@ -127,8 +127,11 @@ internal fun KirtanApp(
     // Leaving the editor hands the transport back to whatever beat is loaded:
     // the preview replaced the engine's beat with the draft, and walking away
     // must not leave the draft sounding — or loaded — under the play screen.
+    // stopPreview first: it clears the playing mirror, without which Home's Play
+    // would no-op on the next tap.
     LaunchedEffect(tab) {
         if (prevTab == Tab.EDITOR && tab != Tab.EDITOR) {
+            transport.stopPreview()
             selectedBeat?.let { transport.loadBeat(it) }
         }
         prevTab = tab
