@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The mridanga's materials, from src/index.css :root. The OKLCH values
+         in the CSS are authoritative; these are the sRGB equivalents. -->
+    <color name="head">#F0EBDC</color>
+    <color name="head_worn">#E6DDCC</color>
+    <color name="head_sunken">#DBD0BB</color>
+    <color name="syahi">#261D16</color>
+    <color name="syahi_soft">#5E534A</color>
+    <color name="clay">#A85335</color>
+    <color name="clay_deep">#913E23</color>
+    <color name="strap">#B38A50</color>
+    <color name="on_clay">#F8F5EE</color>
+</resources>
