@@ -57,12 +57,19 @@ class AudioRenderer(
 
         /**
          * Track buffer as a multiple of the block size. Larger is more tolerant
-         * of the thread being preempted (a background app competes for CPU) and
-         * costs latency; smaller is the reverse. Eight blocks is ~43 ms at
-         * 48 kHz, which survives scheduler noise without the pad-trigger delay
-         * becoming obvious.
+         * of the thread being preempted (a background app competes for CPU, and a
+         * thermally throttled phone preempts often) and costs latency; smaller is
+         * the reverse. Sixteen blocks is ~86 ms at 48 kHz.
+         *
+         * That is deliberately generous: this app is a backing track, not a live
+         * instrument, so the only latency that matters is the editor's pads and
+         * tap tempo, and a dropped downbeat on a hot phone is far worse than
+         * 86 ms of pad delay. Eight blocks proved too tight on the Nexus 5X.
          */
-        private const val BUFFER_BLOCKS = 8
+        private const val BUFFER_BLOCKS = 16
+
+        /** Transient write failures to retry before giving up on a block. */
+        private const val WRITE_RETRIES = 8
     }
 
     /**
@@ -207,24 +214,40 @@ class AudioRenderer(
             // dropped block is a gap in the rhythm, which is far more noticeable
             // than the same block arriving late.
             var offset = 0
+            var failures = 0
             while (offset < blockSize && isRunning) {
                 val written = track.write(pcm, offset, blockSize - offset)
                 if (written > 0) {
                     offset += written
                     framesRendered += written
+                    failures = 0
                 } else if (written == AudioTrack.ERROR_DEAD_OBJECT) {
                     Log.e(TAG, "AudioTrack died; stopping")
                     isRunning = false
                     break
-                } else if (written < 0) {
-                    Log.w(TAG, "AudioTrack.write returned $written")
+                } else {
+                    // A transient write failure. RETRY rather than drop: the block
+                    // has already been rendered and its step triggers already
+                    // consumed by the sequencer, so abandoning it here is the one
+                    // path that silently loses a stroke — and on a thermally
+                    // throttled phone that lands on a bar boundary now and then,
+                    // which is exactly "every so often the downbeat doesn't sound".
+                    failures++
                     underruns++
-                    break
+                    Log.w(TAG, "AudioTrack.write returned $written; retry $failures")
+                    if (failures > WRITE_RETRIES) break
+                    Thread.sleep(1)
                 }
                 // written == 0: non-blocking would spin, but MODE_STREAM blocks,
                 // so treat it as a stall and let the next iteration retry.
             }
-            if (offset < blockSize) underruns++
+            // A block that was not fully written means its tail was rendered but
+            // never reached the device — and any step triggers in that tail were
+            // already consumed by the sequencer, so they are SILENTLY LOST. Log it
+            // loudly: this is the one path that can drop a stroke at runtime.
+            if (offset < blockSize) {
+                Log.w(TAG, "gave up after $failures retries: $offset of $blockSize frames reached the device; steps in the lost tail are dropped")
+            }
         }
     }
 }

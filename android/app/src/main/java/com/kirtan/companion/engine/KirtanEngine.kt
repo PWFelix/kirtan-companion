@@ -327,6 +327,10 @@ class KirtanEngine(
 
             for (event in stepScratch) {
                 val offset = (event.frame - fromFrame).toInt().coerceIn(0, count - 1)
+                // Diagnostic: a dropped downbeat shows up in logcat as a gap in
+                // this sequence rather than only being heard. Verbose, so silent
+                // in normal use.
+                Log.v(TAG, "step ${event.step} frame=${event.frame} block=$fromFrame offset=$offset")
                 // Iterated inline rather than via a helper that builds a list:
                 // this runs ten times a second forever, so it allocates nothing.
                 for (lane in LaneId.ORDERED) {
