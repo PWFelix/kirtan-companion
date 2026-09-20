@@ -86,6 +86,11 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
      *
      * Falls back to every beat when the category holds none, so the chevrons are
      * never dead — a control that silently does nothing reads as a broken app.
+     *
+     * Deliberately does NOT touch the transport: this ViewModel is data and the
+     * engine is the transport's. The engine load for ANY selection change, cycled
+     * or picked, is the KirtanApp bridge (selectedBeat → transport.loadBeat),
+     * which is where the web's one-function selectBeat lives.
      */
     fun cycleBeat(direction: Int) {
         val categoryId = state.value.activeCategoryId

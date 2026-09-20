@@ -114,6 +114,17 @@ class TransportViewModel(
     /** Authoritative tempo, mutated synchronously so rapid ± taps stack. */
     private var bpm: Int = _state.value.bpm
     private var tempoLocked: Boolean = false
+
+    /**
+     * The last beat whose suggested tempo [loadBeat] adopted.
+     *
+     * Re-loading the SAME beat must not re-adopt: the selection bridge in
+     * KirtanApp re-fires whenever its LaunchedEffect is re-launched (a rotation
+     * re-runs it), and an unconditional changeBpm would clobber a tempo the user
+     * nudged in the meantime. Different beat, same locked tempo, fresh process
+     * (this field resets with the ViewModel, as does the engine) all behave.
+     */
+    private var loadedBeatId: String? = null
     private var settings: EqPrefsSnapshot = EqPrefsSnapshot.DEFAULT
 
     private var prefsSaveJob: Job? = null
@@ -375,12 +386,21 @@ class TransportViewModel(
         engine.setBeat(beat)
         container.currentBeatName.value = beat.name
         _state.value = _state.value.copy(beatName = beat.name)
-        if (!tempoLocked) changeBpm(beat.bpm)
+        if (!tempoLocked && beat.id != loadedBeatId) changeBpm(beat.bpm)
+        loadedBeatId = beat.id
     }
 
-    /** Start [beat] unconditionally. A no-op while samples are still decoding. */
+    /**
+     * Start [beat]. A no-op while samples are still decoding, and a no-op while
+     * ALREADY playing — the same rule the web's `play()` states: the selection
+     * that preceded this tap loadBeat'd the beat, which switched the loop live
+     * with bar phase preserved. Calling engine.start() on top of that would
+     * re-anchor the clock to the bar top and kill the still-ringing voices: a
+     * lurch, not a switch.
+     */
     fun play(beat: Beat) {
         if (!_state.value.ready) return
+        if (_state.value.playing) return
         engine.setBeat(beat)
         engine.setBpm(bpm)
         container.currentBeatName.value = beat.name

@@ -134,6 +134,22 @@ internal fun KirtanApp(
         prevTab = tab
     }
 
+    // SELECTION REACHES THE ENGINE, mirroring the web App.jsx where selectBeat
+    // is ONE function that both records the choice and calls transport.loadBeat.
+    // Here the choice (library) and the engine (transport) are separate
+    // ViewModels, so this effect is the seam the web function provides: every
+    // selection change — Home's ‹ › progression cycle, the picker, an accepted
+    // import, the delete fallback — loads into the engine, and a mid-kirtan
+    // switch happens live, bar phase preserved. Without it the chevrons update
+    // the name on screen and the drum keeps playing the beat it no longer shows.
+    //
+    // Safe to re-fire: loadBeat dedupes per beat id (see TransportViewModel),
+    // so a rotation re-launching this effect re-applies the pattern without
+    // clobbering a tempo the user has nudged.
+    LaunchedEffect(selectedBeat) {
+        selectedBeat?.let { transport.loadBeat(it) }
+    }
+
     // Immersive from the moment the user enters, and NOT immersive on the splash.
     // The splash is the one screen where an accidental launch must be escapable
     // with an ordinary Back press; once Begin is tapped the system bars retire and
