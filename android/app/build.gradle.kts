@@ -157,6 +157,10 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.common)
     implementation(libs.androidx.media3.ui)
+    // Custom Tabs for the OAuth hand-off: the sign-in page runs in the browser
+    // the user already trusts, with their existing Google session, rather than
+    // in a WebView we would have to secure ourselves.
+    implementation(libs.androidx.browser)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

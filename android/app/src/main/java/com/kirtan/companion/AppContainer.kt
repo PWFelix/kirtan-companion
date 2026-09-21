@@ -3,6 +3,7 @@ package com.kirtan.companion
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import com.kirtan.companion.data.model.Library
 import com.kirtan.companion.engine.KirtanEngine
 import com.kirtan.companion.playback.AudioDeviceInfo
 import com.kirtan.companion.storage.BeatsProvider
@@ -104,6 +105,16 @@ class AppContainer(private val appContext: Context) {
      */
     val library: LibraryRepository by lazy { LibraryRepository(scope, localBeats) }
 
+    /**
+     * The device library captured at the moment of a FRESH sign-in, waiting for
+     * the user to decide whether it moves to their account.
+     *
+     * Captured BEFORE the provider swaps, because once the repository reads the
+     * cloud the device copy is invisible to it — and with it, any offer to migrate
+     * it. Null means nothing is pending.
+     */
+    val pendingMigration = MutableStateFlow<Library?>(null)
+
     init {
         // Follow the auth session: signed in, the library becomes the cloud one;
         // signed out (or never signed in), it is the local one. Collecting rather
@@ -112,10 +123,37 @@ class AppContainer(private val appContext: Context) {
         scope.launch {
             val client = supabase ?: return@launch
             client.restore()
+            // Seeded from the RESTORED session so a returning user does not get a
+            // migration offer on every cold start: only a transition from signed
+            // out to signed in counts as a fresh sign-in.
+            var wasSignedIn = client.session.value != null
+
             client.session.collect { session ->
-                library.attachProvider(
-                    SupabaseBeatsProvider.create(client, session) ?: localBeats
-                )
+                val signedIn = session != null
+                val freshSignIn = signedIn && !wasSignedIn
+                wasSignedIn = signedIn
+
+                if (freshSignIn) {
+                    val local = with(library.state.value) {
+                        Library(customBeats, categories, activeCategoryId)
+                    }
+                    library.attachProvider(
+                        SupabaseBeatsProvider.create(client, session) ?: localBeats
+                    )
+                    library.reload()
+                    // Only offer when the account is empty: pushing into an
+                    // account that already holds beats would duplicate them,
+                    // because migration mints fresh ids by design.
+                    val cloudEmpty = with(library.state.value) {
+                        customBeats.isEmpty() && categories.isEmpty()
+                    }
+                    val worthMoving = local.beats.isNotEmpty() || local.categories.isNotEmpty()
+                    if (cloudEmpty && worthMoving) pendingMigration.value = local
+                } else {
+                    library.attachProvider(
+                        SupabaseBeatsProvider.create(client, session) ?: localBeats
+                    )
+                }
             }
         }
     }

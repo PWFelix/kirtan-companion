@@ -45,12 +45,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kirtan.companion.AppContainer
 import com.kirtan.companion.container
 import com.kirtan.companion.data.PaletteToken
 import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.ShareIntake
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.storage.EqPrefsSnapshot
+import com.kirtan.companion.ui.account.AccountSection
+import com.kirtan.companion.ui.account.MigrationPromptSheet
 import com.kirtan.companion.ui.beats.BeatsScreen
 import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.components.SectionLabel
@@ -99,6 +102,7 @@ internal fun KirtanApp(
     onImmersiveChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val container = context.container
     val scope = rememberCoroutineScope()
     val transportState by transport.state.collectAsState()
     val selectedBeat by library.selectedBeat.collectAsState()
@@ -269,7 +273,7 @@ internal fun KirtanApp(
 
                 Tab.LEARN -> LearnScreen()
 
-                Tab.SETTINGS -> SettingsScreen(transport = transport)
+                Tab.SETTINGS -> SettingsScreen(transport = transport, container = container)
             }
         }
 
@@ -294,6 +298,12 @@ internal fun KirtanApp(
             onLearn = { tab = Tab.LEARN },
             onSettings = { tab = Tab.SETTINGS },
         )
+
+        // App-level, not Settings-level: a fresh sign-in can complete while the
+        // user is on any tab (the callback arrives through MainActivity), and the
+        // offer to move their device library up must not wait for them to visit
+        // Settings to exist.
+        MigrationPromptSheet(container)
     }
 }
 
@@ -342,7 +352,7 @@ private fun LearnScreen() {
  * syllables and the numbered step labels — and both are persisted.
  */
 @Composable
-private fun SettingsScreen(transport: TransportViewModel) {
+private fun SettingsScreen(transport: TransportViewModel, container: AppContainer) {
     val state by transport.state.collectAsState()
     val dimens = KirtanTheme.dimens
 
@@ -366,6 +376,11 @@ private fun SettingsScreen(transport: TransportViewModel) {
             fontSize = 26.sp,
             fontWeight = FontWeight.SemiBold,
         )
+
+        // Account first: signing in changes what every other part of this screen
+        // implies about where your beats live, so it should not be buried below
+        // the notation toggles.
+        AccountSection(container)
 
         com.kirtan.companion.ui.components.SectionLabel("Notation")
 

@@ -20,6 +20,8 @@ navigationCompose = "2.9.8" # 2.10.x needs compileSdk 37
 composeBom = "2026.06.01"   # ui 1.11.4; BOM 2026.08.00+ needs compileSdk 37
 datastore = "1.2.1"
 media3 = "1.11.1"
+# Pinned conservatively like the rest: Custom Tabs for the OAuth hand-off.
+browser = "1.8.0"
 
 # Kept one notch behind "latest" on purpose: kotlinx libs built with a newer
 # Kotlin than the compiler in use emit metadata it cannot read.
@@ -54,6 +56,7 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
