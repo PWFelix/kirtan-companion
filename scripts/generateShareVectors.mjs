@@ -51,4 +51,4 @@ fs.writeFileSync(dest, JSON.stringify(out, null, 2));
 
 console.log(`wrote ${dest}`);
 console.log(`  ${out.beats.length} beat vectors, 1 category, ${out.hostile.length} hostile`);
-console.log(`  te_ta code: ${out.beats[0].code}`);
+console.log(`  first beat: ${out.beats[0].id} -> ${out.beats[0].code.slice(0, 40)}…`);

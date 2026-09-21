@@ -1,6 +1,7 @@
 package com.kirtan.companion.storage
 
 import com.kirtan.companion.data.BEATS
+import com.kirtan.companion.data.BeatSourceExport
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.Category
 import com.kirtan.companion.data.model.LaneId
@@ -96,15 +97,22 @@ class LibraryJsonTest {
     }
 
     @Test
-    fun `a built-in's absent groups stay absent`() {
-        // Built-ins predate the groups model and carry null. Writing `[]` or
-        // reconstructing the uniform groups here would make a round trip lie about
-        // which model a beat was authored in.
-        val beat = BEATS.first()
+    fun `groups round-trip, and a beat without them stores none`() {
+        // The shipped set is generated from a share payload, which always carries
+        // groups, so they must survive the store exactly.
+        val shipped = BEATS.first()
+        assertNotNull(shipped.groups)
+        assertEquals(
+            shipped.groups,
+            LibraryJson.decodeBeat(LibraryJson.encodeStored(shipped))?.groups,
+        )
 
-        assertNull(beat.groups)
-        assertFalse(LibraryJson.encodeStored(beat).containsKey("groups"))
-        assertNull(LibraryJson.decodeBeat(LibraryJson.encodeStored(beat))?.groups)
+        // A beat authored before the groups model carries none, and the store must
+        // not invent them: writing `[]` or reconstructing uniform groups would make
+        // a round trip lie about which model the beat was authored in.
+        val legacy = shipped.copy(id = null, groups = null)
+        assertFalse(LibraryJson.encodeStored(legacy).containsKey("groups"))
+        assertNull(LibraryJson.decodeBeat(LibraryJson.encodeStored(legacy))?.groups)
     }
 
     @Test
@@ -133,12 +141,18 @@ class LibraryJsonTest {
 
     @Test
     fun `the stored shape uses the web's field names and lane arrays`() {
-        val encoded = LibraryJson.encodeStored(BEATS.first())
+        val shipped = BEATS.first()
+        val encoded = LibraryJson.encodeStored(shipped)
 
         assertEquals(
             setOf(
                 "id", "name", "note", "bpm", "steps", "beatsPerBar", "cellsPerGroup",
-                "description", "group", "dayan", "bayan", "kartal",
+                // `groups` is present because the shipped set carries its meter
+                // explicitly; a beat authored before the groups model omits it.
+                // `description` is absent here for the same reason: the shipped
+                // beats have no prose, and a null field is omitted rather than
+                // written as null.
+                "groups", "group", "dayan", "bayan", "kartal",
             ),
             encoded.keys,
         )
@@ -146,7 +160,7 @@ class LibraryJsonTest {
         // "X-OO-XOO" strings ShareCodec uses. A link has to survive a messenger; a
         // database row does not, and this is the shape the web app writes.
         val bayan = encoded["bayan"]!!.jsonArray
-        assertEquals(8, bayan.size)
+        assertEquals(shipped.steps, bayan.size)
         assertEquals(JsonPrimitive("O"), bayan[0])
         assertEquals(JsonNull, bayan[1])
         assertEquals(JsonPrimitive("X"), bayan[3])
@@ -168,11 +182,18 @@ class LibraryJsonTest {
                     put("steps", shipped.steps)
                     put("beatsPerBar", shipped.beatsPerBar)
                     put("cellsPerGroup", shipped.cellsPerGroup)
+                    // Derived from the shipped beat rather than hardcoded, so
+                    // regenerating the built-in set does not silently invalidate
+                    // this test — it is about the SHAPE, not the patterns.
+                    shipped.groups?.let { groups ->
+                        put("groups", buildJsonArray { groups.forEach { add(it) } })
+                    }
                     shipped.description?.let { put("description", it) }
                     shipped.group?.let { put("group", it) }
-                    put("dayan", laneArray("XOXOXOXO"))
-                    put("bayan", laneArray("O--X-OO-"))
-                    put("kartal", laneArray("O-O-O---"))
+                    for (lane in LaneId.ORDERED) {
+                        val notation = BeatSourceExport.patternNotation(shipped, lane)
+                        if (notation.isNotEmpty()) put(lane.wireId, laneArray(notation))
+                    }
                 },
             )
         }

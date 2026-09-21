@@ -3,7 +3,6 @@ package com.kirtan.companion.data
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.LaneId
 import com.kirtan.companion.data.model.Stroke
-import kotlin.math.roundToInt
 
 /**
  * Pure beat data. No logic, no dependencies.
@@ -38,14 +37,30 @@ private fun builtIn(
     name: String,
     note: String,
     bpm: Int,
-    steps: Int,
-    beatsPerBar: Double,
-    cellsPerGroup: Int,
-    description: String,
+    groups: List<Int>,
+    cpq: Int,
     dayan: String,
     bayan: String,
     kartal: String? = null,
 ): Beat {
+    // steps / beatsPerBar / cellsPerGroup are DERIVED, not declared, and derived
+    // exactly as ShareCodec.decodeBeat derives them. That is the point: a built-in
+    // then round-trips through the share format to an identical beat, which a
+    // test asserts, so the two derivations cannot drift apart.
+    //
+    // The old `steps == beatsPerBar × cellsPerGroup` check is GONE because it is
+    // not a general truth: it holds only when cells-per-group equals cells-per-
+    // quarter. A compound meter breaks it — `matan` is 16 groups of 3 at eighth
+    // subdivision, so 48 cells over 24 quarters, and 24 × 3 ≠ 48. The invariant
+    // that does hold, and is checked below, is steps == sum(groups).
+    val steps = sumGroups(groups)
+    require(steps > 0) { "beat \"$id\": groups sum to zero cells" }
+    require(cpq >= 1) { "beat \"$id\": cells-per-quarter must be at least 1" }
+
+    val uniform = groups.all { it == groups[0] }
+    val cellsPerGroup = if (uniform) groups[0] else cpq
+    val beatsPerBar = steps.toDouble() / cpq
+
     val lanes = linkedMapOf(
         LaneId.DAYAN to pattern(dayan),
         LaneId.BAYAN to pattern(bayan),
@@ -59,9 +74,6 @@ private fun builtIn(
             "beat \"$id\": lane ${lane.wireId} has ${cells.size} cells, expected $steps"
         }
     }
-    require((beatsPerBar * cellsPerGroup).roundToInt() == steps) {
-        "beat \"$id\": beatsPerBar($beatsPerBar) × cellsPerGroup($cellsPerGroup) != steps($steps)"
-    }
 
     return Beat(
         id = id,
@@ -71,8 +83,8 @@ private fun builtIn(
         steps = steps,
         beatsPerBar = beatsPerBar,
         cellsPerGroup = cellsPerGroup,
-        groups = null, // built-ins predate the groups model; see groupsFor()
-        description = description,
+        groups = groups,
+        description = null, // no transcribed prose for these; see generateBuiltinBeats
         lanePatterns = lanes,
         group = group,
     )
@@ -80,82 +92,59 @@ private fun builtIn(
 
 val BEATS: List<Beat> = listOf(
     builtIn(
-        id = "te_ta", group = "Foundations", name = "Te Ta", note = "Foundational",
-        bpm = 80, steps = 8, beatsPerBar = 4.0, cellsPerGroup = 2,
-        description = "The first pattern every player drills: “te ta te ta” on the small head over the standard off-beat, moving the kirtan along in a bopping fashion. The ringing open “ta” is the heart of it — the closed “te” is just a touch that stops the ring, not a slap. A steady, roomy beat for learning and for kirtans that should bounce gently rather than drive.",
-        //      1  +  2  +  3  +  4  +
-        dayan = "XOXOXOXO",
-        bayan = "O--X-OO-",
-        kartal = "O-O-O---",
-    ),
-    builtIn(
-        id = "forward", group = "Everyday", name = "Forward", note = "Everyday",
-        bpm = 90, steps = 8, beatsPerBar = 4.0, cellsPerGroup = 2,
-        description = "The everyday “Forwards” beat — “te tata, te tata”, with the double open strike pushing each phrase ahead. A reliable default for congregational chanting at a walking tempo, and the same pattern becomes the fast double-time beat when the kirtan takes off.",
-        //      1  +  2  +  3  +  4  +
-        dayan = "X-OOX-OO",
-        bayan = "O--X-OO-",
-        kartal = "O-O-O---",
-    ),
-    builtIn(
-        id = "backward", group = "Everyday", name = "Backward", note = "Variation",
-        bpm = 90, steps = 8, beatsPerBar = 4.0, cellsPerGroup = 2,
-        description = "The reverse of Forward — “ta te tata” — a phrasing common in North Indian tabla playing. Swap it in against Forward to keep a long kirtan fresh without changing the feel; at double speed it becomes the top end of a fired-up Vrindavan-mellows style beat.",
-        //      1  +  2  +  3  +  4  +
-        dayan = "OOOOXO--",
-        bayan = "O-X-O-O-",
-        kartal = "O-O-O---",
-    ),
-    builtIn(
-        id = "funky_swing", group = "Everyday", name = "Funky Swing", note = "Lively",
-        bpm = 95, steps = 8, beatsPerBar = 4.0, cellsPerGroup = 2,
-        description = "From a Vrindavan-mellows beat “that has a really funky swing to it” — the pair of closed strokes after each open one gives the bounce. Good for long stretches of chanting the same melody, such as when the microphone is being passed around the kirtan.",
-        //      1  +  2  +  3  +  4  +
-        dayan = "OXXOXX--",
-        bayan = "O-X-O-O-",
-        kartal = "O-O-O---",
-    ),
-    builtIn(
-        id = "da_ge_te_te", group = "Building up", name = "Da Ge Te Te", note = "Build up",
-        bpm = 110, steps = 8, beatsPerBar = 4.0, cellsPerGroup = 2,
-        description = "“Da ge te te take dhena” — a beat from Bablu das, used when you want to ramp the kirtan up. The extra open bass at the top of the bar builds momentum: start with Forward, and move to this as the energy climbs toward the fast section.",
-        //      1  +  2  +  3  +  4  +
-        dayan = "XOXOXOXO",
-        bayan = "OOX-O-O-",
-        kartal = "O-O-O---",
-    ),
-    builtIn(
-        id = "prabhupada", group = "Gentle", name = "Prabhupada", note = "Gentle",
-        bpm = 65, steps = 8, beatsPerBar = 4.0, cellsPerGroup = 2,
-        description = "A slow, spacious beat in the style of Srila Prabhupada’s own playing: the bass head sits silent through the first half of the cycle, then answers. For early-morning programs, bhajans, and chanting that should stay meditative — let it breathe at a low tempo.",
-        //      1  +  2  +  3  +  4  +
-        dayan = "XOXOXOXO",
-        bayan = "----XXOO",
-        kartal = "O-O-O---",
-    ),
-
-    // ── Double-time (16 steps) ──
-    builtIn(
-        id = "double_time", group = "Building up", name = "Double Time", note = "Fast",
-        bpm = 140, steps = 16, beatsPerBar = 4.0, cellsPerGroup = 4,
-        description = "Forward doubled into sixteenths — the double-time beat used for the Nrsimha prayers and the Pancha-tattva mantra. For the fast section of kirtan when the chant doubles up; keep it controlled so the singers can stay with you.",
-        //      1  e  +  a  2  e  +  a  3  e  +  a  4  e  +  a
+        id = "double_time_2", group = "Sixteenths", name = "Double Time 2", note = "4 beats",
+        bpm = 140, groups = listOf(4, 4, 4, 4), cpq = 4,
         dayan = "X-OOX-OOX-OOX-OO",
         bayan = "O--X-OO-O--X-OO-",
-        // 1-2-3 lands on the quarter-note pulses (steps 0, 4, 8), rest on 4 (12).
-        kartal = "O---O---O-------",
+        kartal = "O-XXO-XXO-XXO-XX",
     ),
-
-    // ── Dadra taal (12 steps, felt as 4/4 with triplets) ──
     builtIn(
-        id = "dadra", group = "Swing", name = "Dadra Taal", note = "Swing",
-        bpm = 105, steps = 12, beatsPerBar = 4.0, cellsPerGroup = 3,
-        description = "A 6/8 dadra-taal pattern that lands as a triplet “gallop” against the usual four-beat kirtan, making everything swing. Lovely under swaying melodies and Vrindavan-mellows moods — use it as seasoning rather than the whole meal, or open a kirtan in dadra and switch to double time as it builds.",
-        //      1  t  l  2  t  l  3  t  l  4  t  l
-        dayan = "X-O-O-X-O-O-",
-        bayan = "O--X-----O--",
-        // 1-2-3 on the pulses (steps 0, 3, 6), rest on the fourth (9).
-        kartal = "O--O--O-----",
+        id = "daspahir_taal", group = "Sixteenths", name = "daspahir taal", note = "8 beats",
+        bpm = 90, groups = listOf(4, 4, 4, 4, 4, 4, 4, 4), cpq = 4,
+        dayan = "----X-O-X-XXXXO-----O-O---O---O-",
+        bayan = "O---------------X--X-OO-O-O-O-O-",
+    ),
+    builtIn(
+        id = "tehai", group = "Sixteenths", name = "tehai", note = "4 beats",
+        bpm = 90, groups = listOf(4, 4, 4, 4), cpq = 4,
+        dayan = "-O-OO--O-OO--O-O",
+        bayan = "X-X-O-X-X-O-X-X-",
+    ),
+    builtIn(
+        id = "pick_up", group = "Sixteenths", name = "pick up", note = "4 beats",
+        bpm = 90, groups = listOf(4, 4, 4, 4), cpq = 4,
+        dayan = "O-OO-O-OO-OO-O-O",
+        bayan = "-X-X--X--X-X--X-",
+    ),
+    builtIn(
+        id = "bhajani_taal", group = "Sixteenths", name = "bhajani taal", note = "4 beats",
+        bpm = 90, groups = listOf(4, 4, 4, 4), cpq = 4,
+        dayan = "--O---O---O---O-",
+        bayan = "OO-O-O--XX-X-X-O",
+    ),
+    builtIn(
+        id = "matan", group = "Straight", name = "matan", note = "16 beats",
+        bpm = 157, groups = listOf(3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3), cpq = 2,
+        dayan = "OOOOOOOOOOOOOOOOOOOOOOO-OOOOOOOOOOOOOOOOOOOOOOO-",
+        bayan = "OOOOO-OOOOO-OOOOO-OO-O--XXXXX-XXXXX-XXXXX-XX-X--",
+    ),
+    builtIn(
+        id = "lofa_taal_two_beat_damodarastakam", group = "Straight", name = "lofa taal two beat damodarastakam", note = "8 beats",
+        bpm = 90, groups = listOf(3, 3, 3, 3, 3, 3, 3, 3), cpq = 2,
+        dayan = "O-XXXXO-XXXXO-XXXXO---OO",
+        bayan = "O-O-O-O-O-O---------XX--",
+    ),
+    builtIn(
+        id = "iskcon_smasher", group = "Sixteenths", name = "Iskcon smasher", note = "4 beats",
+        bpm = 90, groups = listOf(4, 4, 4, 4), cpq = 4,
+        dayan = "O--O--O-O--O--O-",
+        bayan = "O---O-O---O-O-O-",
+    ),
+    builtIn(
+        id = "keherva_medium_speed", group = "Straight", name = "keherva medium speed", note = "4 beats",
+        bpm = 90, groups = listOf(2, 2, 2, 2), cpq = 2,
+        dayan = "O-XOO-XO",
+        bayan = "OO-O-OO-",
     ),
 )
 

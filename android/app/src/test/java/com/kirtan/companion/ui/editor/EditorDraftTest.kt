@@ -35,22 +35,51 @@ class EditorDraftTest {
 
     @Test
     fun `seeding from a built-in recovers its groups and feel`() {
-        val teTa = EditorDraft.from(BEATS.first { it.id == "te_ta" })
-        assertEquals(listOf(2, 2, 2, 2), teTa.groups)
-        assertEquals("std", teTa.meter.id)
-        assertEquals("Te Ta", teTa.name)
-        assertEquals(Stroke.CLOSED, teTa.pattern(LaneId.DAYAN)[0])
+        // The one 4/4-in-eighths beat in the shipped set.
+        val keherva = EditorDraft.from(BEATS.first { it.id == "keherva_medium_speed" })
+        assertEquals(listOf(2, 2, 2, 2), keherva.groups)
+        assertEquals("std", keherva.meter.id)
+        assertEquals("keherva medium speed", keherva.name)
+        assertEquals(Stroke.OPEN, keherva.pattern(LaneId.DAYAN)[0])
 
-        val dadra = EditorDraft.from(BEATS.first { it.id == "dadra" })
-        assertEquals(listOf(3, 3, 3, 3), dadra.groups)
-        assertEquals("trip", dadra.meter.id)
-        assertEquals(12, dadra.steps)
+        // The compound one: 16 groups of 3 at eighth subdivision, so 48 cells over
+        // 24 quarters — cells-per-group (3) is NOT cells-per-quarter (2).
+        val matan = EditorDraft.from(BEATS.first { it.id == "matan" })
+        assertEquals(List(16) { 3 }, matan.groups)
+        assertEquals(48, matan.steps)
+        assertEquals(2, matan.cpq)
+    }
+
+    @Test
+    fun `a triplet beat recovers the Triplets feel`() {
+        // No shipped beat uses triplets any more, so build one: meter recovery
+        // depends on the groups and cpq, not on which beats happen to ship.
+        val base = BEATS.first()
+        val triplet = base.copy(
+            id = null,
+            steps = 12,
+            beatsPerBar = 4.0,
+            cellsPerGroup = 3,
+            groups = listOf(3, 3, 3, 3),
+            lanePatterns = base.lanePatterns.mapValues { (_, cells) ->
+                List(12) { cells[it % cells.size] }
+            },
+        )
+        val draft = EditorDraft.from(triplet)
+        assertEquals("trip", draft.meter.id)
+        assertEquals(3, draft.cpq)
+        assertEquals(listOf(3, 3, 3, 3), draft.groups)
     }
 
     @Test
     fun `seeding from a beat without stored groups reconstructs them`() {
-        val beat = BEATS.first().copy(id = null, groups = null)
-        assertEquals(listOf(2, 2, 2, 2), EditorDraft.from(beat).groups)
+        val base = BEATS.first()
+        val beat = base.copy(id = null, groups = null)
+        val groups = EditorDraft.from(beat).groups
+        // Reconstructed uniformly from cellsPerGroup, one group per quarter-note
+        // pulse, summing back to the same number of cells.
+        assertEquals(List(base.beatsPerBar.toInt()) { base.cellsPerGroup }, groups)
+        assertEquals(base.steps, groups.sum())
     }
 
     // ── Meter recovery ─────────────────────────────────────────────────────

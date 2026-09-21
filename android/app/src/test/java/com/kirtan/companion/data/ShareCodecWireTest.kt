@@ -67,8 +67,11 @@ class ShareCodecWireTest {
     @Test
     fun `kotlin encoder matches the web encoder for a category`() {
         val cat = fixture["category"]!!.jsonObject
-        val ids = listOf("te_ta", "forward", "prabhupada")
-        val beats = ids.map { id -> BEATS.first { it.id == id } }
+        // Derived from the fixture rather than hardcoded ids, so regenerating the
+        // vectors after a beat-set change does not silently invalidate this test.
+        val names = cat["decoded"]!!.jsonObject["beats"]!!.jsonArray
+            .map { it.jsonObject["name"]!!.jsonPrimitive.content }
+        val beats = names.map { name -> BEATS.first { it.name == name } }
 
         assertEquals(
             cat["code"]!!.jsonPrimitive.content,
@@ -153,6 +156,16 @@ class ShareCodecWireTest {
             assertEquals(beat.beatsPerBar, round.beatsPerBar, 0.0)
             assertEquals(groupsFor(beat), round.groups)
             for (lane in LaneId.ORDERED) {
+                if (beat.pattern(lane) == null) {
+                    // The decoder materialises every lane as all-rests, so an
+                    // absent lane legitimately comes back as rests rather than
+                    // null. What must not happen is a rest turning into a stroke.
+                    assertTrue(
+                        "lane ${lane.wireId} of ${beat.id} gained a stroke on the round trip",
+                        round.pattern(lane)?.all { it == null } != false,
+                    )
+                    continue
+                }
                 assertEquals(
                     "lane ${lane.wireId} of ${beat.id}",
                     beat.pattern(lane)?.map { it?.code },

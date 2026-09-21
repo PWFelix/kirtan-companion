@@ -36,79 +36,67 @@
 
 export const BEATS = [
   {
-    id: "te_ta", group: "Foundations", name: "Te Ta", note: "Foundational", bpm: 80, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
-    description: "The first pattern every player drills: “te ta te ta” on the small head over the standard off-beat, moving the kirtan along in a bopping fashion. The ringing open “ta” is the heart of it — the closed “te” is just a touch that stops the ring, not a slap. A steady, roomy beat for learning and for kirtans that should bounce gently rather than drive.",
-    //        1     +     2     +     3     +     4     +
-    dayan: ["X",  "O",  "X",  "O",  "X",  "O",  "X",  "O"],
-    bayan: ["O",  null, null,  "X", null,  "O", "O",  null],
-    kartal:["O",  null, "O",  null, "O",  null, null, null],
-  },
-  {
-    id: "forward", group: "Everyday", name: "Forward", note: "Everyday", bpm: 90, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
-    description: "The everyday “Forwards” beat — “te tata, te tata”, with the double open strike pushing each phrase ahead. A reliable default for congregational chanting at a walking tempo, and the same pattern becomes the fast double-time beat when the kirtan takes off.",
-    //        1     +     2     +     3     +     4     +
-    dayan: ["X",  null,  "O",  "O",  "X",  null,  "O", "O"],
-    bayan: ["O",  null, null,  "X", null,  "O", "O",  null],
-    kartal:["O",  null, "O",  null, "O",  null, null, null],
-  },
-  {
-    id: "backward", group: "Everyday", name: "Backward", note: "Variation", bpm: 90, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
-    description: "The reverse of Forward — “ta te tata” — a phrasing common in North Indian tabla playing. Swap it in against Forward to keep a long kirtan fresh without changing the feel; at double speed it becomes the top end of a fired-up Vrindavan-mellows style beat.",
-    //        1     +     2     +     3     +     4     +
-    dayan: ["O",  "O",  "O",  "O",  "X",  "O",  null, null],
-    bayan: ["O",  null, "X",  null, "O",  null, "O",  null],
-    kartal:["O",  null, "O",  null, "O",  null, null, null],
-  },
-  {
-    id: "funky_swing", group: "Everyday", name: "Funky Swing", note: "Lively", bpm: 95, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
-    description: "From a Vrindavan-mellows beat “that has a really funky swing to it” — the pair of closed strokes after each open one gives the bounce. Good for long stretches of chanting the same melody, such as when the microphone is being passed around the kirtan.",
-    //        1     +     2     +     3     +     4     +
-    dayan: ["O",  "X",  "X",  "O",  "X",  "X",  null, null],
-    bayan: ["O",  null, "X",  null, "O",  null, "O",  null],
-    kartal:["O",  null, "O",  null, "O",  null, null, null],
-  },
-  {
-    id: "da_ge_te_te", group: "Building up", name: "Da Ge Te Te", note: "Build up", bpm: 110, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
-    description: "“Da ge te te take dhena” — a beat from Bablu das, used when you want to ramp the kirtan up. The extra open bass at the top of the bar builds momentum: start with Forward, and move to this as the energy climbs toward the fast section.",
-    //        1     +     2     +     3     +     4     +
-    dayan: ["X",  "O",  "X",  "O",  "X",  "O",  "X",  "O"],
-    bayan: ["O",  "O",  "X",  null, "O",  null, "O",  null],
-    kartal:["O",  null, "O",  null, "O",  null, null, null],
-  },
-  {
-    id: "prabhupada", group: "Gentle", name: "Prabhupada", note: "Gentle", bpm: 65, steps: 8, beatsPerBar: 4, cellsPerGroup: 2,
-    description: "A slow, spacious beat in the style of Srila Prabhupada’s own playing: the bass head sits silent through the first half of the cycle, then answers. For early-morning programs, bhajans, and chanting that should stay meditative — let it breathe at a low tempo.",
-    //        1     +     2     +     3     +     4     +
-    dayan: ["X",  "O",  "X",  "O",  "X",  "O",  "X",  "O"],
-    bayan: [null, null, null, null, "X",  "X",  "O",  "O"],
-    kartal:["O",  null, "O",  null, "O",  null, null, null],
-  },
-
-  // ── Double-time sample (16 steps) ──
-  {
-    id: "double_time", group: "Building up", name: "Double Time", note: "Fast", bpm: 140, steps: 16, beatsPerBar: 4, cellsPerGroup: 4,
-    description: "Forward doubled into sixteenths — the double-time beat used for the Nrsimha prayers and the Pancha-tattva mantra. For the fast section of kirtan when the chant doubles up; keep it controlled so the singers can stay with you.",
-    // Forwards top end at double subdivision.
-    //        1    e    +    a    2    e    +    a    3    e    +    a    4    e    +    a
+    id: "double_time_2", group: "Sixteenths", name: "Double Time 2", note: "4 beats",
+    bpm: 140, steps: 16, beatsPerBar: 4, cellsPerGroup: 4, groups: [4, 4, 4, 4],
+    description: null,
     dayan: ["X", null, "O", "O", "X", null, "O", "O", "X", null, "O", "O", "X", null, "O", "O"],
-    bayan: ["O", null, null, "X",null, "O","O",null,"O", null,null, "X",null, "O","O",null],
-    // 1-2-3 lands on the quarter-note pulses (steps 0, 4, 8), rest on 4 (12).
-    kartal:["O", null, null, null,"O", null,null,null,"O", null,null,null,null, null,null,null],
+    bayan: ["O", null, null, "X", null, "O", "O", null, "O", null, null, "X", null, "O", "O", null],
+    kartal: ["O", null, "X", "X", "O", null, "X", "X", "O", null, "X", "X", "O", null, "X", "X"],
   },
-
-  // ── Dadra taal sample (12 steps, felt as 4/4 with triplets) ──
   {
-    // steps MUST match the pattern arrays' length (12 = 4 pulses × 3
-    // triplet cells) — a stale "steps: 6" here once made the strip wrap
-    // into extra rows and the sequencer play only half the pattern.
-    id: "dadra", group: "Swing", name: "Dadra Taal", note: "Swing", bpm: 105, steps: 12, beatsPerBar: 4, cellsPerGroup: 3,
-    description: "A 6/8 dadra-taal pattern that lands as a triplet “gallop” against the usual four-beat kirtan, making everything swing. Lovely under swaying melodies and Vrindavan-mellows moods — use it as seasoning rather than the whole meal, or open a kirtan in dadra and switch to double time as it builds.",
-    // 4 quarter-note pulses, each split into 3 eighth-triplets ("trip-let") —
-    // gives the galloping feel without changing the bar count.
-    //        1   trip let   2   trip let   3   trip let   4   trip let
-    dayan: ["X", null, "O", null, "O", null, "X", null, "O", null, "O", null],
-    bayan: ["O", null,null, "X",null,null,null, null,null, "O",null,null],
-    // 1-2-3 on the pulses (steps 0, 3, 6), rest on the fourth (9).
-    kartal:["O", null,null, "O",null,null,"O", null,null,null,null,null],
+    id: "daspahir_taal", group: "Sixteenths", name: "daspahir taal", note: "8 beats",
+    bpm: 90, steps: 32, beatsPerBar: 8, cellsPerGroup: 4, groups: [4, 4, 4, 4, 4, 4, 4, 4],
+    description: null,
+    dayan: [null, null, null, null, "X", null, "O", null, "X", null, "X", "X", "X", "X", "O", null, null, null, null, null, "O", null, "O", null, null, null, "O", null, null, null, "O", null],
+    bayan: ["O", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "X", null, null, "X", null, "O", "O", null, "O", null, "O", null, "O", null, "O", null],
+  },
+  {
+    id: "tehai", group: "Sixteenths", name: "tehai", note: "4 beats",
+    bpm: 90, steps: 16, beatsPerBar: 4, cellsPerGroup: 4, groups: [4, 4, 4, 4],
+    description: null,
+    dayan: [null, "O", null, "O", "O", null, null, "O", null, "O", "O", null, null, "O", null, "O"],
+    bayan: ["X", null, "X", null, "O", null, "X", null, "X", null, "O", null, "X", null, "X", null],
+  },
+  {
+    id: "pick_up", group: "Sixteenths", name: "pick up", note: "4 beats",
+    bpm: 90, steps: 16, beatsPerBar: 4, cellsPerGroup: 4, groups: [4, 4, 4, 4],
+    description: null,
+    dayan: ["O", null, "O", "O", null, "O", null, "O", "O", null, "O", "O", null, "O", null, "O"],
+    bayan: [null, "X", null, "X", null, null, "X", null, null, "X", null, "X", null, null, "X", null],
+  },
+  {
+    id: "bhajani_taal", group: "Sixteenths", name: "bhajani taal", note: "4 beats",
+    bpm: 90, steps: 16, beatsPerBar: 4, cellsPerGroup: 4, groups: [4, 4, 4, 4],
+    description: null,
+    dayan: [null, null, "O", null, null, null, "O", null, null, null, "O", null, null, null, "O", null],
+    bayan: ["O", "O", null, "O", null, "O", null, null, "X", "X", null, "X", null, "X", null, "O"],
+  },
+  {
+    id: "matan", group: "Straight", name: "matan", note: "16 beats",
+    bpm: 157, steps: 48, beatsPerBar: 24, cellsPerGroup: 3, groups: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+    description: null,
+    dayan: ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", null, "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", null],
+    bayan: ["O", "O", "O", "O", "O", null, "O", "O", "O", "O", "O", null, "O", "O", "O", "O", "O", null, "O", "O", null, "O", null, null, "X", "X", "X", "X", "X", null, "X", "X", "X", "X", "X", null, "X", "X", "X", "X", "X", null, "X", "X", null, "X", null, null],
+  },
+  {
+    id: "lofa_taal_two_beat_damodarastakam", group: "Straight", name: "lofa taal two beat damodarastakam", note: "8 beats",
+    bpm: 90, steps: 24, beatsPerBar: 12, cellsPerGroup: 3, groups: [3, 3, 3, 3, 3, 3, 3, 3],
+    description: null,
+    dayan: ["O", null, "X", "X", "X", "X", "O", null, "X", "X", "X", "X", "O", null, "X", "X", "X", "X", "O", null, null, null, "O", "O"],
+    bayan: ["O", null, "O", null, "O", null, "O", null, "O", null, "O", null, null, null, null, null, null, null, null, null, "X", "X", null, null],
+  },
+  {
+    id: "iskcon_smasher", group: "Sixteenths", name: "Iskcon smasher", note: "4 beats",
+    bpm: 90, steps: 16, beatsPerBar: 4, cellsPerGroup: 4, groups: [4, 4, 4, 4],
+    description: null,
+    dayan: ["O", null, null, "O", null, null, "O", null, "O", null, null, "O", null, null, "O", null],
+    bayan: ["O", null, null, null, "O", null, "O", null, null, null, "O", null, "O", null, "O", null],
+  },
+  {
+    id: "keherva_medium_speed", group: "Straight", name: "keherva medium speed", note: "4 beats",
+    bpm: 90, steps: 8, beatsPerBar: 4, cellsPerGroup: 2, groups: [2, 2, 2, 2],
+    description: null,
+    dayan: ["O", null, "X", "O", "O", null, "X", "O"],
+    bayan: ["O", "O", null, "O", null, "O", "O", null],
   },
 ];

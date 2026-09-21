@@ -71,17 +71,20 @@ object BeatSourceExport {
         sb.append("    builtIn(\n")
         sb.append("        id = ${kotlinString(beat.id)}, group = ${kotlinString(beat.group)}, ")
             .append("name = ${kotlinString(beat.name)}, note = ${kotlinString(beat.note)},\n")
-        sb.append("        bpm = ${beat.bpm}, steps = ${beat.steps}, ")
-            .append("beatsPerBar = ${formatDouble(beat.beatsPerBar)}, cellsPerGroup = ${beat.cellsPerGroup},\n")
+        // groups and cpq, NOT steps/beatsPerBar/cellsPerGroup: builtIn derives
+        // those three the same way ShareCodec does, so an exported entry cannot
+        // contradict the meter it declares. Emitting the derived fields instead
+        // would let a paste introduce an inconsistency the compiler accepts.
+        sb.append("        bpm = ${beat.bpm}, groups = listOf(${groups.joinToString(", ")}), ")
+            .append("cpq = ${cpqFor(beat)},\n")
         beat.description?.let {
             sb.append("        description = ${kotlinString(it)},\n")
         }
         sb.append("        //      ${labelsFromGroups(groups).joinToString(" ")}\n")
         sb.append("        dayan = \"${patternNotation(beat, LaneId.DAYAN)}\",\n")
         sb.append("        bayan = \"${patternNotation(beat, LaneId.BAYAN)}\",\n")
-        val kartal = patternNotation(beat, LaneId.KARTAL)
         if (beat.pattern(LaneId.KARTAL) != null) {
-            sb.append("        kartal = \"$kartal\",\n")
+            sb.append("        kartal = \"${patternNotation(beat, LaneId.KARTAL)}\",\n")
         } else {
             sb.append("        // no kartal line — the beat has no cymbals\n")
         }
@@ -107,6 +110,10 @@ object BeatSourceExport {
         sb.append("    steps: ${beat.steps},\n")
         sb.append("    beatsPerBar: ${formatDouble(beat.beatsPerBar)},\n")
         sb.append("    cellsPerGroup: ${beat.cellsPerGroup},\n")
+        // groups are written too: the web file now carries them, and an entry
+        // that omitted them would be re-derived on load, potentially to a
+        // different bar than the one authored.
+        sb.append("    groups: [${groupsFor(beat).joinToString(", ")}],\n")
         sb.append("    description: ${jsString(beat.description)},\n")
         sb.append("    // ${labelsFromGroups(groups).joinToString(" ")}\n")
         for (lane in LaneId.ORDERED) {

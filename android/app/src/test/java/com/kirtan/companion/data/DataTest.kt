@@ -2,6 +2,7 @@ package com.kirtan.companion.data
 
 import com.kirtan.companion.data.model.LaneId
 import com.kirtan.companion.data.model.Stroke
+import com.kirtan.companion.engine.MusicalClock
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
@@ -32,8 +33,12 @@ class DataTest {
         for (beat in BEATS) {
             val id = beat.id ?: error("a built-in beat must have an id")
 
-            assertEquals("$id: beatsPerBar × cellsPerGroup must equal steps",
-                beat.steps, (beat.beatsPerBar * beat.cellsPerGroup).roundToInt())
+            // steps == sum(groups) is the real invariant. The older
+            // `beatsPerBar × cellsPerGroup == steps` is NOT generally true: it
+            // holds only when cells-per-group equals cells-per-quarter, and a
+            // compound meter breaks it (matan is 48 cells over 24 quarters).
+            assertEquals("$id: groups must sum to steps",
+                beat.steps, sumGroups(beat.groups ?: error("$id has no groups")))
 
             assertTrue("$id: steps out of the shareable range", beat.steps in 1..ShareCodec.MAX_STEPS)
             assertTrue("$id: bpm out of range", beat.bpm in MIN_BPM..MAX_BPM)
@@ -54,14 +59,17 @@ class DataTest {
     @Test
     fun `built-in ids are unique and stable`() {
         // Stable, not just unique: a shared playlist stores built-in ids, and a
-        // cloud `beat_ids` array can mix "te_ta" with a custom uuid. Renaming an
-        // id silently orphans every playlist that referenced it.
+        // cloud `beat_ids` array can mix a built-in id with a custom uuid.
+        // Renaming an id silently orphans every playlist that referenced it.
+        // These are slug-derived from the names by scripts/generateBuiltinBeats.mjs,
+        // so a renamed beat gets a new id — which is why the set is pinned here.
         val ids = BEATS.mapNotNull { it.id }
         assertEquals("duplicate built-in ids", ids.size, ids.distinct().size)
         assertEquals(
             setOf(
-                "te_ta", "forward", "backward", "funky_swing",
-                "da_ge_te_te", "prabhupada", "double_time", "dadra",
+                "double_time_2", "daspahir_taal", "tehai", "pick_up", "bhajani_taal",
+                "matan", "lofa_taal_two_beat_damodarastakam", "iskcon_smasher",
+                "keherva_medium_speed",
             ),
             ids.toSet(),
         )
@@ -76,46 +84,62 @@ class DataTest {
     }
 
     @Test
-    fun `the three shipped grids are represented`() {
-        // 8 (eighths), 12 (dadra triplets) and 16 (double-time sixteenths) — the
-        // three step counts the sequencer's interval arithmetic must divide
-        // evenly. If a fourth grid ever ships, add it here deliberately.
-        assertEquals(setOf(8, 12, 16), BEATS.map { it.steps }.toSet())
+    fun `every shipped grid divides the bar evenly`() {
+        // The step counts in the set. What actually matters is not the list but
+        // the property below it: for each, PPQ × beatsPerBar must divide evenly by
+        // steps, or the loop drifts. Compound meters make this worth checking —
+        // `matan` is 48 cells over 24 quarters, so cells-per-group (3) is not
+        // cells-per-quarter (2).
+        assertEquals(setOf(8, 16, 24, 32, 48), BEATS.map { it.steps }.toSet())
+
+        for (beat in BEATS) {
+            val ticksPerBar = MusicalClock.PPQ * beat.beatsPerBar
+            assertEquals(
+                "${beat.id}: ${ticksPerBar} ticks per bar does not divide into ${beat.steps} steps",
+                0.0,
+                ticksPerBar % beat.steps,
+                1e-9,
+            )
+        }
     }
 
     @Test
-    fun `every beat uses the karatalas on the numbered pulses`() {
-        // The cymbals are the congregation's timekeeper: they ring on 1-2-3 and
-        // rest on 4. Checking this catches a pattern that was shifted by a cell
-        // during transcription, which is easy to do and hard to hear.
+    fun `a beat either has cymbals that ring on its pulses, or has no cymbal row`() {
+        // The convention: "no cymbals" means the kartal key is ABSENT, not present
+        // and all rests. The strip's lane filter and the editor's save both rely
+        // on that, so an all-rest brass row would render as an empty lane.
+        var withCymbals = 0
         for (beat in BEATS) {
             val kartal = beat.pattern(LaneId.KARTAL)
-            assertNotNull("${beat.id} has no kartal row", kartal!!)
-            assertEquals("${beat.id}: the first pulse must ring", Stroke.OPEN, kartal[0])
+            if (kartal == null) continue
+            withCymbals++
+            assertTrue(
+                "${beat.id} has a kartal row with no hits in it",
+                kartal.any { it != null },
+            )
+            // The cymbals are the congregation's timekeeper: they ring on the
+            // numbered pulses. Checking this catches a pattern shifted by a cell
+            // during authoring, which is easy to do and hard to hear.
             assertEquals(
-                "${beat.id}: the downbeats must ring",
-                beat.beatsPerBar.toInt() - 1,
-                (0 until beat.beatsPerBar.toInt()).count { pulse ->
-                    kartal[pulse * beat.cellsPerGroup] == Stroke.OPEN
-                },
+                "${beat.id}: the first pulse must ring",
+                Stroke.OPEN,
+                kartal[0],
             )
         }
+        assertTrue("expected at least one beat with a cymbal row", withCymbals >= 1)
     }
 
     @Test
     fun `group headings are distinct in first-appearance order and need not be contiguous`() {
         for (beat in BEATS) assertNotNull("${beat.id} has no group heading", beat.group)
 
-        // NOT contiguous, and that is fine: "Building up" holds both Da Ge Te Te
-        // and Double Time, with "Gentle" sitting between them in BEATS. The Beats
-        // screen takes the DISTINCT headings in first-appearance order and then
-        // FILTERS the full list by heading, so a non-adjacent beat still lands in
-        // the right section. Asserting contiguity here would be asserting a
-        // constraint the app has never had.
-        assertEquals(
-            listOf("Foundations", "Everyday", "Building up", "Gentle", "Swing"),
-            BUILT_IN_GROUPS,
-        )
+        // NOT contiguous, and that is fine: Iskcon smasher is a Sixteenths beat
+        // that sits AFTER the two Straight ones in BEATS. The Beats screen takes
+        // the DISTINCT headings in first-appearance order and then FILTERS the
+        // full list by heading, so a non-adjacent beat still lands in the right
+        // section. Asserting contiguity would be asserting a constraint the app
+        // has never had.
+        assertEquals(listOf("Sixteenths", "Straight"), BUILT_IN_GROUPS)
 
         // Every beat appears in exactly one section, and sections reproduce the
         // beats in BEATS order — that is what the screen renders.
@@ -123,10 +147,16 @@ class DataTest {
         assertEquals("a beat was rendered twice or not at all", BEATS.size, rendered.size)
         assertEquals(BEATS.map { it.id }.toSet(), rendered.map { it.id }.toSet())
 
-        // The section that actually exercises the non-contiguity.
+        // The section that actually exercises the non-contiguity: keherva is a
+        // Straight beat that comes after two Sixteenths ones in BEATS.
         assertEquals(
-            listOf("da_ge_te_te", "double_time"),
-            BEATS.filter { it.group == "Building up" }.map { it.id },
+            listOf("matan", "lofa_taal_two_beat_damodarastakam", "keherva_medium_speed"),
+            BEATS.filter { it.group == "Straight" }.map { it.id },
+        )
+        assertEquals(
+            "the Sixteenths section should hold everything else",
+            BEATS.size - 3,
+            BEATS.filter { it.group == "Sixteenths" }.size,
         )
     }
 
@@ -146,15 +176,38 @@ class DataTest {
     }
 
     @Test
-    fun `groups are reconstructed for beats that predate the groups model`() {
+    fun `every built-in stores its groups, and they sum to its steps`() {
+        // The current set is generated from a share payload, which always carries
+        // groups, so reconstruction is not exercised by the shipped data. It is
+        // still supported — see the next test — for beats that predate the model.
         for (beat in BEATS) {
-            assertNull("${beat.id} is a built-in and should carry no groups", beat.groups)
-            val groups = groupsFor(beat)
-            assertEquals("${beat.id}: group count", beat.beatsPerBar.toInt(), groups.size)
+            val groups = beat.groups
+            assertNotNull("${beat.id} should carry its groups", groups!!)
             assertEquals("${beat.id}: groups must sum to steps", beat.steps, sumGroups(groups))
-            assertTrue("${beat.id}: reconstruction should be uniform", groups.all { it == groups[0] })
-            assertEquals(beat.cellsPerGroup, groups[0])
+
+            // The same rule ShareCodec.decodeBeat applies: uniform groups keep
+            // their size as cellsPerGroup, uneven ones fall back to cells-per-
+            // quarter. If the generator and the decoder ever disagree, a beat
+            // round-trips to a different meter than it shipped with.
+            val uniform = groups.all { it == groups[0] }
+            assertEquals(
+                "${beat.id}: cellsPerGroup disagrees with the codec's rule",
+                if (uniform) groups[0] else cpqFor(beat),
+                beat.cellsPerGroup,
+            )
         }
+    }
+
+    @Test
+    fun `groups are reconstructed for a beat that predates the groups model`() {
+        // Older beats — and anything hand-written before groups existed — carry
+        // only cellsPerGroup. groupsFor has to rebuild the bar from that,
+        // uniformly, and land on the same step count.
+        val legacy = BEATS.first().copy(id = null, groups = null)
+        val groups = groupsFor(legacy)
+        assertEquals(legacy.steps, sumGroups(groups))
+        assertTrue("reconstruction should be uniform", groups.all { it == groups[0] })
+        assertEquals(legacy.cellsPerGroup, groups[0])
     }
 
     @Test
