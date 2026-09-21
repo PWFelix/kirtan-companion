@@ -43,6 +43,14 @@ import kotlinx.coroutines.launch
  */
 class MainActivity : ComponentActivity() {
 
+    /**
+     * Whether the bars should currently be hidden, so [onWindowFocusChanged] can
+     * re-apply it after a system event cleared it. Without remembering intent we
+     * could not tell "the system revealed the bars" from "we never hid them",
+     * which is the splash state.
+     */
+    private var immersiveWanted = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -114,6 +122,7 @@ class MainActivity : ComponentActivity() {
      * thing.
      */
     private fun applyImmersive(immersive: Boolean) {
+        immersiveWanted = immersive
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -122,6 +131,25 @@ class MainActivity : ComponentActivity() {
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
         }
+    }
+
+    /**
+     * Re-hide the bars whenever the window regains focus.
+     *
+     * Immersive is best-effort and the system clears it on events we do not
+     * control — a permission dialog, the IME, an incoming-call banner, an
+     * accessibility service. Without this, one such event leaves the bars up for
+     * the rest of the session and the user has to discover that restarting the
+     * app fixes it. Re-applying on focus regain is the standard remedy and costs
+     * nothing when the bars are already hidden.
+     *
+     * It does NOT fight a deliberate edge swipe: that reveal happens while we
+     * hold focus, so this never fires for it, and the sticky behaviour retires
+     * the bars on its own.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && immersiveWanted) applyImmersive(true)
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -14,13 +14,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -214,12 +217,19 @@ internal fun KirtanApp(
     Column(
         modifier = modifier
             .fillMaxSize()
-            // NO inset padding here, and that is the point of immersive mode: the
-            // bars are hidden, so the insets are zero and the canvas is the whole
-            // screen. Padding by them anyway would reflow the layout on every
-            // transient reveal (the edge-swipe overlay), making the strip jump
-            // under the user's fingers. The splash, where the bars are visible,
-            // does pad by them.
+            // Inset-aware EVEN THOUGH immersive hides the bars. Immersive is
+            // best-effort: Android re-reveals the bars on an edge swipe, on some
+            // dialogs, on IME and on focus changes, and no app may remove them
+            // permanently. Without this padding a revealed bar OVERLAYS the UI —
+            // the nav pill and the bottom of the strip vanish under it, which is
+            // exactly the occlusion this replaces. With it, a revealed bar pushes
+            // the content up instead, and while the bars are hidden the insets
+            // are zero so the canvas is still the whole screen.
+            //
+            // The cost is a reflow on each transient reveal. That is the correct
+            // trade: content that moves is readable; content that is covered is
+            // not.
+            .windowInsetsPadding(WindowInsets.systemBars)
             .background(PaletteToken.HEAD.color),
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
