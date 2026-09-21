@@ -45,11 +45,14 @@ import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.storage.BUILTIN_CATEGORY
 import com.kirtan.companion.storage.CUSTOM_CATEGORY
 import com.kirtan.companion.storage.LibraryRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kirtan.companion.ui.components.HairlineIconButton
 import com.kirtan.companion.ui.components.PrimaryButton
 import com.kirtan.companion.ui.components.ScreenFrame
 import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.components.SectionLabel
+import com.kirtan.companion.ui.community.CommunityScreen
+import com.kirtan.companion.ui.community.CommunityViewModel
 import com.kirtan.companion.ui.icons.KcIcons
 import com.kirtan.companion.ui.library.LibraryViewModel
 import com.kirtan.companion.ui.share.ImportConfirmSheet
@@ -65,6 +68,10 @@ import com.kirtan.companion.ui.transport.TransportViewModel
 private sealed interface BeatsPage {
     data object Landing : BeatsPage
     data class Category(val id: String) : BeatsPage
+
+    /** The community library. A page, not a sheet: it is a list you browse and
+     *  search, and a sheet's fixed height would cram it. */
+    data object Community : BeatsPage
 }
 
 /**
@@ -106,6 +113,7 @@ internal fun BeatsScreen(
     val state by library.state.collectAsState()
     val allBeats by library.allBeats.collectAsState()
     val transportState by transport.state.collectAsState()
+    val communityVm: CommunityViewModel = viewModel(factory = CommunityViewModel.Factory)
     var page by remember { mutableStateOf<BeatsPage>(BeatsPage.Landing) }
     var search by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf<Beat?>(null) }
@@ -161,6 +169,7 @@ internal fun BeatsScreen(
                 text = when (val p = page) {
                     BeatsPage.Landing -> "Beats"
                     is BeatsPage.Category -> library.categoryName(p.id)
+                    BeatsPage.Community -> "Community"
                 },
                 color = PaletteToken.SYAHI.color,
                 fontSize = 26.sp,
@@ -191,6 +200,12 @@ internal fun BeatsScreen(
                 onOpenCategory = { page = BeatsPage.Category(it) },
                 onOpenDetail = { detail = it },
                 onOpenImport = { importOpen = true },
+                onOpenCommunity = { page = BeatsPage.Community },
+            )
+
+            BeatsPage.Community -> CommunityScreen(
+                vm = communityVm,
+                modifier = Modifier.fillMaxWidth().weight(1f),
             )
 
             is BeatsPage.Category -> CategoryPage(
@@ -202,6 +217,9 @@ internal fun BeatsScreen(
                 onOpenDetail = { detail = it },
                 onShareList = { name, beats ->
                     shareTarget = ShareTarget.CategoryTarget(name, beats)
+                },
+                onPublishList = { name, beats ->
+                    communityVm.publishCategory(name, beats) { message -> importResult = message }
                 },
             )
         }
@@ -234,6 +252,10 @@ internal fun BeatsScreen(
             onShare = {
                 shareTarget = ShareTarget.BeatTarget(target)
                 detail = null
+            },
+            onPublish = {
+                detail = null
+                communityVm.publishBeat(target) { message -> importResult = message }
             },
         )
     }
@@ -272,6 +294,7 @@ private fun LandingPage(
     onOpenCategory: (String) -> Unit,
     onOpenDetail: (Beat) -> Unit,
     onOpenImport: () -> Unit,
+    onOpenCommunity: () -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
 
@@ -313,6 +336,14 @@ private fun LandingPage(
                 title = "Import",
                 meta = "Paste a code or link someone sent you",
                 onClick = onOpenImport,
+            )
+        }
+
+        item {
+            SectionCard(
+                title = "Community",
+                meta = "Browse and publish shared beats",
+                onClick = onOpenCommunity,
             )
         }
 
@@ -479,6 +510,7 @@ private fun CategoryPage(
     library: LibraryViewModel,
     onOpenDetail: (Beat) -> Unit,
     onShareList: (String, List<Beat>) -> Unit,
+    onPublishList: (String, List<Beat>) -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
 
@@ -495,6 +527,16 @@ private fun CategoryPage(
                     label = "Share list",
                     icon = KcIcons.Share,
                     onClick = { onShareList(categoryName, beats) },
+                )
+            }
+            // Publishing uploads a SNAPSHOT: editing the private copy later never
+            // rewrites what the community already took, which is the same rule a
+            // share link follows.
+            item(key = "publish-list") {
+                SecondaryButton(
+                    label = "Publish to community",
+                    icon = KcIcons.Globe,
+                    onClick = { onPublishList(categoryName, beats) },
                 )
             }
         }
@@ -574,6 +616,7 @@ private fun BeatDetailSheet(
     onPlay: () -> Unit,
     onEdit: () -> Unit,
     onShare: () -> Unit,
+    onPublish: () -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
     com.kirtan.companion.ui.components.KcSheet(title = beat.name, onDismiss = onDismiss) {
@@ -603,6 +646,11 @@ private fun BeatDetailSheet(
                 label = "Share",
                 icon = KcIcons.Share,
                 onClick = onShare,
+            )
+            com.kirtan.companion.ui.components.SecondaryButton(
+                label = "Publish to community",
+                icon = KcIcons.Globe,
+                onClick = onPublish,
             )
             if (!beat.isBuiltIn && beat.id != null) {
                 com.kirtan.companion.ui.components.SecondaryButton(
