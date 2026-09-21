@@ -11,6 +11,7 @@ import com.kirtan.companion.KirtanApplication
 import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.storage.AuthSession
+import com.kirtan.companion.storage.CommunityClient
 import com.kirtan.companion.storage.PublishedItem
 import com.kirtan.companion.storage.storageErrorMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +43,22 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
     private val _items = MutableStateFlow<List<PublishedItem>>(emptyList())
     val items: StateFlow<List<PublishedItem>> = _items.asStateFlow()
 
+    /**
+     * The signed-in user's own stars per item id, so their row of stars shows
+     * what THEY chose while the card's number shows the community's average.
+     * Empty when signed out, which is what hides the tappable stars.
+     */
+    private val _myRatings = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val myRatings: StateFlow<Map<String, Int>> = _myRatings.asStateFlow()
+
+    private val _scope = MutableStateFlow(CommunityClient.BrowseScope.EVERYTHING)
+    val scope: StateFlow<CommunityClient.BrowseScope> = _scope.asStateFlow()
+
+    fun setScope(scope: CommunityClient.BrowseScope) {
+        if (_scope.value == scope) return
+        _scope.value = scope
+    }
+
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
@@ -68,17 +85,60 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
             else -> null
         }
 
+    private var lastQuery = ""
+
     fun refresh(query: String = "") {
+        lastQuery = query
         val client = community ?: return
         _loading.value = true
         _error.value = null
         viewModelScope.launch {
             try {
-                _items.value = client.browse(query)
+                val loaded = client.browse(query, _scope.value)
+                _items.value = loaded
+                // One extra query for the whole page, only when signed in: the
+                // stars need to show the user's own choice, not the average.
+                val me = session.value?.userId
+                _myRatings.value = if (me == null) {
+                    emptyMap()
+                } else {
+                    client.myRatings(me, loaded.map { it.id })
+                }
             } catch (e: Exception) {
                 _error.value = storageErrorMessage(e)
             } finally {
                 _loading.value = false
+            }
+        }
+    }
+
+    /**
+     * Rate an item, or clear the rating by passing the star already chosen.
+     *
+     * Optimistic: the stars move immediately and the list reloads afterwards,
+     * because the average lives on the parent row and only the server knows the
+     * new total. A failed write restores the previous state via the reload.
+     */
+    fun rate(item: PublishedItem, stars: Int, onDone: (String?) -> Unit) {
+        val client = community ?: return
+        val me = session.value
+        if (me == null) {
+            onDone("Sign in to rate community beats.")
+            return
+        }
+        val clearing = _myRatings.value[item.id] == stars
+        viewModelScope.launch {
+            try {
+                client.rate(item.id, me.userId, if (clearing) null else stars)
+                _myRatings.value = if (clearing) {
+                    _myRatings.value - item.id
+                } else {
+                    _myRatings.value + (item.id to stars)
+                }
+                refresh(lastQuery)
+                onDone(null)
+            } catch (e: Exception) {
+                onDone(storageErrorMessage(e))
             }
         }
     }

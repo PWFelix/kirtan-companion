@@ -46,10 +46,23 @@ class CommunityClient(
 
     private companion object {
         const val TABLE = "published_beats"
-        const val COLUMNS = "id, author_id, author_name, kind, name, payload, copies, created_at"
+        const val RATINGS = "published_ratings"
+        const val COLUMNS =
+            "id, author_id, author_name, kind, name, payload, copies, " +
+                "rating_sum, rating_count, created_at"
         const val ANONYMOUS_AUTHOR = "A devotee"
         const val DEFAULT_LIMIT = 40
     }
+
+    /**
+     * What a community search matches against.
+     *
+     * Author search is a first-class scope rather than always matching both,
+     * because "everything" makes a common surname drown the library: searching
+     * for a beat called "Dadra" should not return every beat by someone whose
+     * name contains it.
+     */
+    enum class BrowseScope { EVERYTHING, NAMES, AUTHORS }
 
     /**
      * The community list, newest first.
@@ -59,14 +72,18 @@ class CommunityClient(
      * something into their library is what needs an account (or lands on device
      * storage, which needs nothing).
      *
-     * @param query full-text-matches the name via PostgREST's `ilike`.
+     * @param query matched per [scope]. EVERYTHING uses a PostgREST `or=(…)`,
+     *   which is one round trip rather than two queries unioned client-side.
      */
-    suspend fun browse(query: String = "", limit: Int = DEFAULT_LIMIT): List<PublishedItem> {
-        val trimmed = query.trim()
+    suspend fun browse(
+        query: String = "",
+        scope: BrowseScope = BrowseScope.EVERYTHING,
+        limit: Int = DEFAULT_LIMIT,
+    ): List<PublishedItem> {
         val rows = client.select(
             table = TABLE,
             columns = COLUMNS,
-            filters = if (trimmed.isEmpty()) emptyList() else listOf("name" to "ilike.%$trimmed%"),
+            filters = browseFilters(query, scope),
             order = "created_at.desc",
             limit = limit,
             requireSession = false,
@@ -174,6 +191,64 @@ class CommunityClient(
     }
 
     /**
+     * Set or clear the signed-in user's rating on an item.
+     *
+     * Upsert on `(item_id, user_id)`: one rating per person per item, changed by
+     * tapping a different star. Null CLEARS — tapping your own star again is the
+     * natural "take it back", and the unique constraint makes clearing a delete
+     * rather than a zero, which would otherwise drag the average down forever.
+     *
+     * The counters on the parent row are maintained by a database trigger, so
+     * nothing here has to remember to update them — and two people rating at
+     * once cannot lose a count to a read-modify-write race.
+     */
+    suspend fun rate(itemId: String, userId: String, stars: Int?) {
+        if (stars == null) {
+            client.delete(
+                RATINGS,
+                listOf("item_id" to "eq.$itemId", "user_id" to "eq.$userId"),
+                "remove that rating",
+            )
+            return
+        }
+        require(stars in 1..5) { "a rating is 1 to 5 stars, got $stars" }
+        client.upsert(
+            table = RATINGS,
+            body = buildJsonObject {
+                put("item_id", itemId)
+                put("user_id", userId)
+                put("stars", stars)
+            },
+            onConflict = "item_id,user_id",
+            whileDoing = "save that rating",
+        )
+    }
+
+    /**
+     * The signed-in user's own stars per item, so their stars show what they
+     * chose rather than the community's average. One query for the whole page.
+     */
+    suspend fun myRatings(userId: String, itemIds: List<String>): Map<String, Int> {
+        if (itemIds.isEmpty()) return emptyMap()
+        val rows = client.select(
+            table = RATINGS,
+            columns = "item_id,stars",
+            filters = listOf(
+                "user_id" to "eq.$userId",
+                "item_id" to "in.(${itemIds.joinToString(",")})",
+            ),
+            whileDoing = "load your ratings",
+        )
+        return rowsOf(rows).mapNotNull { row ->
+            val obj = row as? JsonObject ?: return@mapNotNull null
+            val id = obj["item_id"]?.stringContent() ?: return@mapNotNull null
+            val stars = (obj["stars"] as? JsonPrimitive)?.longOrNull?.toInt()
+                ?: return@mapNotNull null
+            id to stars
+        }.toMap()
+    }
+
+    /**
      * A published row as the payload [LibraryRepository.importShared] consumes.
      *
      * Null when the row's snapshot will not decode — an item published by a future
@@ -217,6 +292,8 @@ class CommunityClient(
             name = obj["name"]?.stringContent().orEmpty(),
             payload = obj["payload"] as? JsonObject ?: JsonObject(emptyMap()),
             copies = (obj["copies"] as? JsonPrimitive)?.longOrNull ?: 0L,
+            ratingSum = (obj["rating_sum"] as? JsonPrimitive)?.longOrNull ?: 0L,
+            ratingCount = (obj["rating_count"] as? JsonPrimitive)?.longOrNull ?: 0L,
             createdAt = parseTimestamp(obj["created_at"]?.stringContent()),
         )
     }
@@ -251,9 +328,17 @@ data class PublishedItem(
     /** The snapshot: `{ beat }` or `{ name, beats }`, in [LibraryJson]'s shape. */
     val payload: JsonObject,
     val copies: Long,
+    /** Sum of all stars, maintained by a database trigger. */
+    val ratingSum: Long = 0,
+    /** How many people rated it; zero means "nobody yet", not "zero stars". */
+    val ratingCount: Long = 0,
     /** Epoch millis, or null when the server's timestamp could not be read. */
     val createdAt: Long?,
-)
+) {
+    /** The community's average, or null when nobody has rated it yet. */
+    val averageStars: Double?
+        get() = if (ratingCount > 0) ratingSum.toDouble() / ratingCount else null
+}
 
 /**
  * A Postgres `timestamptz` as epoch millis.
@@ -272,3 +357,25 @@ internal fun parseTimestamp(text: String?): Long? {
 }
 
 private fun rowsOf(body: JsonElement?): List<JsonElement> = (body as? JsonArray) ?: emptyList()
+
+/**
+ * The PostgREST filters for a community search.
+ *
+ * Top-level and pure so the author-search wiring is testable without a network
+ * or a client: EVERYTHING is a single `or=(…)` rather than two queries unioned
+ * client-side, and an empty query means "no filters" rather than a filter that
+ * matches nothing.
+ */
+internal fun browseFilters(
+    query: String,
+    scope: CommunityClient.BrowseScope,
+): List<Pair<String, String>> {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) return emptyList()
+    val like = "ilike.%$trimmed%"
+    return when (scope) {
+        CommunityClient.BrowseScope.NAMES -> listOf("name" to like)
+        CommunityClient.BrowseScope.AUTHORS -> listOf("author_name" to like)
+        CommunityClient.BrowseScope.EVERYTHING -> listOf("or" to "(name.$like,author_name.$like)")
+    }
+}
