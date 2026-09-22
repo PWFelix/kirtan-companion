@@ -797,9 +797,7 @@ private fun BeatPickerSheet(
 
     KcSheet(title = "Choose a beat", onDismiss = onDismiss) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space2),
         ) {
             tabs.forEach { id ->
