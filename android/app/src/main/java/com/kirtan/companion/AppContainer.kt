@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -138,6 +139,23 @@ class AppContainer(private val appContext: Context) {
      */
     val pendingMigration = MutableStateFlow<Library?>(null)
 
+    private val _isMaintainer = MutableStateFlow(false)
+
+    /**
+     * True when the signed-in user may change the built-in beat set.
+     *
+     * Held HERE rather than per screen because two screens gate a control on it —
+     * Community's Promote, and the Beats detail sheet's edit-for-everyone — and two
+     * independent probes would be two answers that could disagree, plus two queries
+     * per sign-in. Probed once per session change, never per render.
+     *
+     * Fails closed to false. The database is what actually authorises a write
+     * (`is_maintainer()` inside the row policies), so a wrong `false` costs a
+     * maintainer a button until they sign in again, while a wrong `true` would be a
+     * control whose every use fails.
+     */
+    val isMaintainer: StateFlow<Boolean> = _isMaintainer.asStateFlow()
+
     init {
         // The built-in beats: cached set first, then the server's. Launched before
         // the session collector below because it is the only thing here that can
@@ -147,6 +165,19 @@ class AppContainer(private val appContext: Context) {
             val shipped = shippedBeats ?: return@launch
             shipped.loadCached()
             shipped.checkForUpdates(manual = false)
+        }
+
+        // Who may edit the built-in set. Its own collector rather than a line in
+        // the session collector below, because that one returns early when there is
+        // no cloud, and because this has to re-probe on sign-out as well as sign-in:
+        // the answer changes in both directions, and a stale `true` left behind by a
+        // signed-out maintainer would draw the control for whoever signs in next.
+        scope.launch {
+            val client = supabase ?: return@launch
+            val shipped = shippedBeats ?: return@launch
+            client.session.collect { session ->
+                _isMaintainer.value = session != null && shipped.isMaintainer()
+            }
         }
 
         // Follow the auth session: signed in, the library becomes the cloud one;

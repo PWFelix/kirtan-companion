@@ -264,33 +264,142 @@ class ShippedBeatsClient(
         // looking at it. It also covers the other maintainer promoting
         // something since this device last asked.
         val current = currentRows()
-        val row = shippedRowFor(
-            id = shippedIdFor(beat.name, current.ids),
-            ordinal = current.nextOrdinal,
-            heading = heading,
-            beat = beat,
-            sourcePublishedId = item.id,
+        val row = checkedRow(
+            shippedRowFor(
+                id = shippedIdFor(beat.name, current.ids),
+                ordinal = current.nextOrdinal,
+                heading = heading,
+                beat = beat,
+                sourcePublishedId = item.id,
+                description = beat.description,
+            ),
+            "That beat can't become a built-in one — its name or its pattern is " +
+                "outside what the built-in set allows.",
         )
-
-        // Checked by the READ path before it is written, and that is the whole
-        // point of the line: the set is all-or-nothing, so ONE row a client
-        // cannot parse takes every user's built-in list back to the compiled
-        // fallback. Refusing here turns that into a sentence on the
-        // maintainer's screen. It also catches what the column checks would
-        // otherwise report as an opaque constraint violation, and a blank name
-        // — which slugs to "beat" but is not a row any client will serve.
-        if (shippedBeatsOf(JsonArray(listOf(row))) == null) {
-            throw StorageError(
-                StorageErrorCode.UNKNOWN,
-                "That beat can't become a built-in one — its name or its pattern is " +
-                    "outside what the built-in set allows.",
-            )
-        }
 
         client.upsert(TABLE, row, onConflict = "id", whileDoing = "making that a built-in beat")
         // Silent: the caller has its own "promoted" message, and a set that now
         // holds one more beat is not news the user needs twice.
         refetch()
+    }
+
+    /**
+     * Write a corrected beat back onto the row it came from.
+     *
+     * The other half of serving the set. Promote ADDS a beat; this fixes one that
+     * is already shipping, which is the common case — a wrong cell in a pattern
+     * everybody is playing. Before this existed the only route was SQL, and the
+     * route before that was a rebuild and a reinstall for every phone.
+     *
+     * ── THE ID IS NEVER RE-SLUGIFIED ──
+     * Not even when the maintainer renames the beat, and that is the one rule here
+     * that must not be relaxed: playlists store built-in ids, and nothing anywhere
+     * can tell a stale reference from a live one, so a new slug would orphan every
+     * progression that used this beat while leaving the old row behind. A rename
+     * changes `name` and nothing else.
+     *
+     * ── WHY IT READS THE ROW BACK FIRST ──
+     * `ordinal`, `heading`, `description` and `source_published_id` are not on
+     * [Beat] in a form the editor round-trips, so without a read they would be
+     * written as nulls and the beat would silently lose its section, its prose and
+     * its provenance.
+     *
+     * ── AND WHY THE WRITE IS AN UPDATE, NOT AN UPSERT ──
+     * The read above does NOT make this safe on its own: a beat retired by the
+     * other maintainer between the read and the write would come straight back if
+     * the write inserted on conflict, and the person doing it would be told the
+     * save worked. A filtered UPDATE cannot resurrect a row, and because it asks
+     * for the representation back, "matched nothing" is detectable — an UPDATE that
+     * changes no rows is a 200 with an empty body, not an error, so without reading
+     * the response this would report success and change nothing.
+     *
+     * @throws StorageError when there is no row to update, when the edit is not
+     *   representable, or when RLS says the caller is not a maintainer.
+     */
+    suspend fun updateShippedBeat(edited: Beat) {
+        val id = edited.id ?: throw StorageError(
+            StorageErrorCode.UNKNOWN,
+            "That beat has no id, so there is no built-in row to update.",
+        )
+        val meta = currentRow(id) ?: throw notInTheSet()
+        val row = checkedRow(
+            shippedRowFor(
+                id = id,
+                ordinal = meta.ordinal,
+                heading = meta.heading,
+                beat = edited,
+                sourcePublishedId = meta.sourcePublishedId,
+                description = meta.description,
+            ),
+            "That edit can't be saved — its name or its pattern is outside what " +
+                "the built-in set allows.",
+        )
+        val written = client.update(
+            TABLE,
+            row,
+            filters = listOf("id" to "eq.$id"),
+            whileDoing = "save that for everyone",
+        )
+        if ((written as? JsonArray).isNullOrEmpty()) throw notInTheSet()
+
+        // Silent, as after a promote: the caller has its own confirmation, and the
+        // point of the refetch is that the maintainer sees their own correction
+        // immediately — a mistake is then visible to the one person who can fix it.
+        refetch()
+    }
+
+    /**
+     * The row is gone. One sentence for both the pre-read and the empty write,
+     * because from the maintainer's side they are the same fact and the same
+     * remedy, and the web client words it identically.
+     */
+    private fun notInTheSet() = StorageError(
+        StorageErrorCode.NOT_FOUND,
+        "That beat isn't in the built-in set any more, so there was nothing to update.",
+    )
+
+    /**
+     * One row's carried-over fields, or null when there is no such row.
+     *
+     * Signed out is fine: this is a read of a world-readable table, and the write
+     * that follows is what RLS gates.
+     */
+    private suspend fun currentRow(id: String): ShippedRowMeta? {
+        val body = client.select(
+            table = TABLE,
+            columns = "ordinal, heading, description, source_published_id",
+            // Unquoted, which is safe because an id is `[a-z0-9_]` by construction
+            // — see [shippedIdFor] — so it cannot hold a character PostgREST would
+            // read as an operator or a separator.
+            filters = listOf("id" to "eq.$id"),
+            limit = 1,
+            requireSession = false,
+            whileDoing = "loading the built-in beats",
+        )
+        val row = (body as? JsonArray)?.firstOrNull() as? JsonObject ?: return null
+        return ShippedRowMeta(
+            ordinal = row["ordinal"].intContent() ?: return null,
+            heading = row["heading"].stringField() ?: return null,
+            description = row["description"].stringField(),
+            sourcePublishedId = row["source_published_id"].stringField(),
+        )
+    }
+
+    /**
+     * Refuse to write a row the READ path would reject.
+     *
+     * The set is all-or-nothing, so ONE row a client cannot parse takes every
+     * user's built-in list back to the compiled fallback — a correction that
+     * breaks the app for everybody is the worst available outcome of an edit.
+     * Checking the row against the same function that reads the table turns that
+     * into a sentence on the maintainer's screen, and catches what a column
+     * constraint would otherwise report as an opaque database error.
+     */
+    private fun checkedRow(row: JsonObject, refusal: String): JsonObject {
+        if (shippedBeatsOf(JsonArray(listOf(row))) == null) {
+            throw StorageError(StorageErrorCode.UNKNOWN, refusal)
+        }
+        return row
     }
 
     /** The table as it is NOW: every id, and the ordinal that appends to it. */
@@ -613,6 +722,18 @@ private const val MAX_ID_LEN_FOR_SLUG = 48
  * a meter that contradicts itself. That is the same reason
  * [BeatSourceExport.toKotlinSource] emits groups rather than the derived fields.
  *
+ * `note` is DERIVED here rather than taken from the beat, and [description] is a
+ * parameter rather than a read of the beat, for one shared reason: neither
+ * survives a trip through the editor. [com.kirtan.companion.ui.editor.EditorDraft.toBeat]
+ * stamps `note = "Custom"` and `description = null` on everything it produces,
+ * because a private beat is new and has no prose — so an edit written straight
+ * from the draft would replace "4 beats" with "Custom" and erase a row's prose.
+ * Deriving the note also means it cannot go stale: a maintainer who changes the
+ * meter gets a note that counts the new groups, where a preserved one would say
+ * "4 beats" over a five-group bar, in the list row where everyone can see it.
+ * `scripts/generateBuiltinBeats.mjs` mints the same string, so the table and the
+ * compiled fallback agree.
+ *
  * The two NULLABLE columns are written explicitly rather than omitted when empty,
  * which is the opposite of what [LibraryJson] does and for an upsert-specific
  * reason: `resolution=merge-duplicates` only touches the columns present in the
@@ -625,12 +746,13 @@ internal fun shippedRowFor(
     heading: String,
     beat: Beat,
     sourcePublishedId: String?,
+    description: String?,
 ): JsonObject = buildJsonObject {
     put("id", id)
     put("ordinal", ordinal)
     put("heading", heading)
     put("name", beat.name)
-    put("note", beat.note)
+    put("note", "${groupsFor(beat).size} beats")
     put("bpm", beat.bpm)
     put("groups", buildJsonArray { groupsFor(beat).forEach { add(it) } })
     put("cpq", cpqFor(beat))
@@ -643,6 +765,23 @@ internal fun shippedRowFor(
             }
         },
     )
-    put("description", beat.description)
+    put("description", description)
     put("source_published_id", sourcePublishedId)
 }
+
+/**
+ * The parts of a row that an EDIT must carry over, read fresh from the table.
+ *
+ * None of these four is on [Beat] in a form an editor could round-trip: `ordinal`
+ * and `source_published_id` are not beat fields at all, and `heading` and
+ * `description` are exactly what [com.kirtan.companion.ui.editor.EditorDraft]
+ * drops. Reading them back rather than trusting the beat in memory is what makes
+ * "edit this beat" unable to silently un-file it from its section or strip its
+ * provenance.
+ */
+internal data class ShippedRowMeta(
+    val ordinal: Int,
+    val heading: String,
+    val description: String?,
+    val sourcePublishedId: String?,
+)

@@ -2,8 +2,8 @@
  * shippedBeats.js
  * ---------------
  * The built-in beat set as the SERVER holds it: how a `shipped_beats` row
- * becomes an app beat, which sets of rows may be used at all, and how a
- * promoted beat is packed back into a row.
+ * becomes an app beat, which sets of rows may be used at all, and how a beat
+ * is packed back into a row — by a promote, or by an edit in place.
  *
  * WHY THE BUILT-INS COME FROM A TABLE. They used to be compiled in twice —
  * data/beats.js here, data/Beats.kt on Android — so changing one beat meant
@@ -254,7 +254,7 @@ export function revisionOf(rows) {
   return newest;
 }
 
-// ── Promote (the write side) ─────────────────────────────────────────────
+// ── The write side (promote, and edit in place) ──────────────────────────
 
 /**
  * The id a promoted beat gets: the slug of its name, suffixed until it is
@@ -314,10 +314,13 @@ export function nextOrdinal(rows) {
  * a sentence on the maintainer's screen instead. It also means an out-of-range
  * field can never reach the database as an opaque constraint violation.
  *
- * `description` travels as-is. shareCodec drops prose from an unattended
- * import because it renders as a paragraph in the info sheet and that is a
- * place to phish from; a promote is attended — the maintainer is looking at
- * the card and typing the heading — so their judgement is the gate here.
+ * `description` travels as-is UNLESS the caller supplies one, which only the
+ * in-place update does (see shippedRowForUpdate): the editor that produces an
+ * edited beat has no field for prose, so an edit has to hand the row's own
+ * paragraph back or lose it. shareCodec drops prose from an unattended import
+ * because it renders as a paragraph in the info sheet and that is a place to
+ * phish from; a promote is attended — the maintainer is looking at the card
+ * and typing the heading — so their judgement is the gate here.
  *
  * ── TWO RULES ABOUT WHAT IS *IN* THE ROW ──
  *
@@ -336,7 +339,7 @@ export function nextOrdinal(rows) {
  * contradicts its own pattern — and the two platforms would then have to agree
  * about which of the two to believe.
  */
-export function shippedRowForBeat(beat, { id, ordinal, heading, sourcePublishedId }) {
+export function shippedRowForBeat(beat, { id, ordinal, heading, description, sourcePublishedId }) {
   // A blank name is REFUSED rather than written around, and the reason is the
   // other platform: Android rejects a blank-named row, and since the set is
   // all-or-nothing, one such row would take every Android user back to the
@@ -352,10 +355,10 @@ export function shippedRowForBeat(beat, { id, ordinal, heading, sourcePublishedI
     groups = groupsFor(beat);
   } catch {
     // groupsFor reconstructs a missing `groups` by allocating
-    // Array(steps / cellsPerGroup), and the beat being promoted comes out of
-    // a published payload — a stranger's JSON, stored verbatim at publish
-    // time. One with no usable meter has no length to allocate and throws
-    // instead of returning junk. Every beat this app can produce has a meter,
+    // Array(steps / cellsPerGroup), and a beat with no usable meter — one out
+    // of a published payload, which is a stranger's JSON stored verbatim at
+    // publish time — has no length to allocate, so it throws instead of
+    // returning junk. Every beat this app's own editor produces has a meter,
     // so "can't be a built-in" is the entire response this needs.
     return null;
   }
@@ -377,14 +380,28 @@ export function shippedRowForBeat(beat, { id, ordinal, heading, sourcePublishedI
     }).join("");
   }
 
+  // A `description` the caller passed wins, INCLUDING when it is null: `??`
+  // would read "this row has no prose" as "no opinion" and fall through to the
+  // beat's. Only shippedRowForUpdate passes one; a promote leaves it absent and
+  // the published beat's own prose travels.
+  const prose = description === undefined ? beat.description : description;
+
   const row = {
     id,
     ordinal,
     heading,
     name,
-    // `note` is `not null default ''` in the table, so an empty string is the
-    // honest value for a beat that never had one.
-    note: typeof beat.note === "string" ? beat.note : "",
+    // DERIVED from the pattern, not carried over from `beat.note` — which is
+    // what this used to do, and it was wrong for every beat that reached the
+    // table through the editor. `note` is the first half of a list row
+    // ("4 beats · 16 cells"), so a stale one is a lie the user can read: the
+    // editor drafts every beat with the note "Custom", which says nothing in a
+    // built-in list, and a preserved "4 beats" sitting over a bar its
+    // maintainer just changed to five groups contradicts the strip next to it.
+    // `${groups.length} beats` is also exactly what
+    // scripts/generateBuiltinBeats.mjs mints, so the table and the compiled
+    // fallback generated from it can't disagree about a beat's own count.
+    note: `${groups.length} beats`,
     // Clamped with meter.js's bounds, exactly as shareCodec clamps an
     // incoming bpm — the table checks 40..200 too, so anything else would
     // come back as a database error rather than a tempo.
@@ -397,8 +414,59 @@ export function shippedRowForBeat(beat, { id, ordinal, heading, sourcePublishedI
     // Both nullable columns are written explicitly, never omitted — see the
     // header. To an upsert an absent key means "leave the existing value",
     // not "clear it".
-    description: typeof beat.description === "string" ? beat.description : null,
+    description: typeof prose === "string" ? prose : null,
     source_published_id: sourcePublishedId ?? null,
   };
   return validShippedRow(row) ? row : null;
+}
+
+/**
+ * A CORRECTED built-in as the row that replaces it, or null if it can't be one.
+ *
+ * `current` is the row as the table holds it right now — a fresh read, not the
+ * beat in memory and not the list on screen (see
+ * shippedBeatsClient.updateShippedBeat for why the read has to be fresh) — and
+ * `beat` is the edited version of it.
+ *
+ * FIVE FIELDS COME FROM THE ROW, and every one is a thing the editor that
+ * produced `beat` cannot express, so taking it from the beat would invent it or
+ * erase it:
+ *
+ *   id — THE ONE THAT MUST NOT BE GOT WRONG. Never re-slugified, not even when
+ *     the maintainer renamed the beat, because playlists store built-in ids and
+ *     nothing anywhere can tell a stale reference from a live one. A new id
+ *     orphans every progression that pointed at this beat, and the freed one is
+ *     then handed to the next beat that slugs to it — two breakages for the
+ *     price of one rename. The name is a label; the id is the identity.
+ *   ordinal — the editor has no notion of order, and a correction is not a move.
+ *   heading — the editor has no notion of sections, so it has nothing to say
+ *     about which one this beat is in.
+ *   description — the editor has no prose field, so the beat carries none and
+ *     writing the beat's would erase the row's paragraph.
+ *   source_published_id — a correction is still the beat that community snapshot
+ *     made. Provenance is the only answer to "where did this ship from?", and
+ *     it is exactly what an edit would otherwise quietly lose.
+ *
+ * Everything else is the edited beat's — name, bpm, groups, cpq, lanes — plus
+ * `note`, derived from the new groups rather than preserved, for the reason
+ * shippedRowForBeat gives.
+ *
+ * A THIN COMPOSITION over shippedRowForBeat, not a second builder: one place
+ * knows how a beat becomes a row, and one gate (validShippedRow, inside it)
+ * decides whether it may, for both writes. That is what keeps a promote and an
+ * edit from drifting into disagreeing about what the table may hold — and the
+ * row an edit writes is a row every client reads back through validShippedSet,
+ * where one unparseable entry costs everyone the whole built-in list.
+ */
+export function shippedRowForUpdate(current, beat) {
+  return shippedRowForBeat(beat, {
+    id: current.id,
+    ordinal: current.ordinal,
+    heading: current.heading,
+    // Passed explicitly, and an ABSENT key would be a different rule: the
+    // builder would fall back to the beat's prose, and a row that has none must
+    // stay a row that has none (see `prose` in shippedRowForBeat).
+    description: current.description ?? null,
+    sourcePublishedId: current.source_published_id ?? null,
+  });
 }

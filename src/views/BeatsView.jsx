@@ -74,7 +74,7 @@ function SortableRow({ id, children }) {
  */
 function BeatsView({
   library, beat, beatId, ready,
-  onSelect, onStart, onStartBeat, onEdit, onNewBeat, onDeleteBeat,
+  onSelect, onStart, onStartBeat, onEdit, onEditShipped, onNewBeat, onDeleteBeat,
   pendingShare, onImportShare, onDismissShare, auth, onRequestAuth, nav,
 }) {
   const {
@@ -218,6 +218,28 @@ function BeatsView({
     } catch (err) {
       setPromoteState(err.message || "Couldn't add that to the built-in beats.");
     }
+  }
+
+  // ── Edit a built-in in place (maintainers only) ──
+  /**
+   * The other shipped-set write: correct a beat that already ships, rather than
+   * add one. Offered beside Customize and not instead of it, because forking a
+   * private copy is still what a non-maintainer wants and what a maintainer
+   * wants while experimenting — this one is for when the beat is simply wrong.
+   *
+   * CONFIRMED HERE, before the editor opens, rather than at Save. This screen
+   * owns the confirm sheet and unmounts while the editor is up, so a confirm at
+   * Save would have to be App's, drawn over the editor and holding its save
+   * open. The tradeoff is that the yes comes a while before the write — minutes,
+   * if the correction is a careful one — which is why the blast radius is named
+   * twice: here, and on the editor's own Save button.
+   */
+  function askEditShipped(b) {
+    askConfirm(
+      `Edit “${b.name}” for everyone? Every install picks the change up on its next launch. Playlists using it keep working — its id doesn't change, even if you rename it.`,
+      "Edit for everyone",
+      () => { setDetailBeat(null); onEditShipped(b); },
+    );
   }
 
   // Publish whatever the share sheet is showing to the community library.
@@ -818,6 +840,18 @@ function BeatsView({
                 Start
               </button>
             </div>
+            {/* A built-in, for a maintainer: correct the row every install
+                reads. BELOW the two primary actions rather than beside them —
+                three buttons in that row is what pushed Share up into the
+                head, and "Customize" needs its width. Outlined rather than
+                clay for the promoteChip's reason: it writes to the set the app
+                SHIPS, and it is only ever drawn for the two people who can
+                perform it. */}
+            {maintainer && !isCustomBeat(detailBeat.id) && (
+              <button onClick={() => askEditShipped(detailBeat)} style={st.shippedEditBtn}>
+                Edit for everyone
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1166,6 +1200,10 @@ const st = {
   sheetActions: { display: "flex", gap: "var(--space-3)", marginTop: "var(--space-5)" },
   sheetEditBtn: { flex: 1, minHeight: 50, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
   sheetStartBtn: { flex: 2, minHeight: 50, borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", cursor: "pointer" },
+  // The maintainer's in-place edit of a built-in. Its own full-width row under
+  // the two primary actions, in the quiet outline promoteChip wears and for the
+  // reason given there: this one writes to the set the app SHIPS.
+  shippedEditBtn: { width: "100%", minHeight: 46, marginTop: "var(--space-3)", borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
   confirmDangerBtn: { flex: 1, minHeight: 50, borderRadius: 14, border: "none", background: "var(--danger)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
   startBtn: { flexShrink: 0, width: "100%", padding: "16px", borderRadius: 18, border: "none", background: "var(--accent-action)", color: "var(--on-action)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 800, letterSpacing: "0.02em", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 },
 };

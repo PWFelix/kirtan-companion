@@ -2,7 +2,8 @@
  * shippedBeatsClient.js
  * ---------------------
  * The server side of the built-in beat set: reading `shipped_beats`, the
- * maintainer probe, and the one write — promoting a community beat into it.
+ * maintainer probe, and the two writes — promoting a community beat into the
+ * set, and correcting one of its beats in place.
  *
  * WHY IT ISN'T A BeatsProvider. A provider holds one user's work behind an
  * identity; this table holds what the app SHIPS, is world-readable (RLS
@@ -17,7 +18,7 @@
  * maintainer). Keeping them apart is what makes that one crossing obvious.
  *
  * PERMISSIONS LIVE IN THE DATABASE. `is_maintainer()` gates the write
- * policies, so nothing here decides who may promote; the UI hides the button
+ * policies, so nothing here decides who may write; the UI hides the controls
  * for a non-maintainer purely so it doesn't offer something that will fail.
  * A refusal therefore has to come back as a sentence about permission, which
  * is what mapError's 42501 branch is for.
@@ -25,7 +26,7 @@
 
 import { supabase } from "./supabaseClient.js";
 import { StorageError } from "./BeatsProvider.js";
-import { shippedIdFor, nextOrdinal, shippedRowForBeat } from "../data/shippedBeats.js";
+import { shippedIdFor, nextOrdinal, shippedRowForBeat, shippedRowForUpdate } from "../data/shippedBeats.js";
 
 function ensureClient() {
   if (!supabase) {
@@ -103,6 +104,23 @@ export async function fetchShippedRows() {
 }
 
 /**
+ * ONE row by its primary key, or null when the table has no such beat.
+ *
+ * `maybeSingle` rather than `single` because an absent row is an ANSWER here,
+ * not a failure: a beat retired in the dashboard while an editor was open is
+ * the case updateShippedBeat exists to handle, and `single` reports it as a
+ * PGRST116 error that mapError would turn into "Couldn't …" instead of into
+ * that sentence.
+ */
+async function fetchShippedRow(id) {
+  const row = await run(
+    () => supabase.from("shipped_beats").select(COLUMNS).eq("id", id).maybeSingle(),
+    "load that built-in beat",
+  );
+  return row ?? null;
+}
+
+/**
  * Is the signed-in user one of the app's maintainers?
  *
  * `maintainers` is select-only for its own rows and has no write policy at
@@ -163,5 +181,64 @@ export async function promoteShippedBeat(beat, { heading, publishedId }) {
     () => supabase.from("shipped_beats").upsert(row, { onConflict: "id" }),
     "add that to the built-in beats",
   );
+  return row;
+}
+
+// Said once, for the two ways a row can turn out to be gone: the read found
+// nothing, or the write matched nothing. From the maintainer's chair they are
+// one event — the beat being edited isn't in the set any more — and the second
+// is the reason the write below is an update and not an upsert, since an upsert
+// would answer that event by putting the beat back. The same sentence the
+// Android half shows: the two apps already share the promote refusals word for
+// word, and one table should not be described two ways.
+const GONE =
+  "That beat isn't in the built-in set any more, so there was nothing to update.";
+
+/**
+ * Correct one built-in beat IN PLACE, and return the row written.
+ *
+ * `beat` is the editor's draft — the pattern, name and tempo the maintainer
+ * just changed. It is not a row and cannot be made into one on its own: the
+ * editor hardcodes a note of "Custom", has no field for a section heading or a
+ * description and no notion of order, so everything it doesn't own is read back
+ * off the row being replaced (see shippedRowForUpdate). `id` names that row,
+ * and the write never changes it — playlists store built-in ids, so re-slugifying
+ * a renamed beat would orphan every progression that referenced it.
+ *
+ * THE ROW IS READ FRESH, by its primary key, and — unlike promote's fresh read
+ * of the whole set — not in order to choose anything: in order to AVOID
+ * choosing. The ordinal, heading, description and provenance written are the
+ * ones the table holds now, not the ones behind the beat on screen, which came
+ * from a fetch that may be an hour old and may predate the other maintainer's
+ * edit. Writing those would undo it silently, under a success message.
+ *
+ * THE WRITE IS AN UPDATE, NEVER AN UPSERT. `upsert(…, { onConflict: "id" })`
+ * CREATES the row when nothing matches, so a beat retired in the dashboard
+ * while this editor was open would come back on save — a resurrection nobody
+ * asked for, and one no client would ever report, because the write succeeded.
+ * `.update()` matches nothing instead, which is why its response is read back.
+ */
+export async function updateShippedBeat(beat, { id }) {
+  const current = await fetchShippedRow(id);
+  if (!current) throw new StorageError("notFound", GONE);
+
+  const row = shippedRowForUpdate(current, beat);
+  if (!row) {
+    // The same refusal a promote gets, from the same gate: shippedRowForBeat
+    // validates through the read path, so a beat that would produce a row no
+    // client can parse never reaches the table — see its header.
+    throw new StorageError("unknown", "That edit can't be saved — its name or its pattern is outside what the built-in set allows.");
+  }
+
+  // `.select("id")` asks for the rows the UPDATE matched, because one that
+  // matched none is a 200 with an empty body rather than an error: without
+  // reading it back, a beat deleted between the read above and this write would
+  // report success and have changed nothing. `updated_at` is trigger-maintained
+  // and is never sent.
+  const written = await run(
+    () => supabase.from("shipped_beats").update(row).eq("id", current.id).select("id"),
+    "save that change to the built-in beats",
+  );
+  if (!Array.isArray(written) || written.length === 0) throw new StorageError("notFound", GONE);
   return row;
 }

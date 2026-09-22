@@ -76,24 +76,11 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * True when the signed-in user may change the built-in beat set for everyone.
      *
-     * Resolved once per SESSION rather than per browse, because the flag only
-     * decides whether a button exists and the search field re-queries on every
-     * pause in typing — hanging it off [refresh] would turn a keystroke into a
-     * second round trip. Fails closed: the database is what actually authorises the
-     * write, so a wrong `false` here costs a maintainer one retry and a wrong
-     * `true` would be a button that always fails.
+     * Read from the container rather than probed here: the Beats screen gates its
+     * own maintainer control on the same fact, and one probe per session in one
+     * place is cheaper and cannot disagree with itself.
      */
-    private val _isMaintainer = MutableStateFlow(false)
-    val isMaintainer: StateFlow<Boolean> = _isMaintainer.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            session.collect { current ->
-                _isMaintainer.value =
-                    current != null && container.shippedBeats?.isMaintainer() == true
-            }
-        }
-    }
+    val isMaintainer: StateFlow<Boolean> = container.isMaintainer
 
     /**
      * The beats a published snapshot holds, for the card's mini strip.

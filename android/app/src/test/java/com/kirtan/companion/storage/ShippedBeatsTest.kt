@@ -19,6 +19,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -51,7 +52,10 @@ class ShippedBeatsTest {
     @Test
     fun `every compiled beat survives a trip through the row format unchanged`() {
         val rows = BEATS.mapIndexed { ordinal, beat ->
-            shippedRowFor(beat.id!!, ordinal, beat.group!!, beat, sourcePublishedId = null)
+            shippedRowFor(
+                beat.id!!, ordinal, beat.group!!, beat,
+                sourcePublishedId = null, description = beat.description,
+            )
         }
 
         assertEquals(BEATS, shippedBeatsOf(JsonArray(rows)))
@@ -62,7 +66,7 @@ class ShippedBeatsTest {
         // The convention the strip and the editor both read: "no cymbals" is an
         // ABSENT key, not a lane of rests. Materialising it would render an empty
         // row and offer the user a lane they never drew.
-        val twoLane = shippedRowFor("two", 0, "Straight", testBeat(id = "two", name = "Two"), null)
+        val twoLane = shippedRowFor("two", 0, "Straight", testBeat(id = "two", name = "Two"), null, null)
         val derived = shippedBeatsOf(one(twoLane))!!.single()
         assertNull(derived.pattern(LaneId.KARTAL))
         assertEquals(listOf(LaneId.DAYAN, LaneId.BAYAN), derived.activeLanes())
@@ -72,6 +76,7 @@ class ShippedBeatsTest {
             0,
             "Straight",
             testBeat(id = "three", name = "Three", kartal = "O-O-O-O-"),
+            null,
             null,
         )
         assertEquals(
@@ -83,7 +88,7 @@ class ShippedBeatsTest {
     @Test
     fun `rows are ordered by ordinal, not by the order they arrived in`() {
         val rows = BEATS.take(3).mapIndexed { ordinal, beat ->
-            shippedRowFor(beat.id!!, ordinal, beat.group!!, beat, null)
+            shippedRowFor(beat.id!!, ordinal, beat.group!!, beat, null, beat.description)
         }
 
         val shuffled = JsonArray(listOf(rows[2], rows[0], rows[1]))
@@ -99,7 +104,7 @@ class ShippedBeatsTest {
         // A row written by a JS client carries JS numbers, and `bpm: 90` and
         // `bpm: 90.0` are the same beat. Refusing the second would reject every
         // beat the web app promotes.
-        val asInt = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null)
+        val asInt = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null, null)
         val asDouble = asInt.with("bpm", JsonPrimitive(90.0))
 
         assertEquals(
@@ -112,7 +117,7 @@ class ShippedBeatsTest {
 
     @Test
     fun `one unusable row rejects the whole set`() {
-        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null)
+        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null, null)
         assertNotNull("the fixture itself must be valid", shippedBeatsOf(one(good)))
 
         // A set, not a row, is the unit of acceptance: the Beats screen takes its
@@ -146,7 +151,7 @@ class ShippedBeatsTest {
         // Not new numbers: a promoted beat arrives through the share format, so
         // "expressible as a share code" and "acceptable as a built-in" are the same
         // set by construction.
-        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null)
+        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null, null)
 
         // More numbered beats than the codec allows.
         val tooMany = buildJsonArray { repeat(ShareCodec.MAX_GROUPS + 1) { add(2) } }
@@ -183,12 +188,12 @@ class ShippedBeatsTest {
             bayan = "X".repeat(ShareCodec.MAX_STEPS),
         )
         val accepted = shippedBeatsOf(
-            one(shippedRowFor("at_limit", 0, "Straight", atLimit, null)),
+            one(shippedRowFor("at_limit", 0, "Straight", atLimit, null, atLimit.description)),
         )
-        // `group` comes from the row's HEADING, so the fixture has to carry the
-        // same one — a beat with no section is a beat the Beats screen's heading
-        // loop never renders.
-        assertEquals(listOf(atLimit), accepted)
+        // `group` comes from the row's HEADING and `note` from the row's group
+        // count, so the fixture has to carry the same ones — a beat with no section
+        // is a beat the Beats screen's heading loop never renders.
+        assertEquals(listOf(atLimit.copy(group = "Straight", note = "32 beats")), accepted)
     }
 
     @Test
@@ -199,7 +204,7 @@ class ShippedBeatsTest {
         // platform serving a row the other rejects. Two platforms disagreeing
         // about a row are two platforms showing different built-in sets, and a
         // shared link resolves built-in ids against whichever one you are holding.
-        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null)
+        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null, null)
 
         for (column in listOf("id", "heading", "name", "note")) {
             assertNull(
@@ -220,7 +225,7 @@ class ShippedBeatsTest {
 
     @Test
     fun `a fractional number is refused rather than rounded`() {
-        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null)
+        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null, null)
 
         // Rounding 4.4 cells to 4 is a guess about somebody's meter, and the web
         // refuses it — so guessing here is how the two platforms come to serve
@@ -246,18 +251,18 @@ class ShippedBeatsTest {
         // name slugs to "beat" happily, but no client will serve the row, and
         // since the set is all-or-nothing, writing it would take every user's
         // built-in list back to the compiled fallback.
-        val blank = shippedRowFor("beat", 0, "Community", testBeat(name = "   "), null)
+        val blank = shippedRowFor("beat", 0, "Community", testBeat(name = "   "), null, null)
         assertNull(shippedBeatsOf(one(blank)))
 
         // A real beat's row always passes — the guard must not refuse the
         // ordinary case.
-        val real = shippedRowFor("dadra", 0, "Community", testBeat(name = "Dadra"), null)
+        val real = shippedRowFor("dadra", 0, "Community", testBeat(name = "Dadra"), null, null)
         assertNotNull(shippedBeatsOf(one(real)))
     }
 
     @Test
     fun `a lane of the wrong length or an unknown stroke is refused`() {
-        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null)
+        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null, null)
 
         // A short pattern reads as trailing rests and silently truncates the loop —
         // the failure data/Beats.kt checks at class-load time for the compiled set.
@@ -278,7 +283,7 @@ class ShippedBeatsTest {
 
     @Test
     fun `an unknown lane key is ignored rather than becoming a lane`() {
-        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null)
+        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null, null)
         val withMelody = withLane(good, "melody", "OOOOOOOO")
 
         val derived = shippedBeatsOf(one(withMelody))!!.single()
@@ -336,7 +341,7 @@ class ShippedBeatsTest {
 
     @Test
     fun `the revision is the newest updated_at in the set`() {
-        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null)
+        val good = shippedRowFor("dadra", 0, "Straight", testBeat(id = "dadra", name = "Dadra"), null, null)
         val rows = buildJsonArray {
             add(good.with("updated_at", JsonPrimitive("2026-01-01T00:00:00+00:00")))
             add(good.with("updated_at", JsonPrimitive("2026-09-21T23:15:17.447734+00:00")))
@@ -356,7 +361,7 @@ class ShippedBeatsTest {
     @Test
     fun `a promoted row carries the meter and not the fields derived from it`() {
         val beat = testBeat(name = "Dadra", description = "A galloping feel")
-        val row = shippedRowFor("dadra", 3, "Community", beat, "published-id")
+        val row = shippedRowFor("dadra", 3, "Community", beat, "published-id", beat.description)
 
         assertEquals(
             setOf(
@@ -366,15 +371,20 @@ class ShippedBeatsTest {
             row.keys,
         )
         assertEquals(3, row["ordinal"]!!.jsonPrimitive.int)
+        // Derived from the group count, NOT taken from the beat: the draft says
+        // "Custom", which is meaningless in a built-in list and would go stale the
+        // moment a maintainer changed the meter.
+        assertEquals("4 beats", row["note"]!!.jsonPrimitive.content)
         assertEquals("Community", row["heading"]!!.jsonPrimitive.content)
         assertEquals(listOf(2, 2, 2, 2), row["groups"]!!.jsonArray.map { it.jsonPrimitive.int })
         assertEquals(2, row["cpq"]!!.jsonPrimitive.int)
         assertEquals("A galloping feel", row["description"]!!.jsonPrimitive.content)
         assertEquals("published-id", row["source_published_id"]!!.jsonPrimitive.content)
 
-        // And it reads back as the same beat, in the section it was promoted into.
+        // And it reads back as the same beat, in the section it was promoted into
+        // and with the note the row derives rather than the one the draft carried.
         assertEquals(
-            beat.copy(id = "dadra", group = "Community"),
+            beat.copy(id = "dadra", group = "Community", note = "4 beats"),
             shippedBeatsOf(one(row))!!.single(),
         )
     }
@@ -384,7 +394,7 @@ class ShippedBeatsTest {
         // `resolution=merge-duplicates` only touches the columns present, so an
         // omitted `description` would leave the PREVIOUS row's prose attached to a
         // beat that no longer has any. A promote replaces a row wholesale.
-        val row = shippedRowFor("dadra", 0, "Community", testBeat(name = "Dadra"), null)
+        val row = shippedRowFor("dadra", 0, "Community", testBeat(name = "Dadra"), null, null)
 
         assertTrue(row.containsKey("description"))
         assertEquals(JsonNull, row["description"])
@@ -426,6 +436,75 @@ class ShippedBeatsTest {
         // nobody meant to write.
         assertFalse("id \"$id\" ends in a separator", id.endsWith("_"))
         assertEquals("ab_ab", shippedIdFor("ab ab", emptySet()))
+    }
+
+    @Test
+    fun `the note counts the groups, whatever the beat claims`() {
+        val beat = testBeat(id = "dadra", name = "Dadra", note = "Custom")
+        assertEquals(
+            "4 beats",
+            shippedRowFor("dadra", 0, "Straight", beat, null, null)["note"]!!.jsonPrimitive.content,
+        )
+
+        // The case that makes deriving worth it: a maintainer widens the bar, and
+        // a preserved note would keep saying "4 beats" over five groups — in the
+        // list row, where everybody can see it disagree with the pattern.
+        val wider = testBeat(
+            id = "dadra",
+            name = "Dadra",
+            note = "Custom",
+            steps = 10,
+            beatsPerBar = 5.0,
+            groups = listOf(2, 2, 2, 2, 2),
+            dayan = "O".repeat(10),
+            bayan = "X".repeat(10),
+        )
+        assertEquals(
+            "5 beats",
+            shippedRowFor("dadra", 0, "Straight", wider, null, null)["note"]!!.jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `an edit keeps the row's id, section, prose and provenance`() {
+        // What the editor hands back after a maintainer corrects a built-in: a
+        // renamed beat with the draft's own hardcoded note and no prose, because
+        // EditorDraft.toBeat stamps `note = "Custom"` and `description = null` on
+        // everything it produces. Those fields have to come from the ROW.
+        val edited = testBeat(id = "keherva_medium_speed", name = "Keherva, corrected")
+        val row = shippedRowFor(
+            id = "keherva_medium_speed",
+            ordinal = 8,
+            heading = "Straight",
+            beat = edited,
+            sourcePublishedId = "published-id",
+            description = "Prose the editor has no field for",
+        )
+
+        assertEquals("keherva_medium_speed", row["id"]!!.jsonPrimitive.content)
+        assertEquals(8, row["ordinal"]!!.jsonPrimitive.int)
+        assertEquals("Straight", row["heading"]!!.jsonPrimitive.content)
+        assertEquals("Prose the editor has no field for", row["description"]!!.jsonPrimitive.content)
+        assertEquals("published-id", row["source_published_id"]!!.jsonPrimitive.content)
+        assertEquals("Keherva, corrected", row["name"]!!.jsonPrimitive.content)
+
+        // THE POINT OF THE TEST: renaming does not re-slugify. A new id would
+        // orphan every playlist that referenced the old one and leave the old row
+        // behind, and nothing anywhere could tell the two apart.
+        assertNotEquals(
+            shippedIdFor(edited.name, emptySet()),
+            row["id"]!!.jsonPrimitive.content,
+        )
+
+        // And it reads back as the edited beat wearing the row's section and prose.
+        assertEquals(
+            edited.copy(
+                group = "Straight",
+                note = "4 beats",
+                description = "Prose the editor has no field for",
+            ),
+            shippedBeatsOf(one(row))!!.single(),
+        )
     }
 
     // ── Status ─────────────────────────────────────────────────────────────

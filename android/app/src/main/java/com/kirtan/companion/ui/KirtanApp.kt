@@ -55,6 +55,8 @@ import com.kirtan.companion.storage.EqPrefsSnapshot
 import com.kirtan.companion.ui.account.AccountSection
 import com.kirtan.companion.ui.account.MigrationPromptSheet
 import com.kirtan.companion.ui.beats.BeatsScreen
+import com.kirtan.companion.ui.components.KcSheet
+import com.kirtan.companion.ui.components.PrimaryButton
 import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.components.SectionLabel
 import com.kirtan.companion.ui.editor.BeatEditorScreen
@@ -121,12 +123,28 @@ internal fun KirtanApp(
     var editorSession by remember { mutableIntStateOf(0) }
     var prevTab by remember { mutableStateOf(Tab.HOME) }
 
+    /**
+     * True when the open editor session saves to the SHIPPED set rather than to
+     * this user's library.
+     *
+     * State on the session rather than a property of the beat, because the same
+     * beat can be opened both ways: "Customize" forks a private copy, "Edit for
+     * everyone" corrects the row every install reads. The editor itself does not
+     * know or care which — it drafts a beat and hands it back — so the distinction
+     * lives with whoever opened it.
+     */
+    var editorForEveryone by remember { mutableStateOf(false) }
+
+    /** A shipped save waiting on the maintainer's confirmation. */
+    var pendingShippedSave by remember { mutableStateOf<PendingShippedSave?>(null) }
+
     /** A decoded share payload awaiting the library screen's confirmation. */
     var pendingImport by remember { mutableStateOf<ShareCodec.SharePayload?>(null) }
 
-    fun openEditor(beat: Beat?, from: Tab?) {
+    fun openEditor(beat: Beat?, from: Tab?, forEveryone: Boolean = false) {
         editorInitial = beat
         editorReturn = from
+        editorForEveryone = forEveryone
         editorSession++
         tab = Tab.EDITOR
     }
@@ -256,6 +274,7 @@ internal fun KirtanApp(
                         tab = Tab.HOME
                     },
                     onEditBeat = { openEditor(it, Tab.BEATS) },
+                    onEditShippedBeat = { openEditor(it, Tab.BEATS, forEveryone = true) },
                     pendingImport = pendingImport,
                     onPendingImportHandled = { pendingImport = null },
                 )
@@ -265,7 +284,17 @@ internal fun KirtanApp(
                         engine = transport.engine,
                         transport = transport,
                         initialBeat = editorInitial,
-                        onSave = { beat, callback -> library.saveBeat(beat, callback) },
+                        onSave = { beat, callback ->
+                            // Routed, not decided: a shipped save is confirmed by a
+                            // sheet first, so the editor's callback is held until the
+                            // maintainer has said yes — or abandoned, in which case
+                            // the editor stays open with its draft intact.
+                            if (editorForEveryone) {
+                                pendingShippedSave = PendingShippedSave(beat, callback)
+                            } else {
+                                library.saveBeat(beat, callback)
+                            }
+                        },
                         onBack = editorReturn?.let { from -> { tab = from } },
                         onClose = { tab = editorReturn ?: Tab.HOME },
                     )
@@ -304,6 +333,102 @@ internal fun KirtanApp(
         // offer to move their device library up must not wait for them to visit
         // Settings to exist.
         MigrationPromptSheet(container)
+
+        pendingShippedSave?.let { pending ->
+            ShippedSaveSheet(
+                beat = pending.beat,
+                library = library,
+                onDismiss = {
+                    // The callback MUST be answered even when nothing was saved.
+                    // The editor sets `saving = true` before calling onSave and
+                    // clears it only inside the callback, so abandoning this sheet
+                    // without one would leave its Save button permanently dead —
+                    // with the draft still on screen and no way to store it.
+                    // Answering with null is the editor's own "failed, stay open".
+                    pending.callback(null)
+                    pendingShippedSave = null
+                },
+                onSaved = { saved ->
+                    pendingShippedSave = null
+                    pending.callback(saved)
+                },
+            )
+        }
+    }
+}
+
+/**
+ * An editor save that has not been confirmed yet.
+ *
+ * Holds the editor's own callback so the sheet can hand the result back to it:
+ * that callback is what closes the editor on success and keeps it open on
+ * failure, and losing it would strand the user in an editor that no longer
+ * responds to Save.
+ */
+private class PendingShippedSave(val beat: Beat, val callback: (Beat?) -> Unit)
+
+/**
+ * The confirm step for saving an edit of a built-in beat.
+ *
+ * Its own sheet rather than a plain save because this is the one write in the app
+ * that reaches other people's devices: everyone playing this beat gets the edit on
+ * their next launch. Naming the beat is the point — a maintainer deep in a grid of
+ * cells has just spent a while looking at strokes, not at a title, and "Save for
+ * everyone" on its own does not say which of the nine they are about to change.
+ *
+ * A refusal stays HERE rather than closing the sheet, so the maintainer reads it in
+ * front of the work they were trying to save and can try again. Closing on failure
+ * would return them to an editor whose draft they then have to re-verify.
+ */
+@Composable
+private fun ShippedSaveSheet(
+    beat: Beat,
+    library: LibraryViewModel,
+    onDismiss: () -> Unit,
+    onSaved: (Beat) -> Unit,
+) {
+    val dimens = KirtanTheme.dimens
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    KcSheet(title = "Save for everyone", onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
+            Text(
+                text = beat.name,
+                color = PaletteToken.SYAHI.color,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "Every install of the app gets this version of the beat on its " +
+                    "next launch. Progressions that use it keep working — its id does " +
+                    "not change, even if you renamed it.",
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 13.4.sp,
+                lineHeight = 19.sp,
+            )
+            error?.let { message ->
+                Text(
+                    text = message,
+                    color = PaletteToken.DANGER.color,
+                    fontSize = 13.4.sp,
+                    lineHeight = 19.sp,
+                )
+            }
+            PrimaryButton(
+                label = if (saving) "Saving…" else "Save for everyone",
+                enabled = !saving,
+                onClick = {
+                    saving = true
+                    error = null
+                    library.saveShippedBeat(beat) { saved, message ->
+                        saving = false
+                        if (saved != null) onSaved(saved) else error = message
+                    }
+                },
+            )
+            SecondaryButton(label = "Keep editing", onClick = onDismiss)
+        }
     }
 }
 

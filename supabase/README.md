@@ -76,20 +76,46 @@ beats — the database refuses the row.
 
 ## Maintaining the built-in beats
 
-Two people do this, and neither needs a terminal.
+Two people do this, and neither needs a terminal for the common cases.
 
-1. Edit or author the beat in the app's editor and **publish it to the
-   community library** (or send it as a share link and publish that).
-2. On the Community screen, a maintainer sees **Make this a built-in beat** on
-   each single-beat card. It asks for a section heading, then writes the row —
-   and every app that launches afterwards has it.
+**Correct a beat that's already shipping.** Open it under *Beats → Built in* and
+choose **Edit for everyone** — a maintainer-only action that sits next to
+*Customize*, which still forks a private copy. Fix the cells, save, confirm. Every
+install has it on its next launch. The row keeps its `id`, so progressions that
+use the beat keep working **even if you rename it** — an id is forever, and
+nothing anywhere can tell a stale reference from a live one. `ordinal`, `heading`,
+`description` and `source_published_id` are carried over from the row, because the
+editor has no field for any of them; `note` is re-derived from the group count so
+it can't go stale when you change the meter.
+
+**Add a new one.** Author or edit it in the app's editor, **publish it to the
+community library** (or send it as a share link and publish that), then use
+**Make this a built-in beat** on its card in Community. That asks for a section
+heading and writes a new row with an id slugged from the name — suffixed if the
+slug is taken, because a promote must never silently overwrite a beat that
+already ships.
+
+**Then regenerate the compiled fallbacks**, which is a developer step:
+
+```sh
+node scripts/generateBuiltinBeats.mjs --from-server   # writes beats.js + Beats.kt
+node scripts/generateShareVectors.mjs                 # wire-compat fixtures
+git diff                                              # should show only your change
+```
+
+`src/data/beats.js` and `android/.../data/Beats.kt` are what an offline launch
+and a fresh install play before the first fetch, so they must not drift from the
+table. Running the script against an unchanged table writes nothing and says so,
+which makes it a drift check as well as a generator. Never hand-edit those two
+files: a mistyped cell in a 48-character pattern changes the music silently and
+nothing fails.
 
 **Who counts as a maintainer** is `public.maintainers`. That table has **no write
 policy**, deliberately: only the service role can change it, so neither
 maintainer can grant it to the other and no bug in a client can promote itself.
 Adding someone is an operator act — run this in the SQL editor, and note that
 `maintainers` is readable only by the person themselves, so the app can answer
-"may I promote?" without exposing the list:
+"may I edit the built-ins?" without exposing the list:
 
 ```sql
 insert into public.maintainers (user_id, note)
@@ -97,6 +123,7 @@ select id, email from auth.users where email = 'someone@example.com'
 on conflict (user_id) do nothing;
 ```
 
-Retiring a beat is a `delete from public.shipped_beats where id = '…'`. Clients
-drop it on their next check; a playlist that pointed at it filters it out rather
-than breaking. Don't reuse the id afterwards.
+**Retiring a beat** has no in-app path yet:
+`delete from public.shipped_beats where id = '…'`, then regenerate as above.
+Clients drop it on their next check, and a playlist that pointed at it filters it
+out rather than breaking. Don't reuse the id afterwards.

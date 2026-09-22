@@ -100,6 +100,13 @@ internal fun BeatsScreen(
     beat: Beat?,
     onStart: () -> Unit,
     onEditBeat: (Beat) -> Unit,
+    /**
+     * Open the editor for a BUILT-IN beat in the mode that saves back onto its own
+     * row, for every install. Separate from [onEditBeat] because the two saves go
+     * to different places and only the caller can tell the editor which one this
+     * session is — see [com.kirtan.companion.ui.KirtanApp].
+     */
+    onEditShippedBeat: (Beat) -> Unit,
     modifier: Modifier = Modifier,
     /**
      * A share payload that arrived through a deep link, to be previewed here
@@ -114,6 +121,7 @@ internal fun BeatsScreen(
     val allBeats by library.allBeats.collectAsState()
     val builtIns by library.builtInBeats.collectAsState()
     val shipped by library.shippedStatus.collectAsState()
+    val isMaintainer by library.isMaintainer.collectAsState()
     val transportState by transport.state.collectAsState()
     val communityVm: CommunityViewModel = viewModel(factory = CommunityViewModel.Factory)
     var page by remember { mutableStateOf<BeatsPage>(BeatsPage.Landing) }
@@ -265,6 +273,14 @@ internal fun BeatsScreen(
             },
             onEdit = {
                 onEditBeat(target)
+                detail = null
+            },
+            // A maintainer looking at a built-in gets both: forking a private copy
+            // is still what you want when you are experimenting, and correcting the
+            // shipped beat is what you want when it is simply wrong.
+            canEditShipped = isMaintainer && target.isBuiltIn,
+            onEditShipped = {
+                onEditShippedBeat(target)
                 detail = null
             },
             onShare = {
@@ -692,6 +708,8 @@ private fun BeatDetailSheet(
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
     onEdit: () -> Unit,
+    canEditShipped: Boolean,
+    onEditShipped: () -> Unit,
     onShare: () -> Unit,
     onPublish: () -> Unit,
 ) {
@@ -719,6 +737,18 @@ private fun BeatDetailSheet(
                 icon = KcIcons.Pencil,
                 onClick = onEdit,
             )
+            if (canEditShipped) {
+                // Wording is the safety mechanism here: the button above it edits
+                // one person's library and this one edits every install of the app,
+                // and the two look identical apart from the label. Same cap icon as
+                // Community's promote, so "affects what ships" reads the same way in
+                // both places.
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = "Edit for everyone",
+                    icon = KcIcons.Cap,
+                    onClick = onEditShipped,
+                )
+            }
             com.kirtan.companion.ui.components.SecondaryButton(
                 label = "Share",
                 icon = KcIcons.Share,

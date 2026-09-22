@@ -13,6 +13,8 @@ import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.Library
 import com.kirtan.companion.storage.LibraryRepository
 import com.kirtan.companion.storage.ShippedStatus
+import com.kirtan.companion.storage.storageErrorMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -58,6 +60,9 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
     /** False when this build has no server configured, so there is nothing to check. */
     val canCheckForUpdates: Boolean get() = container.shippedBeats != null
+
+    /** True when the signed-in user may edit the built-in set for everyone. */
+    val isMaintainer: StateFlow<Boolean> = container.isMaintainer
 
     /**
      * The beat currently loaded into the engine.
@@ -194,6 +199,43 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     fun checkForBeatUpdates() {
         val client = container.shippedBeats ?: return
         viewModelScope.launch { client.checkForUpdates(manual = true) }
+    }
+
+    /**
+     * Save an edit of a BUILT-IN beat back onto its own row, for every install.
+     *
+     * Deliberately not [saveBeat]: that writes to the user's library, and a
+     * built-in's id is not in it, so routing an edit there would silently fork a
+     * private copy and leave the shipped beat wrong for everybody else. Which of the
+     * two a save means is decided by the screen that opened the editor, not here —
+     * only it knows whether the maintainer asked to customize or to correct.
+     *
+     * Reports as `(saved, message)` with exactly one of them null, so a caller can
+     * show the sentence without also watching a separate error flow, and the
+     * editor's own "stay open on failure" rule gets both outcomes from one call.
+     */
+    fun saveShippedBeat(beat: Beat, onDone: (Beat?, String?) -> Unit) {
+        val client = container.shippedBeats
+        if (client == null) {
+            onDone(
+                null,
+                "This build has no server configured, so the built-in beats can't be edited.",
+            )
+            return
+        }
+        viewModelScope.launch {
+            try {
+                client.updateShippedBeat(beat)
+                // Hand back the beat as the refetch now holds it, not the draft that
+                // was saved: the caller selects the result, and the refetched one is
+                // what every other install will get.
+                onDone(builtInBeats.value.firstOrNull { it.id == beat.id } ?: beat, null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onDone(null, storageErrorMessage(e))
+            }
+        }
     }
 
     companion object {
