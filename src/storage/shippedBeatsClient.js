@@ -195,6 +195,37 @@ const GONE =
   "That beat isn't in the built-in set any more, so there was nothing to update.";
 
 /**
+ * Remove one built-in beat from the set for every user of every install.
+ *
+ * The third shipped-set write: promote adds, update corrects, and this retires.
+ * A retired beat disappears from the Beats screen on the next launch, but its
+ * id remains addressable by playlists — a playlist that used it keeps working,
+ * pointing at a row that no longer appears in any list. That is the intended
+ * behaviour: removing a beat should never orphan a progression someone built.
+ *
+ * THE ROW IS READ FRESH first, so a beat retired by the other maintainer while
+ * this editor was open reports "not found" rather than silently succeeding and
+ * changing nothing. The write itself is a DELETE filtered on the primary key,
+ * not an upsert or update — there is no row to write back, only one to remove.
+ *
+ * @throws StorageError when there is no row to delete, or when RLS says the
+ *   caller is not a maintainer.
+ */
+export async function removeShippedBeat({ id }) {
+  const current = await fetchShippedRow(id);
+  if (!current) throw new StorageError("notFound", GONE);
+
+  // A DELETE that matches nothing is a 200 with an empty body, not an error.
+  // Reading the response back makes "matched nothing" detectable — the same
+  // reason updateShippedBeat reads its response back before declaring success.
+  const deleted = await run(
+    () => supabase.from("shipped_beats").delete().eq("id", current.id).select("id"),
+    "remove that from the built-in beats",
+  );
+  if (!Array.isArray(deleted) || deleted.length === 0) throw new StorageError("notFound", GONE);
+}
+
+/**
  * Correct one built-in beat IN PLACE, and return the row written.
  *
  * `beat` is the editor's draft — the pattern, name and tempo the maintainer

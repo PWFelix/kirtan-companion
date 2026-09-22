@@ -349,6 +349,48 @@ class ShippedBeatsClient(
     }
 
     /**
+     * Retire one built-in beat for every user of every install.
+     *
+     * The third shipped-set write: promote adds, update corrects, and this removes.
+     * A retired beat disappears from the Beats screen on the next launch, but its
+     * id remains addressable by playlists — a progression that used it keeps
+     * working, pointing at a row that no longer appears in any list. That is the
+     * intended behaviour: removing a beat should never orphan a playlist someone
+     * built.
+     *
+     * THE ROW IS READ FRESH first, so a beat retired by the other maintainer while
+     * this editor was open reports "not found" rather than silently succeeding and
+     * changing nothing. The write itself is a DELETE filtered on the primary key,
+     * not an upsert or update — there is no row to write back, only one to remove.
+     *
+     * @throws StorageError when there is no row to delete, or when RLS says the
+     *   caller is not a maintainer.
+     */
+    suspend fun removeShippedBeat(beat: Beat) {
+        val id = beat.id ?: throw StorageError(
+            StorageErrorCode.UNKNOWN,
+            "That beat has no id, so there is no built-in row to remove.",
+        )
+        val meta = currentRow(id) ?: throw notInTheSet()
+
+        // A DELETE that matches nothing is a 200 with an empty body, not an error.
+        // Reading the response back makes "matched nothing" detectable — the same
+        // reason updateShippedBeat reads its response back before declaring success.
+        val deleted = client.delete(
+            TABLE,
+            filters = listOf("id" to "eq.$id"),
+            whileDoing = "remove that from the built-in beats",
+        )
+        if ((deleted as? JsonArray).isNullOrEmpty()) throw notInTheSet()
+
+        // Silent, as after a promote: the caller has its own confirmation. The
+        // refetch is what makes the maintainer see their own retirement immediately,
+        // which matters because a retired beat is gone for everyone — a mistake is
+        // then visible to the one person who can fix it.
+        refetch()
+    }
+
+    /**
      * The row is gone. One sentence for both the pre-read and the empty write,
      * because from the maintainer's side they are the same fact and the same
      * remedy, and the web client words it identically.

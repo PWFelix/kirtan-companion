@@ -238,6 +238,28 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Retire a built-in beat for every install. */
+    fun removeShippedBeat(beat: Beat, onDone: (Boolean, String?) -> Unit) {
+        val client = container.shippedBeats
+        if (client == null) {
+            onDone(
+                false,
+                "This build has no server configured, so the built-in beats can't be edited.",
+            )
+            return
+        }
+        viewModelScope.launch {
+            try {
+                client.removeShippedBeat(beat)
+                onDone(true, null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onDone(false, storageErrorMessage(e))
+            }
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer { LibraryViewModel(this[APPLICATION_KEY]!!) }

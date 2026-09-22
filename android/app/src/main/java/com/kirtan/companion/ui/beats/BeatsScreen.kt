@@ -107,6 +107,12 @@ internal fun BeatsScreen(
      * session is — see [com.kirtan.companion.ui.KirtanApp].
      */
     onEditShippedBeat: (Beat) -> Unit,
+    /**
+     * Retire a built-in beat from the shipped set for every install. Separate from
+     * [onEditBeat] and [onEditShippedBeat] because it is a DELETE rather than an
+     * edit — there is no editor to open, just a confirm and a write.
+     */
+    onRemoveShippedBeat: (Beat) -> Unit,
     modifier: Modifier = Modifier,
     /**
      * A share payload that arrived through a deep link, to be previewed here
@@ -281,6 +287,14 @@ internal fun BeatsScreen(
             canEditShipped = isMaintainer && target.isBuiltIn,
             onEditShipped = {
                 onEditShippedBeat(target)
+                detail = null
+            },
+            // Retiring a beat is the third shipped-set write, alongside promote and
+            // edit-for-everyone. Same confirm-first pattern: the blast radius is
+            // named in the confirm sheet before the write happens.
+            canRemoveShipped = isMaintainer && target.isBuiltIn,
+            onRemoveShipped = {
+                onRemoveShippedBeat(target)
                 detail = null
             },
             onShare = {
@@ -710,6 +724,8 @@ private fun BeatDetailSheet(
     onEdit: () -> Unit,
     canEditShipped: Boolean,
     onEditShipped: () -> Unit,
+    canRemoveShipped: Boolean,
+    onRemoveShipped: () -> Unit,
     onShare: () -> Unit,
     onPublish: () -> Unit,
 ) {
@@ -747,6 +763,17 @@ private fun BeatDetailSheet(
                     label = "Edit for everyone",
                     icon = KcIcons.Cap,
                     onClick = onEditShipped,
+                )
+            }
+            if (canRemoveShipped) {
+                // Retiring a beat is the third shipped-set write. Same cap icon as
+                // edit-for-everyone and promote, so "affects what ships" reads the
+                // same way in all three places. The confirm sheet names the blast
+                // radius before the write happens.
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = "Remove from built-ins",
+                    icon = KcIcons.Cap,
+                    onClick = onRemoveShipped,
                 )
             }
             com.kirtan.companion.ui.components.SecondaryButton(

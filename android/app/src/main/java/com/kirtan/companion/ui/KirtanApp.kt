@@ -137,6 +137,7 @@ internal fun KirtanApp(
 
     /** A shipped save waiting on the maintainer's confirmation. */
     var pendingShippedSave by remember { mutableStateOf<PendingShippedSave?>(null) }
+    var pendingShippedRemove by remember { mutableStateOf<PendingShippedRemove?>(null) }
 
     /** A decoded share payload awaiting the library screen's confirmation. */
     var pendingImport by remember { mutableStateOf<ShareCodec.SharePayload?>(null) }
@@ -275,6 +276,7 @@ internal fun KirtanApp(
                     },
                     onEditBeat = { openEditor(it, Tab.BEATS) },
                     onEditShippedBeat = { openEditor(it, Tab.BEATS, forEveryone = true) },
+                    onRemoveShippedBeat = { pendingShippedRemove = PendingShippedRemove(it) },
                     pendingImport = pendingImport,
                     onPendingImportHandled = { pendingImport = null },
                 )
@@ -354,6 +356,15 @@ internal fun KirtanApp(
                 },
             )
         }
+
+        pendingShippedRemove?.let { pending ->
+            ShippedRemoveSheet(
+                beat = pending.beat,
+                library = library,
+                onDismiss = { pendingShippedRemove = null },
+                onRemoved = { pendingShippedRemove = null },
+            )
+        }
     }
 }
 
@@ -366,6 +377,9 @@ internal fun KirtanApp(
  * responds to Save.
  */
 private class PendingShippedSave(val beat: Beat, val callback: (Beat?) -> Unit)
+
+/** A shipped remove waiting on the maintainer's confirmation. */
+private class PendingShippedRemove(val beat: Beat)
 
 /**
  * The confirm step for saving an edit of a built-in beat.
@@ -428,6 +442,66 @@ private fun ShippedSaveSheet(
                 },
             )
             SecondaryButton(label = "Keep editing", onClick = onDismiss)
+        }
+    }
+}
+
+/**
+ * The confirm step for retiring a built-in beat.
+ *
+ * Same blast radius as saving an edit for everyone — every install gets the
+ * change on its next launch — but this one is destructive: the beat disappears
+ * from the Beats screen entirely. Playlists that used it keep working because
+ * its id remains addressable, which is why the confirm sheet names that fact.
+ */
+@Composable
+private fun ShippedRemoveSheet(
+    beat: Beat,
+    library: LibraryViewModel,
+    onDismiss: () -> Unit,
+    onRemoved: () -> Unit,
+) {
+    val dimens = KirtanTheme.dimens
+    var removing by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    KcSheet(title = "Remove for everyone", onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
+            Text(
+                text = beat.name,
+                color = PaletteToken.SYAHI.color,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "This beat disappears from the Beats screen for everyone on their " +
+                    "next launch. Progressions that use it keep working — its id does not " +
+                    "change, only its visibility.",
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 13.4.sp,
+                lineHeight = 19.sp,
+            )
+            error?.let { message ->
+                Text(
+                    text = message,
+                    color = PaletteToken.DANGER.color,
+                    fontSize = 13.4.sp,
+                    lineHeight = 19.sp,
+                )
+            }
+            PrimaryButton(
+                label = if (removing) "Removing…" else "Remove for everyone",
+                enabled = !removing,
+                onClick = {
+                    removing = true
+                    error = null
+                    library.removeShippedBeat(beat) { success, message ->
+                        removing = false
+                        if (success) onRemoved() else error = message
+                    }
+                },
+            )
+            SecondaryButton(label = "Cancel", onClick = onDismiss)
         }
     }
 }

@@ -17,7 +17,7 @@ import {
   browse as browseCommunity, publish as publishCommunity,
   incrementCopies, toImportPayload,
 } from "../storage/communityClient.js";
-import { promoteShippedBeat } from "../storage/shippedBeatsClient.js";
+import { promoteShippedBeat, removeShippedBeat } from "../storage/shippedBeatsClient.js";
 import { useMaintainer } from "../hooks/useMaintainer.js";
 
 // Whether the platform has a native share sheet (iOS/Android do, most
@@ -239,6 +239,31 @@ function BeatsView({
       `Edit “${b.name}” for everyone? Every install picks the change up on its next launch. Playlists using it keep working — its id doesn't change, even if you rename it.`,
       "Edit for everyone",
       () => { setDetailBeat(null); onEditShipped(b); },
+    );
+  }
+
+  // ── Remove a built-in (maintainers only) ──
+  /**
+   * Retire a beat from the shipped set for every install. The confirm names the
+   * blast radius twice, as edit-for-everyone does: this is a write to what the
+   * app SHIPS, and it is only ever drawn for the two people who can perform it.
+   * Playlists that used the beat keep working — its id remains addressable even
+   * though it no longer appears in any list.
+   */
+  async function askRemoveShipped(b) {
+    askConfirm(
+      `Remove “${b.name}” from the built-in set for everyone? It disappears from the Beats screen on the next launch, but playlists using it keep working.`,
+      "Remove for everyone",
+      async () => {
+        try {
+          await removeShippedBeat({ id: b.id });
+          // Re-read the set so the retired beat vanishes from the list immediately.
+          setUpdateNote(noteFor(await checkForBeatUpdates()));
+        } catch (err) {
+          setUpdateNote({ text: err.message || "Couldn't remove that from the built-in beats.", failed: true });
+        }
+        setDetailBeat(null);
+      },
     );
   }
 
@@ -848,9 +873,14 @@ function BeatsView({
                 SHIPS, and it is only ever drawn for the two people who can
                 perform it. */}
             {maintainer && !isCustomBeat(detailBeat.id) && (
-              <button onClick={() => askEditShipped(detailBeat)} style={st.shippedEditBtn}>
-                Edit for everyone
-              </button>
+              <>
+                <button onClick={() => askEditShipped(detailBeat)} style={st.shippedEditBtn}>
+                  Edit for everyone
+                </button>
+                <button onClick={() => askRemoveShipped(detailBeat)} style={st.shippedEditBtn}>
+                  Remove from built-ins
+                </button>
+              </>
             )}
           </div>
         </div>
