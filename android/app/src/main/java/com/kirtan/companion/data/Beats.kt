@@ -50,6 +50,7 @@ private fun builtIn(
     dayan: String,
     bayan: String,
     kartal: String? = null,
+    description: String? = null,
 ): Beat {
     // steps / beatsPerBar / cellsPerGroup are DERIVED, not declared, and derived
     // exactly as ShareCodec.decodeBeat derives them. That is the point: a built-in
@@ -92,7 +93,7 @@ private fun builtIn(
         beatsPerBar = beatsPerBar,
         cellsPerGroup = cellsPerGroup,
         groups = groups,
-        description = null, // no transcribed prose for these; see generateBuiltinBeats
+        description = description,
         lanePatterns = lanes,
         group = group,
     )
@@ -152,7 +153,7 @@ val BEATS: List<Beat> = listOf(
         id = "keherva_medium_speed", group = "Straight", name = "keherva medium speed", note = "4 beats",
         bpm = 90, groups = listOf(2, 2, 2, 2), cpq = 2,
         dayan = "O-XOO-XO",
-        bayan = "OO-O-OO-",
+        bayan = "OO-X-OO-",
     ),
 )
 

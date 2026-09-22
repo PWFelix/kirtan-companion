@@ -97,6 +97,6 @@ export const BEATS = [
     bpm: 90, steps: 8, beatsPerBar: 4, cellsPerGroup: 2, groups: [2, 2, 2, 2],
     description: null,
     dayan: ["O", null, "X", "O", "O", null, "X", "O"],
-    bayan: ["O", "O", null, "O", null, "O", "O", null],
+    bayan: ["O", "O", null, "X", null, "O", "O", null],
   },
 ];

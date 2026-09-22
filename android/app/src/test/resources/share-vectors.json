@@ -800,7 +800,7 @@
     {
       "id": "keherva_medium_speed",
       "name": "keherva medium speed",
-      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJrZWhlcnZhIG1lZGl1bSBzcGVlZCIsIm0iOjkwLCJnIjpbMiwyLDIsMl0sInEiOjIsInAiOnsiZGF5YW4iOiJPLVhPTy1YTyIsImJheWFuIjoiT08tTy1PTy0ifX0",
+      "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJrZWhlcnZhIG1lZGl1bSBzcGVlZCIsIm0iOjkwLCJnIjpbMiwyLDIsMl0sInEiOjIsInAiOnsiZGF5YW4iOiJPLVhPTy1YTyIsImJheWFuIjoiT08tWC1PTy0ifX0",
       "decoded": {
         "kind": "beat",
         "beat": {
@@ -830,7 +830,7 @@
             "O",
             "O",
             null,
-            "O",
+            "X",
             null,
             "O",
             "O",
