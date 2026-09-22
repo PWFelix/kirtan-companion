@@ -1,19 +1,27 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { BEATS } from "../data/beats.js";
 import { beatsProvider, storageErrorMessage } from "../storage/index.js";
+import { useShippedBeats } from "./useShippedBeats.js";
 
 /**
- * The shipped beats, tagged once at module load.
+ * The COMPILED beats, tagged once at module load — the offline fallback and
+ * the pre-load value of the built-in list.
  *
  * `readOnly` is the ORIGIN MARKER the rest of the app can trust: screens ask
  * for `allBeats` and decide what to offer (edit in place vs fork, delete or
  * not) from the beat itself, without needing to know which list it came out
- * of. Tagged HERE, at import, rather than during render, so the objects keep
- * their identity across re-renders — and by copying rather than mutating,
- * because data/beats.js is read-only source data.
+ * of. Tagged HERE, at the merge, rather than during render, so the objects
+ * keep their identity across re-renders — and by copying rather than
+ * mutating, because data/beats.js is read-only source data.
+ *
+ * This is no longer the only source of built-ins (the server is canonical),
+ * but it is still the one that always works: it is what renders on the first
+ * paint, what runs with no network, and what a rejected server set falls back
+ * to. The same mechanism tags both, so a beat's origin marker doesn't depend
+ * on where it came from.
  */
-const BUILTIN_BEATS = BEATS.map((b) => ({ ...b, readOnly: true }));
+const COMPILED_BEATS = BEATS.map((b) => ({ ...b, readOnly: true }));
 
 /**
  * A name nobody else in the library is using: "My Beat" → "My Beat (2)".
@@ -39,10 +47,17 @@ function uniqueName(wanted, taken) {
 /**
  * useBeatLibrary — everything the user has saved, and its persistence.
  *
- * Two things live here:
- *  - CUSTOM BEATS: beats built or forked in the editor. The built-in BEATS
- *    are read-only, so every write touches only this list and the shipped
+ * Three things live here:
+ *  - CUSTOM BEATS: beats built or forked in the editor. The built-ins are
+ *    read-only, so every write touches only this list and the shipped
  *    beats can never be corrupted.
+ *  - THE BUILT-IN LIST: the server's `shipped_beats` set when one has
+ *    loaded, the compiled BEATS until then (and forever if none ever does).
+ *    The merge lives here rather than in a provider for the reason
+ *    BeatsProvider's rule 2 gives — built-ins are not any user's work, and
+ *    putting them behind the store would mean writing the merge again in
+ *    every provider. It is state now rather than a module constant so a
+ *    maintainer's change reaches a running app without a rebuild.
  *  - CATEGORIES: ordered lists of beat ids. Each one is a kirtan
  *    PROGRESSION — the order is the order Home's ‹ › moves through them.
  *    Two categories are always present and are not stored: "builtin" and
@@ -72,6 +87,16 @@ export function useBeatLibrary(provider = beatsProvider) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // The server-sourced built-ins. `beats` is null until a set that validates
+  // has arrived, which is the state the app is in for its whole life when
+  // there's no network, no configured project or an empty table — so this is
+  // never a loading flag and nothing waits on it.
+  const shipped = useShippedBeats();
+  const builtinBeats = useMemo(
+    () => (shipped.beats ? shipped.beats.map((b) => ({ ...b, readOnly: true })) : COMPILED_BEATS),
+    [shipped.beats],
+  );
+
   // Reads are async now, so the library starts empty and fills in. App gates
   // the splash's Begin button on `loading`, which means this has always
   // resolved before any screen renders — the empty first paint is never seen.
@@ -100,7 +125,7 @@ export function useBeatLibrary(provider = beatsProvider) {
     };
   }, [provider]);
 
-  const allBeats = [...BUILTIN_BEATS, ...customBeats];
+  const allBeats = [...builtinBeats, ...customBeats];
   const isCustomBeat = (id) => customBeats.some((b) => b.id === id);
 
   const dismissError = useCallback(() => setError(null), []);
@@ -134,7 +159,7 @@ export function useBeatLibrary(provider = beatsProvider) {
 
   /** The ordered beats of a category ("builtin" | "custom" | user cat id). */
   function categoryBeats(catId) {
-    if (catId === "builtin") return BUILTIN_BEATS;
+    if (catId === "builtin") return builtinBeats;
     if (catId === "custom") return customBeats;
     const c = categories.find((c) => c.id === catId);
     if (!c) return allBeats;
@@ -391,6 +416,12 @@ export function useBeatLibrary(provider = beatsProvider) {
 
   return {
     customBeats, allBeats, isCustomBeat,
+    // The effective built-in list, and the manual re-read behind the Beats
+    // screen's "Check for beat updates". Exposed through here rather than by
+    // the view calling useShippedBeats itself, so there is ONE fetched set in
+    // the app: a second hook instance would keep its own revision and could
+    // hand a screen a different list from the one the library merged.
+    builtinBeats, checkForBeatUpdates: shipped.check,
     categories, activeCat, setActiveCat, categoryBeats, catName,
     saveBeat, deleteBeat, importShared, importLibrary,
     createCategory, deleteCategory, toggleBeatInCategory, reorderCategory,

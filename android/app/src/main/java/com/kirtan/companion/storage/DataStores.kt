@@ -92,6 +92,22 @@ internal object Keys {
 
     /** The CSRF `state` paired with [AUTH_PENDING_VERIFIER]. */
     val AUTH_PENDING_STATE = stringPreferencesKey("kirtan.auth.pendingState")
+
+    /**
+     * The server's built-in beat rows, cached VERBATIM as one JSON array.
+     *
+     * Rows rather than beats: a cache written by an older build then goes back
+     * through today's validation and today's derivation rules on the way in, so
+     * neither can be smuggled past by a blob on disk, and changing how a row
+     * becomes a beat needs no cache-version bump. See [ShippedBeatsClient].
+     */
+    val SHIPPED_ROWS = stringPreferencesKey("kirtan.shipped.rows")
+
+    /**
+     * The newest `updated_at` among [SHIPPED_ROWS], so a check that fetched the
+     * same set again can say so instead of rewriting the blob.
+     */
+    val SHIPPED_REVISION = stringPreferencesKey("kirtan.shipped.revision")
 }
 
 /**

@@ -42,8 +42,14 @@ const EQ_SAVE_DEBOUNCE_MS = 250;
  * computing it from a stale render closure would resurrect a just-changed
  * band or panel when two changes land before a re-render (fast drags,
  * double-clicks).
+ *
+ * `launchBeat` is the beat Home opens on — the head of the library's built-in
+ * list, which is server-sourced now (see useShippedBeats), so App hands it in.
+ * Only the tempo mirror's seed comes from it. The compiled BEATS[0] default
+ * keeps the hook usable on its own, and is what App passes anyway until a
+ * server set lands.
  */
-export function useTransport() {
+export function useTransport(launchBeat = BEATS[0]) {
   // Lazy initialiser, not a ref: the engine is constructed exactly once and
   // the identity is stable for the component's life, but unlike a ref it's a
   // legal read during render (which is where children like BeatStrip get it).
@@ -52,7 +58,12 @@ export function useTransport() {
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [step, setStep] = useState(-1);
-  const [bpm, setBpm] = useState(BEATS[0].bpm);
+  // Seeded once, from the beat Home launches on: its suggested tempo is what
+  // the slider shows before anything has been played. A useState initialiser
+  // runs once, so a server set landing later does not re-seed it — App
+  // re-points the selection if the launched beat stops existing, and every
+  // loadBeat from then on writes the mirror.
+  const [bpm, setBpm] = useState(launchBeat.bpm);
   const [volume, setVolume] = useState(0.9);
   const [endVolumes, setEndVolumes] = useState({});  // per-lane faders, default 1
   const [mutedEnds, setMutedEnds] = useState({});

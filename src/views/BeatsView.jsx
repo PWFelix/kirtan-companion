@@ -6,7 +6,6 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { BEATS } from "../data/beats.js";
 import BeatStrip from "../BeatStrip.jsx";
 import * as sh from "../ui/styles.js";
 import {
@@ -18,10 +17,18 @@ import {
   browse as browseCommunity, publish as publishCommunity,
   incrementCopies, toImportPayload,
 } from "../storage/communityClient.js";
+import { promoteShippedBeat } from "../storage/shippedBeatsClient.js";
+import { useMaintainer } from "../hooks/useMaintainer.js";
 
 // Whether the platform has a native share sheet (iOS/Android do, most
 // desktop browsers don't). Checked once — it can't change mid-session.
 const CAN_NATIVE_SHARE = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+// The section a promoted beat lands in when the maintainer leaves the field
+// alone. A default is what stops every promotion piling into one bucket that
+// only a SQL update can un-pile — the heading becomes the beat's `group`, and
+// the built-in page is grouped by it.
+const PROMOTE_HEADING = "Community";
 
 // Sortable row wrapper (dnd-kit). MODULE-LEVEL so React keeps its identity
 // across re-renders — a component defined inside the view would remount every
@@ -54,6 +61,8 @@ function SortableRow({ id, children }) {
  *     where a pasted share code comes in.
  *   - Built in / Your beats / each user category — a card apiece that opens a
  *     dedicated PAGE listing that category's beats, with its edit controls.
+ *     The built-in card also carries the manual "check for beat updates"
+ *     action, that list being the one the server owns.
  *
  * Everything is one component because it's all one screen's worth of state:
  * which page is open lives here (`page`) and dies with the screen, exactly
@@ -70,6 +79,7 @@ function BeatsView({
 }) {
   const {
     allBeats, customBeats, isCustomBeat, categories, categoryBeats, catName,
+    builtinBeats, checkForBeatUpdates,
     createCategory, deleteCategory, toggleBeatInCategory, reorderCategory,
     error, dismissError,
   } = library;
@@ -98,6 +108,32 @@ function BeatsView({
   const askConfirm = (message, label, onConfirm) =>
     setConfirmAction({ message, label, onConfirm });
 
+  // ── Built-in set (server-sourced) ──────────────────────────────────────
+  // The launch fetch is the library's business and is silent; this is the
+  // manual re-read the built-in card offers, and the only place a result is
+  // shown. `updateNote` is a sentence rather than a status enum because that
+  // is all the row has room for — `failed` only picks its colour.
+  const [checking, setChecking] = useState(false);
+  const [updateNote, setUpdateNote] = useState(null);   // { text, failed } | null
+
+  // One sentence per outcome, shared by the card's button and the re-read
+  // after a promote (the same call, made for a different reason). It reports
+  // what the set IS rather than claiming it changed: `updated_at` moves on any
+  // write to a row, so a revision can move without one beat differing (a seed
+  // re-run, a promote then reverted), and "updated" would then be a lie.
+  const noteFor = (result) =>
+    result.kind === "updated"
+      ? { text: `Loaded from the server · ${result.count} beats` }
+      : result.kind === "current"
+        ? { text: `Up to date · ${result.count} beats` }
+        : { text: result.message, failed: true };
+
+  async function handleCheckForUpdates() {
+    setChecking(true);
+    setUpdateNote(noteFor(await checkForBeatUpdates()));
+    setChecking(false);
+  }
+
   // ── Community library (Browse page) ────────────────────────────────────
   const signedIn = Boolean(auth?.configured && auth?.user);
   const [community, setCommunity] = useState([]);
@@ -107,6 +143,16 @@ function BeatsView({
   const [copiedId, setCopiedId] = useState(null);       // "Added" flash on a card
   // Publish-from-share state: null | "publishing" | "done" | an error string.
   const [publishState, setPublishState] = useState(null);
+
+  // ── Promote (maintainers only) ─────────────────────────────────────────
+  // The flag decides whether the button is DRAWN and nothing else; the
+  // database decides whether the write happens (see useMaintainer).
+  const maintainer = useMaintainer(auth);
+  const [promoteTarget, setPromoteTarget] = useState(null);   // the published row
+  const [promoteHeading, setPromoteHeading] = useState(PROMOTE_HEADING);
+  // null | "saving" | "done" | an error string — the same four-state shape the
+  // publish button uses, so the two read the same way.
+  const [promoteState, setPromoteState] = useState(null);
 
   // Load the community list when the Browse page is open and the user is
   // signed in. Debounced so typing in the search box doesn't fire a request
@@ -136,6 +182,41 @@ function BeatsView({
       incrementCopies(row.id);
       setCopiedId(row.id);
       setTimeout(() => setCopiedId((id) => (id === row.id ? null : id)), 1600);
+    }
+  }
+
+  // ── Promote ──
+  // The sheet opens with the default heading and a clean state; the row it
+  // will write comes from the card, so nothing is computed until Promote.
+  function openPromote(row) {
+    setPromoteTarget(row);
+    setPromoteHeading(PROMOTE_HEADING);
+    setPromoteState(null);
+  }
+
+  /**
+   * Copy a community BEAT into the table the app ships from. A playlist can't
+   * be promoted — one progression is not one beat — so the action only exists
+   * on beat cards.
+   *
+   * On success the shipped set is re-read at once: the write moved the row's
+   * `updated_at`, so the revision differs and the library replaces its
+   * built-in list, which means the beat is under Built in without a reload.
+   * That re-read is the same call the landing card's button makes, so its
+   * result is reported the same way — for whoever goes looking there, since
+   * this sheet stays open to say the promote itself worked.
+   */
+  async function handlePromote() {
+    setPromoteState("saving");
+    try {
+      await promoteShippedBeat(promoteTarget.payload.beat, {
+        heading: promoteHeading.trim() || PROMOTE_HEADING,
+        publishedId: promoteTarget.id,
+      });
+      setPromoteState("done");
+      setUpdateNote(noteFor(await checkForBeatUpdates()));
+    } catch (err) {
+      setPromoteState(err.message || "Couldn't add that to the built-in beats.");
     }
   }
 
@@ -390,7 +471,38 @@ function BeatsView({
           )}
         </div>
 
-        {categoryCard("builtin", "Ships with the app")}
+        {/* Built in — the one section whose contents the server owns, so its
+            card carries the manual re-read alongside the count. The two are
+            SIBLINGS in a column, never nested: a button inside a button is
+            invalid HTML and screen readers drop one of them (the reason a beat
+            row is a div with buttons inside it, too). */}
+        <div style={st.builtinCard}>
+          <button onClick={() => setPage({ name: "category", id: "builtin" })}
+            aria-label={`Open ${catName("builtin")}, ${builtinBeats.length} ${builtinBeats.length === 1 ? "beat" : "beats"}`}
+            style={st.builtinOpen}>
+            <div style={st.cardTitleWrap}>
+              <span style={st.cardTitle}>{catName("builtin")}</span>
+              <span style={sh.beatRowMeta}>
+                Ships with the app · {builtinBeats.length} {builtinBeats.length === 1 ? "beat" : "beats"}
+              </span>
+            </div>
+            <span style={st.chevron}><ChevronRightIcon /></span>
+          </button>
+          {/* Offered only when there's a server to ask. An unconfigured build
+              runs on the compiled list for good, so the button would be a
+              question with one permanent answer. */}
+          {auth?.configured && (
+            <div style={st.updateRow}>
+              <button onClick={handleCheckForUpdates} disabled={checking}
+                style={{ ...st.linkBtn, opacity: checking ? 0.6 : 1 }}>
+                {checking ? "Checking…" : "Check for beat updates"}
+              </button>
+              {updateNote && (updateNote.failed
+                ? <span style={st.codeError} role="alert">{updateNote.text}</span>
+                : <span style={sh.beatRowMeta}>{updateNote.text}</span>)}
+            </div>
+          )}
+        </div>
 
         {/* Playlists — the user's own progressions live behind one card, so
             the landing stays short. It sits between the two fixed libraries.
@@ -434,7 +546,8 @@ function BeatsView({
   }
 
   // A published beat/playlist as a card — preview, author, copy count, and an
-  // Add button that imports it into the user's own library.
+  // Add button that imports it into the user's own library. For a maintainer,
+  // a beat card also offers to promote it into the built-in set.
   function communityCard(row) {
     const added = copiedId === row.id;
     const count = row.kind === "playlist" ? row.payload?.beats?.length ?? 0 : 0;
@@ -448,6 +561,17 @@ function BeatsView({
               {row.copies ? ` · ${row.copies} ${row.copies === 1 ? "copy" : "copies"}` : ""}
             </span>
           </div>
+          {/* Beat cards only — a progression is not one beat, so there is
+              nothing to ship — and gated on `payload.beat` for the same reason
+              the strip below is: a published row was written by another build
+              and may not carry what this one expects. */}
+          {maintainer && row.kind === "beat" && row.payload?.beat && (
+            <button onClick={() => openPromote(row)}
+              aria-label={`Promote ${row.name} to a built-in beat`}
+              style={st.promoteChip}>
+              Promote
+            </button>
+          )}
           <button onClick={() => copyCommunity(row)} disabled={added}
             aria-label={`Add ${row.name} to your library`}
             style={{ ...st.addChip, ...(added ? st.addChipDone : null) }}>
@@ -533,14 +657,19 @@ function BeatsView({
   function renderCategory() {
     const id = page.id;
     if (id === "builtin") {
-      const groups = [...new Set(BEATS.map(b => b.group))];
+      // Sections are read off the EFFECTIVE built-ins, in the order the rows
+      // arrived — which is `ordinal` order, so the table's "sections follow
+      // first-appearance order of heading" rule is just the list's own order.
+      // Reading the compiled BEATS here instead is how a section a maintainer
+      // added would end up in the data and not on the screen.
+      const sections = [...new Set(builtinBeats.map(b => b.group))];
       return (
         <>
           <p style={sh.emptyHint}>The beats that come with the app. Open any one to customize your own copy.</p>
-          {groups.map(g => (
+          {sections.map(g => (
             <div key={g} style={{ display: "contents" }}>
               <div style={st.sectionLabel}>{g}</div>
-              {categoryBeats("builtin").filter(b => b.group === g).map(b => renderRow(b, "builtin"))}
+              {builtinBeats.filter(b => b.group === g).map(b => renderRow(b, "builtin"))}
             </div>
           ))}
         </>
@@ -715,6 +844,50 @@ function BeatsView({
                 Create
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Promote sheet — the heading is the one thing a maintainer has to
+          decide, since it becomes the beat's section in the built-in list.
+          Same shape as the new-category sheet: an input with the action
+          beside it and the refusal underneath. */}
+      {promoteTarget && (
+        <div style={sh.sheetBackdrop} onClick={() => setPromoteTarget(null)}>
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={`Promote ${promoteTarget.name}`}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={sh.sheetHead}>
+              <h2 style={sh.sheetName}>Promote “{promoteTarget.name}”</h2>
+              <button onClick={() => setPromoteTarget(null)} aria-label="Close" style={sh.sheetClose}>×</button>
+            </div>
+            <p style={sh.emptyHint}>
+              Adds it to the beats that ship with the app, for everyone, in the
+              section named below. An existing heading groups it with the beats
+              already there; a new one starts a section.
+            </p>
+            <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
+              <input type="text" value={promoteHeading} onChange={(e) => setPromoteHeading(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && promoteState !== "saving") handlePromote(); }}
+                placeholder={PROMOTE_HEADING} aria-label="Section heading" autoFocus
+                disabled={promoteState === "done"} style={st.catNameInput} />
+              <button onClick={handlePromote} disabled={promoteState === "saving" || promoteState === "done"}
+                style={{ ...st.sheetStartBtn, flex: "0 0 auto", padding: "0 22px", opacity: promoteState === "saving" ? 0.6 : 1 }}>
+                {promoteState === "saving" ? "Adding…" : promoteState === "done" ? "Added" : "Promote"}
+              </button>
+            </div>
+            {promoteState === "done" && (
+              <p style={sh.emptyHint}>
+                It's in the built-in set now, under “{promoteHeading.trim() || PROMOTE_HEADING}”.
+                Everyone picks it up on their next launch.
+              </p>
+            )}
+            {/* The refusal worth naming is Row-Level Security's: the button is
+                only drawn for a maintainer, so a "no" from the database means
+                the session changed underneath us. It has to land here as a
+                sentence rather than leave the button spinning. */}
+            {typeof promoteState === "string" && promoteState !== "saving" && (
+              <p style={st.codeError} role="alert">{promoteState}</p>
+            )}
           </div>
         </div>
       )}
@@ -920,6 +1093,15 @@ const st = {
   cardTitle: { fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, letterSpacing: "0.01em", color: "var(--ink-primary)" },
   cardTitleRow: { display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 20, letterSpacing: "0.01em", color: "var(--ink-primary)" },
   chevron: { flexShrink: 0, color: "var(--syahi-soft)", display: "grid", placeItems: "center" },
+  // The built-in card is a COLUMN: the card chrome with the tap target inside
+  // it, so the update check can sit under the count without nesting one button
+  // in another. Same border, background and radius as `card`; less bottom
+  // padding because the second row brings its own height.
+  builtinCard: { display: "flex", flexDirection: "column", gap: 2, width: "100%", padding: "14px 18px 8px", borderRadius: 18, border: "var(--rule-hairline)", background: "var(--head-worn)", textAlign: "left" },
+  builtinOpen: { display: "flex", alignItems: "center", gap: "var(--space-3)", width: "100%", padding: "4px 0", border: "none", background: "transparent", textAlign: "left", cursor: "pointer" },
+  // Baseline rather than centre: the result beside the button is a sentence
+  // that can wrap to two lines on a narrow phone.
+  updateRow: { display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "var(--space-2)", minHeight: 34 },
   // New-category leads the category group; dashed so it reads as "add", not as
   // one of the categories themselves.
   newCatBtn: { width: "100%", minHeight: 52, borderRadius: 16, border: "2px dashed var(--rule)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer" },
@@ -959,6 +1141,10 @@ const st = {
   linkBtn: { flexShrink: 0, border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
   addChip: { flexShrink: 0, minHeight: 40, padding: "0 16px", borderRadius: 999, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
   addChipDone: { background: "transparent", color: "var(--syahi-soft)", border: "var(--rule-hairline)", cursor: "default" },
+  // Promote writes to the set the app SHIPS, so it deliberately doesn't wear
+  // the clay "+ Add" does: one primary action per card, and this one is only
+  // ever drawn for the two people who can perform it.
+  promoteChip: { flexShrink: 0, minHeight: 40, padding: "0 14px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
   publishRow: { display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-4)" },
 
   // ── Sharing ──

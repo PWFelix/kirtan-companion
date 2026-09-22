@@ -10,15 +10,23 @@ import com.kirtan.companion.data.model.Stroke
  * Transcribed from `src/data/beats.js`, which is itself transcribed from
  * Sita-pati das, "The Art and Science of Harinam Sankirtan Yajna".
  *
- * THE TWO LISTS MUST STAY IN SYNC. A beat added or retimed on the web has to be
- * mirrored here, because a shared `#b=` link carries no id: the recipient's
- * library resolves built-in ids against ITS OWN compiled list. Divergent ids or
- * patterns mean the same link plays a different beat on each platform.
+ * ── THIS IS THE FALLBACK SET, NOT THE CANONICAL ONE ──
+ * The built-ins the app shows come from the server's `shipped_beats` table when
+ * it can be read, and from this list when it cannot — see [ShippedBeats]. Both
+ * files are still generated from the same source (scripts/generateBuiltinBeats.mjs)
+ * and must still agree at release time, for two reasons that survive the move
+ * server-side: an offline user plays THIS list, and a shared `#b=` link carries no
+ * id, so each client resolves built-in ids against the set it happens to be
+ * holding. Divergent ids or patterns mean the same link plays a different beat on
+ * each platform.
  *
  * Pattern notation is the wire format's own: `"O"` open, `"X"` closed, `"-"`
  * rest. Using it here too means a pattern in this file can be pasted straight
  * into [ShareCodec] and vice versa, and the length check in [builtIn] catches a
- * mistyped cell at class-load time rather than as a silently short loop.
+ * mistyped cell at class-load time rather than as a silently short loop. The
+ * server's `lanes` column uses this same notation, so
+ * [com.kirtan.companion.storage.ShippedBeatsClient] and this file parse patterns
+ * identically.
  */
 
 private fun pattern(notation: String): List<Stroke?> =
@@ -148,11 +156,22 @@ val BEATS: List<Beat> = listOf(
     ),
 )
 
-/** The ids compiled into this build; makes [Beat.isBuiltIn] work. */
-internal val BUILT_IN_ID_SET: Set<String> = BEATS.mapNotNull { it.id }.toSet()
-
-/** The distinct `group` headings, in the order the beats declare them. */
+/**
+ * The distinct `group` headings of the COMPILED set, in declaration order.
+ *
+ * The set the app actually shows is [ShippedBeats.effective], and the Beats
+ * screen derives ITS headings from the list it was handed rather than from this
+ * constant — a beat promoted after this APK was built carries a heading that is
+ * not in here. What remains true, and what a test pins, is that the fallback set
+ * has exactly these two sections in this order.
+ */
 val BUILT_IN_GROUPS: List<String> = BEATS.mapNotNull { it.group }.distinct()
 
-/** The default beat the app loads before the user chooses one. */
-val DEFAULT_BEAT: Beat get() = BEATS.first()
+/**
+ * The default beat the app loads before the user chooses one.
+ *
+ * Via [ShippedBeats] rather than `BEATS.first()` so the default follows a
+ * remotely updated set: a maintainer who reorders `ordinal` is reordering what
+ * every installed app opens on, which is the point of serving the list.
+ */
+val DEFAULT_BEAT: Beat get() = ShippedBeats.default

@@ -11,6 +11,8 @@ import com.kirtan.companion.storage.CommunityClient
 import com.kirtan.companion.storage.EqPrefs
 import com.kirtan.companion.storage.LibraryRepository
 import com.kirtan.companion.storage.LocalBeatsProvider
+import com.kirtan.companion.storage.ShippedBeatsClient
+import com.kirtan.companion.storage.ShippedStatus
 import com.kirtan.companion.storage.SupabaseBeatsProvider
 import com.kirtan.companion.storage.SupabaseClient
 import com.kirtan.companion.storage.kirtanStore
@@ -18,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -88,6 +91,26 @@ class AppContainer(private val appContext: Context) {
     val community: CommunityClient? by lazy { supabase?.let { CommunityClient(it) } }
 
     /**
+     * The server's built-in beat set, and the cache that stands in for it.
+     *
+     * Null exactly when [supabase] is: an unconfigured build compiles its beats in
+     * and never asks, which is why [com.kirtan.companion.data.ShippedBeats] starts
+     * at the compiled list rather than at nothing.
+     */
+    val shippedBeats: ShippedBeatsClient? by lazy {
+        supabase?.let { ShippedBeatsClient(it, store) }
+    }
+
+    /**
+     * Where the built-in set on screen came from, for the Beats screen's one line
+     * about it. A stand-in flow when there is no cloud, so the screen has one thing
+     * to collect either way instead of a null check around every read.
+     */
+    val shippedStatus: StateFlow<ShippedStatus> by lazy {
+        shippedBeats?.status ?: MutableStateFlow(ShippedStatus())
+    }
+
+    /**
      * The mixer's persisted settings.
      *
      * Separate from [library] on purpose, and the separation is load-bearing:
@@ -116,6 +139,16 @@ class AppContainer(private val appContext: Context) {
     val pendingMigration = MutableStateFlow<Library?>(null)
 
     init {
+        // The built-in beats: cached set first, then the server's. Launched before
+        // the session collector below because it is the only thing here that can
+        // change what "Built in" MEANS, and both are non-blocking — the compiled
+        // list is already on screen while they run.
+        scope.launch {
+            val shipped = shippedBeats ?: return@launch
+            shipped.loadCached()
+            shipped.checkForUpdates(manual = false)
+        }
+
         // Follow the auth session: signed in, the library becomes the cloud one;
         // signed out (or never signed in), it is the local one. Collecting rather
         // than checking once means signing out mid-session drops back to device

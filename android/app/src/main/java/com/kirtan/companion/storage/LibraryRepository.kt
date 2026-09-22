@@ -1,7 +1,7 @@
 package com.kirtan.companion.storage
 
-import com.kirtan.companion.data.BEATS
 import com.kirtan.companion.data.ShareCodec
+import com.kirtan.companion.data.ShippedBeats
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.Category
 import com.kirtan.companion.data.model.Library
@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,6 +44,16 @@ import java.util.concurrent.atomic.AtomicInteger
  * [Beat.isBuiltIn] — the fact is in the type, so it cannot fall out of step with
  * the list it came from.
  *
+ * ── AND THE BUILT-INS THEMSELVES ARE A FLOW ──
+ * They are served from the database (see [ShippedBeatsClient]) with the compiled
+ * list as the fallback, so the set can change WHILE THE APP IS RUNNING: a check
+ * lands a corrected pattern, or a maintainer promotes a beat and the refetch
+ * brings it back. Everything that reads built-ins — the merge, the two virtual
+ * categories, the name de-duping that stops a custom beat shadowing "Te Ta" — goes
+ * through [builtIns] rather than a captured list, so one update reaches all of
+ * them. A repository holding a snapshot would keep de-duping names against a set
+ * nobody can see any more.
+ *
  * ── WHY SOME WRITES AWAIT AND SOME DON'T ──
  * CREATES await, because the id is minted by the provider and the caller needs the
  * saved beat back in order to select it — its id may not have existed until a
@@ -66,14 +76,16 @@ import java.util.concurrent.atomic.AtomicInteger
  * @param scope the coroutine scope the initial load, [allBeats] and the
  *   fire-and-forget preference write run in. The composition root's scope, so the
  *   repository lives as long as the process.
- * @param builtIns the compiled-in beats. A parameter, not a constant, so a test can
- *   hand over two beats and reason about de-duping without the whole shipped
- *   library in the way — the same reason the web hook takes its provider as one.
+ * @param builtIns the built-in beat set, live. Defaults to [ShippedBeats.effective]
+ *   — the served set, falling back to the compiled one. A parameter, not a
+ *   constant, so a test can hand over two beats and reason about de-duping without
+ *   the whole shipped library in the way — the same reason the web hook takes its
+ *   provider as one.
  */
 class LibraryRepository(
     private val scope: CoroutineScope,
     initialProvider: BeatsProvider,
-    private val builtIns: List<Beat> = BEATS,
+    private val builtIns: StateFlow<List<Beat>> = ShippedBeats.effective,
     private val log: StorageLog = AndroidStorageLog,
 ) {
 
@@ -105,10 +117,16 @@ class LibraryRepository(
     /**
      * Built-ins then the user's beats, in that order — the list every screen reads.
      * Derived once here so no screen can get the order or the merge wrong.
+     *
+     * A COMBINE rather than a map over the library state, because either input can
+     * move on its own: a save changes the user's half, and a served beat set
+     * landing changes the built-in half. Seeded with the merge as it stands now, so
+     * a screen reading before the first emission still sees the compiled beats
+     * rather than an empty list.
      */
-    val allBeats: StateFlow<List<Beat>> = _state
-        .map { builtIns + it.customBeats }
-        .stateIn(scope, SharingStarted.Eagerly, builtIns)
+    val allBeats: StateFlow<List<Beat>> =
+        combine(builtIns, _state) { shipped, state -> shipped + state.customBeats }
+            .stateIn(scope, SharingStarted.Eagerly, builtIns.value + _state.value.customBeats)
 
     private val provider = MutableStateFlow(initialProvider)
 
@@ -210,10 +228,10 @@ class LibraryRepository(
     fun categoryBeats(categoryId: String): List<Beat> {
         val current = _state.value
         when (categoryId) {
-            BUILTIN_CATEGORY -> return builtIns
+            BUILTIN_CATEGORY -> return builtIns.value
             CUSTOM_CATEGORY -> return current.customBeats
         }
-        val everything = builtIns + current.customBeats
+        val everything = builtIns.value + current.customBeats
         val category = current.categories.firstOrNull { it.id == categoryId } ?: return everything
         return category.beatIds.mapNotNull { id -> everything.firstOrNull { it.id == id } }
     }
@@ -251,7 +269,7 @@ class LibraryRepository(
         // ("My Beat (2)", then "My Beat (2) (2)"). Built-ins are included, so a
         // custom beat cannot shadow "Te Ta" either.
         val taken = LinkedHashSet(
-            (builtIns + current.customBeats).filter { it.id != id }.map { it.name },
+            (builtIns.value + current.customBeats).filter { it.id != id }.map { it.name },
         )
         val fields = newBeat.copy(id = null, name = uniqueName(newBeat.name, taken))
 
@@ -353,7 +371,7 @@ class LibraryRepository(
 
             // Re-importing your own link shouldn't produce two rows with one name.
             val takenBeatNames = LinkedHashSet(
-                (builtIns + _state.value.customBeats).map { it.name },
+                (builtIns.value + _state.value.customBeats).map { it.name },
             )
             val drafts = incoming.map { beat ->
                 beat.copy(id = null, name = uniqueName(beat.name, takenBeatNames))
@@ -421,7 +439,8 @@ class LibraryRepository(
         // `mapNotNull`: dropping one null would shift every later index and repoint
         // the wrong playlists, which is a worse bug than the one it looks like it
         // avoids.
-        val takenBeatNames = LinkedHashSet((builtIns + _state.value.customBeats).map { it.name })
+        val takenBeatNames =
+            LinkedHashSet((builtIns.value + _state.value.customBeats).map { it.name })
         val oldIds: List<String?> = local.beats.map { it.id }
         val drafts = local.beats.map { beat ->
             beat.copy(id = null, name = uniqueName(beat.name, takenBeatNames))

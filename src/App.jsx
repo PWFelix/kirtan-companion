@@ -1,5 +1,4 @@
-import { useState, useMemo } from "react";
-import { BEATS } from "./data/beats.js";
+import { useState, useMemo, useEffect } from "react";
 import { useTransport } from "./hooks/useTransport.js";
 import { useBeatLibrary } from "./hooks/useBeatLibrary.js";
 import { useLandscape } from "./hooks/useLandscape.js";
@@ -30,7 +29,8 @@ const INBOUND_SHARE = readShareFromLocation();
  *
  * Everything else has a home of its own:
  *   useTransport   — the engine and its React mirror (playing, tempo, mixer)
- *   useBeatLibrary — saved beats, categories, and their persistence
+ *   useBeatLibrary — saved beats, the effective built-in list, categories,
+ *                    and their persistence
  *   views/*        — one screen each, owning only its own sheets and tabs
  *
  * The split is by STATE OWNERSHIP, not by screen count. `beatId` stays here
@@ -39,7 +39,6 @@ const INBOUND_SHARE = readShareFromLocation();
  * so `selectBeat` is the seam between them and belongs to neither.
  */
 function App() {
-  const transport = useTransport();
   const auth = useAuth();
   // The storage seam: signed in on a configured project → the user's cloud
   // library; otherwise this device's localStorage. useBeatLibrary reloads
@@ -54,6 +53,10 @@ function App() {
     [auth.configured, auth.user?.id],
   );
   const library = useBeatLibrary(provider);
+  // Created AFTER the library, because the tempo mirror seeds from the head of
+  // the built-in list — which is server-sourced, so it lives there and not in
+  // a module constant any more.
+  const transport = useTransport(library.builtinBeats[0]);
   const isLandscape = useLandscape();
   // Offers to move this device's guest beats into a freshly signed-in, empty
   // account. Self-contained: it watches auth + library and drives its own sheet.
@@ -70,7 +73,11 @@ function App() {
   const [view, setView] = useState(INBOUND_SHARE ? "beats" : "home"); // "home" | "beats" | "editor" | "learn" | "settings"
   const [pendingShare, setPendingShare] = useState(INBOUND_SHARE);
   const [entered, setEntered] = useState(false); // splash shown until Begin
-  const [beatId, setBeatId] = useState(BEATS[0].id);
+  // Launched on the head of the built-in list. At first render that IS the
+  // compiled head — the server's set arrives asynchronously and nothing waits
+  // for it (see useShippedBeats) — so this seeds the app exactly as it always
+  // did, and the effect below reconciles it once the real list lands.
+  const [beatId, setBeatId] = useState(library.builtinBeats[0].id);
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
   // Where the editor's Back button returns to, or null when it was opened
   // from the nav tab (then there's no Back — the nav bar navigates).
@@ -86,6 +93,36 @@ function App() {
     transport.loadBeat(b);
     if (fromCat) library.setActiveCat(fromCat);
   }
+
+  // The built-in list is server-sourced, so it can change under a running app:
+  // a maintainer re-orders it, edits a beat, or removes one. Exactly one thing
+  // has to be repaired — Home must never be left pointing at a beat that no
+  // longer exists. `beat` above would quietly fall back to the first beat in
+  // the library while the ENGINE still holds the removed one, so the screen
+  // and the sequencer would disagree about what is playing. Going through
+  // selectBeat moves both.
+  //
+  // Everything else is deliberately left alone: a different first beat, or an
+  // edited pattern behind an id that still exists, is picked up the next time
+  // the user selects a beat. Re-selecting on every refresh would throw away a
+  // tempo they had just nudged — mid-kirtan — for nothing they asked for.
+  useEffect(() => {
+    // Not while the library is still filling in: an id that isn't in the list
+    // YET (a custom beat, before its load resolves) is not one that has gone.
+    if (library.loading) return;
+    const stillThere = library.builtinBeats.some(b => b.id === beatId)
+      || library.customBeats.some(b => b.id === beatId);
+    if (stillThere) return;
+    // The setState is the point of this effect, not an incidental one: it is
+    // what keeps `beatId` and the engine — which selectBeat's loadBeat moves —
+    // telling the same story.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    selectBeat(library.builtinBeats[0], "builtin");
+    // selectBeat is rebuilt every render and closes over nothing the deps
+    // don't already name, so listing it would re-run this on every render for
+    // no new information.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library.loading, library.builtinBeats, library.customBeats, beatId]);
 
   // Home chevrons: step through the ACTIVE category in its order (wraps).
   function cycleBeat(dir) {
@@ -161,10 +198,11 @@ function App() {
     // draft on unmount, so it must stay open if this didn't stick.
     return saved;
   }
-  // Deleting the loaded beat falls back to the first built-in.
+  // Deleting the loaded beat falls back to the first built-in — the head of
+  // the effective list, which is what the reconcile effect above uses too.
   function handleDeleteBeat(id) {
     library.deleteBeat(id);
-    if (beatId === id) selectBeat(BEATS[0], "builtin");
+    if (beatId === id) selectBeat(library.builtinBeats[0], "builtin");
   }
   // Accepting a share: same shape as saving from the editor — the library
   // takes it, then the engine and main view move to what just arrived. The

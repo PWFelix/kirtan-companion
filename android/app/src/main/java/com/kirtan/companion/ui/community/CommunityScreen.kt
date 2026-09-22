@@ -45,7 +45,11 @@ import com.kirtan.companion.data.PaletteToken
 import com.kirtan.companion.storage.CommunityClient
 import com.kirtan.companion.storage.PublishedItem
 import com.kirtan.companion.storage.PublishedKind
+import com.kirtan.companion.ui.components.KcSheet
+import com.kirtan.companion.ui.components.PrimaryButton
 import com.kirtan.companion.ui.components.SecondaryButton
+import com.kirtan.companion.ui.components.SectionLabel
+import com.kirtan.companion.ui.icons.KcIcons
 import com.kirtan.companion.ui.strip.BeatStrip
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
@@ -68,8 +72,11 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
     val session by vm.session.collectAsState()
     val scope by vm.scope.collectAsState()
     val myRatings by vm.myRatings.collectAsState()
+    val isMaintainer by vm.isMaintainer.collectAsState()
     var query by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf<String?>(null) }
+    /** The card whose beat is about to become a built-in, while its sheet is open. */
+    var promoteTarget by remember { mutableStateOf<PublishedItem?>(null) }
 
     // One debounced effect drives every load, including the first: typing or
     // switching scope re-queries after a pause rather than per keystroke, which
@@ -174,17 +181,39 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
         }
 
         items.forEach { item ->
+            // Decoded ONCE per card and shared by the strip and the promote gate:
+            // asking the view model twice would run the same snapshot through the
+            // codec twice on every recomposition of the list.
+            val preview = vm.preview(item)
             CommunityCard(
                 item = item,
-                beats = vm.preview(item),
+                beats = preview,
                 mine = session?.userId != null && session?.userId == item.authorId,
                 signedIn = session != null,
                 myStars = myRatings[item.id],
+                // Gated on the flag AND on the snapshot decoding to a single beat:
+                // a button that opens a sheet and then says "only a single beat can
+                // become a built-in" is a button that should not have been there.
+                canPromote = isMaintainer &&
+                    item.kind == PublishedKind.BEAT &&
+                    preview != null,
                 onAdd = { vm.add(item) { notice = it } },
                 onUnpublish = { vm.unpublish(item) { notice = it } },
+                onPromote = { promoteTarget = item },
                 onRate = { stars -> vm.rate(item, stars) { notice = it } },
             )
         }
+    }
+
+    promoteTarget?.let { item ->
+        PromoteSheet(
+            item = item,
+            onDismiss = { promoteTarget = null },
+            onConfirm = { heading ->
+                promoteTarget = null
+                vm.promote(item, heading) { notice = it }
+            },
+        )
     }
 }
 
@@ -195,8 +224,10 @@ private fun CommunityCard(
     mine: Boolean,
     signedIn: Boolean,
     myStars: Int?,
+    canPromote: Boolean,
     onAdd: () -> Unit,
     onUnpublish: () -> Unit,
+    onPromote: () -> Unit,
     onRate: (Int) -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
@@ -268,6 +299,18 @@ private fun CommunityCard(
                     onClick = onUnpublish,
                 )
             }
+        }
+
+        // Its own row rather than a third button beside the other two: this one
+        // changes what every installed app ships with, and a control that looks
+        // like "Add to library" but does that is a mis-tap waiting to happen.
+        if (canPromote) {
+            SecondaryButton(
+                label = "Make this a built-in beat",
+                icon = KcIcons.Cap,
+                minHeight = 44.dp,
+                onClick = onPromote,
+            )
         }
 
         if (!signedIn) {
@@ -345,6 +388,73 @@ private fun StarRow(selected: Int?, onRate: (Int) -> Unit) {
                         onClick = { onRate(star) },
                     ),
             )
+        }
+    }
+}
+
+/**
+ * The confirm step for making a community beat one of the built-ins.
+ *
+ * A sheet rather than a single tap because this is the one action in the app whose
+ * blast radius is other people's apps: it writes a row every install reads on its
+ * next launch. The heading it asks for is the part that cannot be guessed — without
+ * it every promoted beat lands in one section, and the Beats screen derives its
+ * sections from the set, so a bucket nobody named is a set nobody can browse.
+ */
+@Composable
+private fun PromoteSheet(
+    item: PublishedItem,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val dimens = KirtanTheme.dimens
+    // Keyed on the item so promoting a second beat does not inherit the first
+    // one's half-typed heading.
+    var heading by remember(item.id) { mutableStateOf(CommunityViewModel.DEFAULT_HEADING) }
+
+    KcSheet(title = "Make this a built-in beat", onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
+            Text(
+                text = item.name,
+                color = PaletteToken.SYAHI.color,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "It joins the Built in list for everyone using this app, on their " +
+                    "next launch. The beat stays in the community library too, and a " +
+                    "playlist that already points at it keeps working.",
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 13.4.sp,
+                lineHeight = 19.sp,
+            )
+
+            SectionLabel("Section heading")
+            OutlinedTextField(
+                value = heading,
+                onValueChange = { heading = it },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PaletteToken.CLAY.color,
+                    unfocusedBorderColor = KirtanTheme.colors.rule,
+                    focusedContainerColor = PaletteToken.HEAD.color,
+                    unfocusedContainerColor = PaletteToken.HEAD.color,
+                    focusedTextColor = PaletteToken.SYAHI.color,
+                    unfocusedTextColor = PaletteToken.SYAHI.color,
+                    cursorColor = PaletteToken.CLAY.color,
+                ),
+            )
+            Text(
+                text = "An existing heading puts it in that section; a new one starts one.",
+                color = KirtanTheme.colors.faint,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+            )
+
+            PrimaryButton(label = "Promote", onClick = { onConfirm(heading) })
+            SecondaryButton(label = "Cancel", onClick = onDismiss)
         }
     }
 }

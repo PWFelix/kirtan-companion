@@ -37,14 +37,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kirtan.companion.data.BUILT_IN_GROUPS
-import com.kirtan.companion.data.BEATS
 import com.kirtan.companion.data.PaletteToken
 import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.storage.BUILTIN_CATEGORY
 import com.kirtan.companion.storage.CUSTOM_CATEGORY
 import com.kirtan.companion.storage.LibraryRepository
+import com.kirtan.companion.storage.ShippedSource
+import com.kirtan.companion.storage.ShippedStatus
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kirtan.companion.ui.components.HairlineIconButton
 import com.kirtan.companion.ui.components.PrimaryButton
@@ -112,6 +112,8 @@ internal fun BeatsScreen(
 ) {
     val state by library.state.collectAsState()
     val allBeats by library.allBeats.collectAsState()
+    val builtIns by library.builtInBeats.collectAsState()
+    val shipped by library.shippedStatus.collectAsState()
     val transportState by transport.state.collectAsState()
     val communityVm: CommunityViewModel = viewModel(factory = CommunityViewModel.Factory)
     var page by remember { mutableStateOf<BeatsPage>(BeatsPage.Landing) }
@@ -197,6 +199,7 @@ internal fun BeatsScreen(
                 library = library,
                 state = state,
                 allBeats = allBeats,
+                builtInMeta = shippedSourceLine(shipped.source, builtIns.size),
                 onOpenCategory = { page = BeatsPage.Category(it) },
                 onOpenDetail = { detail = it },
                 onOpenImport = { importOpen = true },
@@ -212,8 +215,15 @@ internal fun BeatsScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 categoryId = p.id,
                 categoryName = library.categoryName(p.id),
-                beats = remember(p.id, state) { library.categoryBeats(p.id) },
+                // Keyed on the built-in set as well as the library state: a check
+                // for updates replaces the built-ins WITHOUT touching `state`, so
+                // without it this `remember` would keep serving the set that was
+                // on screen when the page opened.
+                beats = remember(p.id, state, builtIns) { library.categoryBeats(p.id) },
                 library = library,
+                shipped = shipped,
+                canCheckForUpdates = library.canCheckForUpdates,
+                onCheckForUpdates = { library.checkForBeatUpdates() },
                 onOpenDetail = { detail = it },
                 onShareList = { name, beats ->
                     shareTarget = ShareTarget.CategoryTarget(name, beats)
@@ -291,6 +301,7 @@ private fun LandingPage(
     library: LibraryViewModel,
     state: LibraryRepository.State,
     allBeats: List<Beat>,
+    builtInMeta: String,
     onOpenCategory: (String) -> Unit,
     onOpenDetail: (Beat) -> Unit,
     onOpenImport: () -> Unit,
@@ -314,7 +325,7 @@ private fun LandingPage(
         item {
             SectionCard(
                 title = "Built in",
-                meta = "Ships with the app · ${BEATS.size} beats",
+                meta = builtInMeta,
                 onClick = { onOpenCategory(BUILTIN_CATEGORY) },
             )
         }
@@ -454,6 +465,35 @@ private fun Hint(text: String) {
     )
 }
 
+/**
+ * Which of the three built-in sets is on screen, in one line.
+ *
+ * Worth saying out loud because "Built in" stopped meaning "compiled into this
+ * APK": a user who was told a pattern had been corrected should be able to see
+ * whether the app is showing the server's answer, the one it cached on an earlier
+ * launch, or the fallback it shipped with.
+ */
+private fun shippedSourceLine(source: ShippedSource, count: Int): String = when (source) {
+    ShippedSource.SERVER -> "Up to date with the server · $count beats"
+    ShippedSource.CACHED -> "From the last check · $count beats"
+    ShippedSource.COMPILED -> "Ships with the app · $count beats"
+}
+
+/**
+ * The line under the update button.
+ *
+ * A manual check's answer stays until the next check: this is a status line, not a
+ * toast, and "already up to date" is worth still being there when the user looks
+ * back up from the button. An AUTOMATIC check sets no notice at all, so a launch
+ * never announces itself.
+ */
+private fun shippedLine(status: ShippedStatus, canCheck: Boolean): String = when {
+    !canCheck -> shippedSourceLine(ShippedSource.COMPILED, status.count)
+    status.checking -> "Checking the server…"
+    status.notice != null -> status.notice!!
+    else -> shippedSourceLine(status.source, status.count)
+}
+
 @Composable
 private fun SectionCard(title: String, meta: String, onClick: () -> Unit) {
     val dimens = KirtanTheme.dimens
@@ -508,6 +548,9 @@ private fun CategoryPage(
     categoryName: String,
     beats: List<Beat>,
     library: LibraryViewModel,
+    shipped: ShippedStatus,
+    canCheckForUpdates: Boolean,
+    onCheckForUpdates: () -> Unit,
     onOpenDetail: (Beat) -> Unit,
     onShareList: (String, List<Beat>) -> Unit,
     onPublishList: (String, List<Beat>) -> Unit,
@@ -542,12 +585,38 @@ private fun CategoryPage(
         }
 
         if (categoryId == BUILTIN_CATEGORY) {
+            // The one page that can say where its beats came from. The set is
+            // served rather than compiled in, so "Built in" no longer means "in
+            // this APK", and a user looking at a beat they were told had been
+            // corrected deserves to be able to look again themselves.
+            item(key = "beat-updates") {
+                Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
+                    if (canCheckForUpdates) {
+                        SecondaryButton(
+                            label = if (shipped.checking) {
+                                "Checking…"
+                            } else {
+                                "Check for beat updates"
+                            },
+                            icon = KcIcons.Globe,
+                            enabled = !shipped.checking,
+                            onClick = onCheckForUpdates,
+                        )
+                    }
+                    Hint(shippedLine(shipped, canCheckForUpdates))
+                }
+            }
+
             // The built-ins are sub-divided by their `group` heading, in the order
-            // the beats first declare them. Headings need not be contiguous in the
-            // data — "Building up" holds both Da Ge Te Te and Double Time with
-            // "Gentle" between them — so each section filters the whole list rather
-            // than slicing it.
-            BUILT_IN_GROUPS.forEach { group ->
+            // the beats first declare them. DERIVED FROM THIS LIST rather than read
+            // from a constant: a beat promoted after this APK was built carries a
+            // heading that appears in no compiled list, and a heading nobody uses
+            // any more must stop rendering as an empty section.
+            //
+            // Headings need not be contiguous in the data — "Building up" holds both
+            // Da Ge Te Te and Double Time with "Gentle" between them — so each
+            // section filters the whole list rather than slicing it.
+            beats.mapNotNull { it.group }.distinct().forEach { group ->
                 val inGroup = beats.filter { it.group == group }
                 if (inGroup.isNotEmpty()) {
                     item(key = "heading-$group") { SectionLabel(group) }

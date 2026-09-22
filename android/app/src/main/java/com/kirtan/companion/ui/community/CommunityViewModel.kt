@@ -14,6 +14,7 @@ import com.kirtan.companion.storage.AuthSession
 import com.kirtan.companion.storage.CommunityClient
 import com.kirtan.companion.storage.PublishedItem
 import com.kirtan.companion.storage.storageErrorMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -71,6 +72,28 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
 
     /** False when this build has no cloud at all. */
     val available: Boolean get() = community != null
+
+    /**
+     * True when the signed-in user may change the built-in beat set for everyone.
+     *
+     * Resolved once per SESSION rather than per browse, because the flag only
+     * decides whether a button exists and the search field re-queries on every
+     * pause in typing — hanging it off [refresh] would turn a keystroke into a
+     * second round trip. Fails closed: the database is what actually authorises the
+     * write, so a wrong `false` here costs a maintainer one retry and a wrong
+     * `true` would be a button that always fails.
+     */
+    private val _isMaintainer = MutableStateFlow(false)
+    val isMaintainer: StateFlow<Boolean> = _isMaintainer.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            session.collect { current ->
+                _isMaintainer.value =
+                    current != null && container.shippedBeats?.isMaintainer() == true
+            }
+        }
+    }
 
     /**
      * The beats a published snapshot holds, for the card's mini strip.
@@ -182,6 +205,48 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * The beat a card would promote, or null when it cannot be promoted.
+     *
+     * Only a single BEAT can become a built-in: a published progression is several
+     * beats and one row, and splitting it would silently invent a set nobody
+     * chose. Null also covers a snapshot this build cannot decode, which the card
+     * already handles by not offering Add.
+     */
+    fun promotable(item: PublishedItem): Beat? =
+        (community?.toImportPayload(item) as? ShareCodec.SharePayload.BeatPayload)?.beat
+
+    /**
+     * Make a community beat one of the built-ins, for every user of every install.
+     *
+     * The write goes to `shipped_beats`, whose insert policy is `is_maintainer()`,
+     * so the server has the last word; [isMaintainer] only decides whether the
+     * button is on screen. The refetch inside means the maintainer sees the beat
+     * under Built in immediately rather than after a restart — the one part of this
+     * feature worth confirming with your own eyes before telling anyone it shipped.
+     *
+     * @param heading the section the beat lands in, asked for because every
+     *   promoted beat arriving in one bucket is a set nobody can browse.
+     */
+    fun promote(item: PublishedItem, heading: String, onDone: (String?) -> Unit) {
+        val client = container.shippedBeats ?: return
+        val beat = promotable(item)
+        if (beat == null) {
+            onDone("Only a single beat can become a built-in — not a list.")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                client.promote(item, beat, heading.trim().ifEmpty { DEFAULT_HEADING })
+                onDone("“${beat.name}” is now one of the built-in beats.")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onDone(storageErrorMessage(e))
+            }
+        }
+    }
+
     /** Publish one of your beats. Requires a session; the caller gates the button. */
     fun publishBeat(beat: Beat, onDone: (String?) -> Unit) {
         publish(ShareCodec.SharePayload.BeatPayload(beat), beat.name, onDone)
@@ -211,6 +276,14 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /**
+         * The section a promoted beat lands in when its maintainer leaves the
+         * field blank. A real heading rather than an empty one: `heading` is
+         * `not null` in the table, and a beat with no section is a beat the Beats
+         * screen's heading loop never renders.
+         */
+        internal const val DEFAULT_HEADING = "Community"
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer { CommunityViewModel(this[APPLICATION_KEY]!!) }
         }

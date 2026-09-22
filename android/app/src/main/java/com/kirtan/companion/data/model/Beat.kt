@@ -113,8 +113,14 @@ data class Beat(
      */
     val group: String? = null,
 ) {
-    /** True when this beat shipped with the app rather than being user-made. */
-    val isBuiltIn: Boolean get() = id != null && com.kirtan.companion.data.BUILT_IN_ID_SET.contains(id)
+    /**
+     * True when this beat is one of the built-ins rather than user-made.
+     *
+     * Asks [com.kirtan.companion.data.ShippedBeats], not the compiled list: the
+     * built-in set is served from the database, so a beat promoted after this APK
+     * was built has an id that appears nowhere in it and must still be read-only.
+     */
+    val isBuiltIn: Boolean get() = com.kirtan.companion.data.ShippedBeats.isShippedId(id)
 
     /**
      * True when the user may not overwrite it. Built-in beats are read-only;

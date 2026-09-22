@@ -5,6 +5,7 @@ import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.Library
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -61,10 +62,14 @@ class LibraryRepositoryTest {
      * every assertion below would run against an empty library — quietly, because an
      * empty library is also a legal state. A plain scope on the same scheduler is
      * foreground work, which is what these tests need to drive.
+     *
+     * The built-ins arrive as a FLOW because in the app they are one: the set is
+     * served, so it can change while the repository is alive. A test that wants
+     * that moment holds the flow it passed in and pushes into it.
      */
     private fun TestScope.repository(
         provider: BeatsProvider,
-        builtIns: List<Beat> = shipped,
+        builtIns: MutableStateFlow<List<Beat>> = MutableStateFlow(shipped),
     ): LibraryRepository {
         val scope = CoroutineScope(StandardTestDispatcher(testScheduler) + SupervisorJob())
         scopes += scope
@@ -308,6 +313,63 @@ class LibraryRepositoryTest {
             assertEquals(shipped + mine, repo.allBeats.value)
             assertTrue("a shipped beat is not a custom one", repo.isCustomBeat("te_ta").not())
             assertTrue(repo.isCustomBeat("mine"))
+        }
+    }
+
+    @Test
+    fun `a served built-in set replaces the compiled one everywhere it is read`() {
+        runTest {
+            val mine = testBeat(id = "mine", name = "Mine")
+            val builtIns = MutableStateFlow(shipped)
+            val repo = repository(FakeBeatsProvider(beats = listOf(mine)), builtIns)
+            advanceUntilIdle()
+            assertEquals(shipped + mine, repo.allBeats.value)
+
+            // The moment a check for updates lands a different set: one beat
+            // corrected, one gone, one that this build has never seen. NOTHING
+            // else moved — not the library state, not the provider — and every
+            // read of the built-ins has to follow, or the app shows one set while
+            // de-duping names against another.
+            val served = listOf(
+                testBeat(id = "te_ta", name = "Te Ta", note = "Corrected", group = "Foundations"),
+                testBeat(id = "promoted_after_this_build", name = "Dadra", group = "Community"),
+            )
+            builtIns.value = served
+            advanceUntilIdle()
+
+            assertEquals(served + mine, repo.allBeats.value)
+            assertEquals(served, repo.categoryBeats(BUILTIN_CATEGORY))
+            assertFalse(
+                "a beat that left the set is still being served",
+                repo.categoryBeats(BUILTIN_CATEGORY).any { it.id == "forward" },
+            )
+
+            // Naming follows the LIVE set in both directions: a name that arrived
+            // with it is now taken, and one that left with it is now free.
+            assertEquals("Dadra (2)", repo.saveBeat(testBeat(name = "Dadra"))?.name)
+            assertEquals("Forward", repo.saveBeat(testBeat(name = "Forward"))?.name)
+        }
+    }
+
+    @Test
+    fun `a progression that points at a built-in the server removed drops it`() {
+        runTest {
+            val builtIns = MutableStateFlow(shipped)
+            val repo = repository(
+                FakeBeatsProvider(
+                    categories = listOf(testCategory(id = "cat", beatIds = listOf("te_ta", "forward"))),
+                ),
+                builtIns,
+            )
+            advanceUntilIdle()
+            assertEquals(2, repo.categoryBeats("cat").size)
+
+            // A maintainer retiring a beat must not leave Home cycling into a
+            // hole: the progression is filtered against the set that exists now.
+            builtIns.value = shipped.take(1)
+            advanceUntilIdle()
+
+            assertEquals(listOf("te_ta"), repo.categoryBeats("cat").map { it.id })
         }
     }
 

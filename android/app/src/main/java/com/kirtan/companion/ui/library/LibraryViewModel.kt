@@ -8,9 +8,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kirtan.companion.container
+import com.kirtan.companion.data.ShippedBeats
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.Library
 import com.kirtan.companion.storage.LibraryRepository
+import com.kirtan.companion.storage.ShippedStatus
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -33,12 +35,29 @@ import kotlinx.coroutines.launch
  */
 class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repository: LibraryRepository = app.container.library
+    private val container = app.container
+    private val repository: LibraryRepository = container.library
 
     val state: StateFlow<LibraryRepository.State> = repository.state
 
-    /** Every beat: the compiled-in ones with the user's saved work merged above. */
+    /** Every beat: the built-in ones with the user's saved work merged above. */
     val allBeats: StateFlow<List<Beat>> = repository.allBeats
+
+    /**
+     * The built-in set alone, live.
+     *
+     * Collected separately from [allBeats] because a screen that shows only the
+     * built-ins — the Beats screen's count, its section headings — must recompose
+     * when a served set lands, and reading the count out of [allBeats] minus the
+     * custom beats would be arithmetic on two things that change independently.
+     */
+    val builtInBeats: StateFlow<List<Beat>> = ShippedBeats.effective
+
+    /** Where that set came from, and what the last check for updates said. */
+    val shippedStatus: StateFlow<ShippedStatus> = container.shippedStatus
+
+    /** False when this build has no server configured, so there is nothing to check. */
+    val canCheckForUpdates: Boolean get() = container.shippedBeats != null
 
     /**
      * The beat currently loaded into the engine.
@@ -63,13 +82,21 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                     // A beat that vanished (deleted, or filtered out) falls back
                     // to the head of the list.
                     beats.none { it.id == current.id } -> _selectedBeat.value = beats.firstOrNull()
-                    // Otherwise REFRESH to the newest object with the same id.
-                    // Without this, saving an edit left the selection pointing at
-                    // the STALE instance: the library list showed the new pattern
-                    // while Home's strip and the engine — both fed by the
-                    // selection — kept the old one, which read as "my edits didn't
-                    // hold".
+                    // Otherwise REFRESH to the newest object with the same id —
+                    // but only when it actually DIFFERS. Without the refresh,
+                    // saving an edit left the selection pointing at the STALE
+                    // instance: the library list showed the new pattern while
+                    // Home's strip and the engine — both fed by the selection —
+                    // kept the old one, which read as "my edits didn't hold".
+                    //
+                    // Without the difference check, a served built-in set landing
+                    // mid-playback re-selects an equal beat, which re-loads the
+                    // engine, which resets the sequencer's duplicate guard — and
+                    // that guard is the only thing stopping a re-grid from
+                    // double-hitting a stroke. A refresh that changes nothing must
+                    // therefore change nothing.
                     else -> beats.firstOrNull { it.id == current.id }
+                        ?.takeIf { it != current }
                         ?.let { _selectedBeat.value = it }
                 }
             }
@@ -153,6 +180,20 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
     fun reload() {
         viewModelScope.launch { repository.reload() }
+    }
+
+    /**
+     * Ask the server for the built-in set again — the user's button, as distinct
+     * from the check every launch already makes on its own.
+     *
+     * Reports through [shippedStatus] rather than a callback: the answer is a
+     * sentence that belongs under the button whether or not the user is still
+     * looking at it, and a result that arrives after a navigation should not have
+     * to be delivered to a composable that is gone.
+     */
+    fun checkForBeatUpdates() {
+        val client = container.shippedBeats ?: return
+        viewModelScope.launch { client.checkForUpdates(manual = true) }
     }
 
     companion object {
