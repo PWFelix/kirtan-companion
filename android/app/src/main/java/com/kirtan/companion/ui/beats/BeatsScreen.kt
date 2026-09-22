@@ -154,11 +154,19 @@ internal fun BeatsScreen(
     ScreenFrame(modifier = modifier) {
         // The sub-header: a back button on drilled-in pages, a spacer on the
         // landing so the title stays centred in both.
+        //
+        // "Drilled in" is EVERY page but the landing, not just a category. This
+        // read `page is BeatsPage.Category` until Community was added, which left
+        // that page with no way back at all: the header had a spacer where the
+        // button belonged, and the Beats tab does not reset the sub-page — it is
+        // already the selected tab, so tapping it again is a no-op. The only exit
+        // was to leave for Home and come back, which disposes the screen and loses
+        // the search and the scroll with it.
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (page is BeatsPage.Category) {
+            if (page != BeatsPage.Landing) {
                 HairlineIconButton(
                     icon = KcIcons.Back,
                     contentDescription = "Back",
