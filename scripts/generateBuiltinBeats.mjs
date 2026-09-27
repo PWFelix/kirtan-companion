@@ -37,7 +37,7 @@
  * cells-per-quarter (2) and the old `steps = beatsPerBar × cellsPerGroup`
  * invariant does not hold.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { decodeShare } from "../src/data/shareCodec.js";
@@ -45,6 +45,7 @@ import { decodeShare } from "../src/data/shareCodec.js";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const JS_FILE = join(ROOT, "src/data/beats.js");
 const KT_FILE = join(ROOT, "android/app/src/main/java/com/kirtan/companion/data/Beats.kt");
+const SWIFT_FILE = join(ROOT, "ios/KirtanCompanion/Sources/data/Beats.swift");
 
 const arg = process.argv[2];
 const fromServer = arg === "--from-server";
@@ -344,12 +345,46 @@ splice(
   `val BEATS: List<Beat> = listOf(\n${kotlin}\n)\n`,
   "Beats.kt",
 );
+// iOS Swift. The emitter must reproduce byte-for-byte what scripts/generateIosBeats.mjs
+// writes, so the three compiled files stay identical; the anchors match the markers
+// that script stamps.
+const swiftStr = (s) => `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+const swift = rows
+  .map((r) => {
+    const lanes = [
+      `            dayan: ${swiftStr(r.dayan)},`,
+      `            bayan: ${swiftStr(r.bayan)},`,
+      r.kartal ? `            kartal: ${swiftStr(r.kartal)},` : null,
+      r.description ? `            description: ${swiftStr(r.description)},` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return `        builtIn(
+            id: ${swiftStr(r.id)}, group: ${swiftStr(r.group)}, name: ${swiftStr(r.name)}, note: ${swiftStr(r.note)},
+            bpm: ${r.bpm}, groups: [${r.groups.join(", ")}], cpq: ${r.cpq},
+${lanes}
+        ),`;
+  })
+  .join("\n");
+
 splice(
   JS_FILE,
   /export const BEATS = \[[\s\S]*?\n\];\n/,
   `export const BEATS = [\n${js}\n];\n`,
   "beats.js",
 );
+
+// Only splice the iOS file when it already exists (a fresh checkout before the port
+// lands must not fail the canonical generator). The array sits between the BEGIN/END
+// GENERATED markers that generateIosBeats.mjs stamps.
+if (existsSync(SWIFT_FILE)) {
+  splice(
+    SWIFT_FILE,
+    /static let beats: \[Beat\] = \[[\s\S]*?\n    \]\n/,
+    `static let beats: [Beat] = [\n${swift}\n    ]\n`,
+    "Beats.swift",
+  );
+}
 
 console.log(`\n${rows.length} beats:`);
 for (const r of rows) {

@@ -1,0 +1,17 @@
+# Xcode build products. `xcodebuild` writes derived data to a local `build/`
+# (see README's Testing section); it is regenerated on every build and never
+# belongs in the repo. A slash-less pattern matches `build/` at any depth,
+# covering `KirtanCompanion/build/`.
+build/
+
+# Per-user / per-machine Xcode state — regenerated when the project opens.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.dSYM
+*.dSYM.zip
+*.ipa
+
+# Swift Package Manager workspace metadata (regenerated).
+.swiftpm/

@@ -1,0 +1,182 @@
+import SwiftUI
+
+/// The sound panel: master volume, then per-instrument volume/mute, and — for the
+/// two mridanga ends — a five-band EQ and a tuning control.
+///
+/// Ported from `src/views/HomeView.jsx`'s mixer sheet. Every knob writes through the
+/// transport (which mirrors into the engine and persists); every knob reads back from
+/// the persisted snapshot, so reopening the sheet shows exactly what is sounding.
+struct MixerSheet: View {
+    let container: AppContainer
+    let beat: Beat
+
+    private var transport: TransportViewModel { container.transport }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    masterSection
+
+                    ForEach(LaneId.ordered, id: \.self) { lane in
+                        laneSection(lane)
+                    }
+                }
+                .padding(20)
+            }
+            .background(Palette.head.ignoresSafeArea())
+            .navigationTitle("Sound")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var masterSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Master")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Palette.syahiSoft)
+            Slider(
+                value: Binding(
+                    get: { transport.settings.masterVolume },
+                    set: { transport.changeVolume($0) }
+                ),
+                in: 0...1
+            ) {
+                Text("Master")
+            } minimumValueLabel: {
+                Image(systemName: "speaker").foregroundStyle(Palette.faint)
+            } maximumValueLabel: {
+                Image(systemName: "speaker.wave.3.fill").foregroundStyle(Palette.faint)
+            }
+            .tint(Palette.clay)
+        }
+        .sectionCard()
+    }
+
+    private func laneSection(_ lane: LaneId) -> some View {
+        let hasSound = settings().end(lane) != nil   // kartal has no EQ/tune
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(lane.label)
+                    .font(.headline)
+                    .foregroundStyle(Palette.lane(lane))
+                Spacer()
+                Button {
+                    transport.toggleMute(lane)
+                } label: {
+                    Image(systemName: transport.settings.isMuted(lane) ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .foregroundStyle(transport.settings.isMuted(lane) ? Palette.danger : Palette.syahiSoft)
+                }
+            }
+
+            Slider(
+                value: Binding(
+                    get: { transport.settings.volume(lane) },
+                    set: { transport.changeEndVolume(lane, $0) }
+                ),
+                in: 0...1
+            )
+            .tint(Palette.lane(lane))
+
+            if hasSound, let end = settings().end(lane) {
+                eqSection(lane, end: end)
+                tuneSection(lane, end: end)
+            }
+        }
+        .sectionCard()
+    }
+
+    private func eqSection(_ lane: LaneId, end: EndSoundPrefs) -> some View {
+        let open = bindingForEqPanel(lane)
+        return VStack(alignment: .leading, spacing: 10) {
+            Button {
+                transport.toggleEqPanel(lane)
+            } label: {
+                HStack {
+                    Text("Equaliser")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Palette.syahi)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                        .foregroundStyle(Palette.faint)
+                }
+            }
+            if open {
+                ForEach(0..<EQ_BAND_COUNT, id: \.self) { band in
+                    HStack {
+                        Text(EQ_BANDS[band].label)
+                            .font(.caption.monospacedDigit())
+                            .frame(width: 52, alignment: .leading)
+                            .foregroundStyle(Palette.syahiSoft)
+                        Slider(
+                            value: Binding(
+                                get: { transport.settings.end(lane)?.bands[band] ?? 0 },
+                                set: { transport.changeEqBand(lane, bandIndex: band, db: $0) }
+                            ),
+                            in: EQ_MIN_DB...EQ_MAX_DB
+                        )
+                        .tint(Palette.lane(lane))
+                    }
+                }
+            }
+        }
+    }
+
+    private func tuneSection(_ lane: LaneId, end: EndSoundPrefs) -> some View {
+        let open = bindingForTunePanel(lane)
+        return VStack(alignment: .leading, spacing: 10) {
+            Button {
+                transport.toggleTunePanel(lane)
+            } label: {
+                HStack {
+                    Text("Tune  \(end.tuneCents >= 0 ? "+" : "")\(end.tuneCents)¢")
+                        .font(.subheadline.weight(.medium))
+                        .monospacedDigit()
+                        .foregroundStyle(Palette.syahi)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                        .foregroundStyle(Palette.faint)
+                }
+            }
+            if open {
+                Slider(
+                    value: Binding(
+                        get: { Double(transport.settings.end(lane)?.tuneCents ?? 0) },
+                        set: { transport.changeTune(lane, Int($0.rounded())) }
+                    ),
+                    in: Double(TUNE_MIN_CENTS)...Double(TUNE_MAX_CENTS)
+                )
+                .tint(Palette.lane(lane))
+            }
+        }
+    }
+
+    private func settings() -> EqPrefsSnapshot { transport.settings }
+
+    private func bindingForEqPanel(_ lane: LaneId) -> Bool {
+        transport.settings.end(lane)?.eqPanelOpen ?? false
+    }
+
+    private func bindingForTunePanel(_ lane: LaneId) -> Bool {
+        transport.settings.end(lane)?.tunePanelOpen ?? false
+    }
+}
+
+/// The raised card a mixer section sits in.
+private extension View {
+    func sectionCard() -> some View {
+        self
+            .padding(16)
+            .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 14))
+    }
+}
