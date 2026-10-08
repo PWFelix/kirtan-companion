@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** What the engine tells the outside world. Commands go down, events come up. */
 sealed interface EngineEvent {
@@ -108,6 +109,17 @@ class KirtanEngine(
      * one thread.
      */
     private val pendingPads = ConcurrentLinkedQueue<StrokeKey>()
+
+    /**
+     * A start() awaiting the audio thread. The clock must be anchored BY the
+     * audio thread, at the first frame of the block it is about to render.
+     * Anchoring it from the UI thread at `framesRendered` raced the renderer:
+     * if that block was already being rendered (or the count advanced
+     * mid-write), step 0 fell before the next block's `fromFrame` and the
+     * first downbeat was never played. Clearing voices from the UI thread
+     * also raced the unsynchronised voice list.
+     */
+    private val pendingStart = AtomicBoolean(false)
 
     // Reused across blocks: the audio thread must not allocate.
     private val stepScratch = ArrayList<StepEvent>(8)
@@ -245,10 +257,11 @@ class KirtanEngine(
         if (!arm()) return
 
         // Position 0 so the visual playhead and the audio both begin on the
-        // downbeat, matching the web transport's start().
-        clock.start(renderer.framesRendered)
-        soundPlayer.stopAllVoices()
-        sequencer.invalidateGuard()
+        // downbeat, matching the web transport's start(). The anchor itself is
+        // set by the audio thread at the top of its next block — see
+        // [pendingStart] — so step 0 always lands at offset 0 of that block.
+        clock.stop()
+        pendingStart.set(true)
         isPlaying = true
         _events.tryEmit(EngineEvent.Started)
     }
@@ -256,6 +269,7 @@ class KirtanEngine(
     fun stop() {
         if (!isPlaying) return
         isPlaying = false
+        pendingStart.set(false)
         clock.stop()
         // Voices are left to ring out rather than being cut: stopping mid-decay
         // is a click, and a drum that is allowed to finish sounds like a drum
@@ -314,13 +328,21 @@ class KirtanEngine(
     override fun render(fromFrame: Long, count: Int, out: FloatArray) {
         val beat = sequencer.beat
 
-        // 1. Pad taps queued from the UI thread.
+        // 1. A pending start anchors the clock HERE, on the audio thread, at
+        //    this block's first frame — so step 0 is inside this block.
+        if (pendingStart.getAndSet(false)) {
+            soundPlayer.stopAllVoices()
+            sequencer.invalidateGuard()
+            clock.start(fromFrame)
+        }
+
+        // 2. Pad taps queued from the UI thread.
         while (true) {
             val key = pendingPads.poll() ?: break
             soundPlayer.play(key, 0)
         }
 
-        // 2. Sequenced steps falling inside this block.
+        // 3. Sequenced steps falling inside this block.
         if (beat != null && clock.isRunning) {
             stepScratch.clear()
             sequencer.collectStepEvents(fromFrame, fromFrame + count, stepScratch)
@@ -341,7 +363,7 @@ class KirtanEngine(
             }
         }
 
-        // 3. Mix: voices → per-end EQ and fader → master.
+        // 4. Mix: voices → per-end EQ and fader → master.
         soundPlayer.renderBlock(out, count)
     }
 }
