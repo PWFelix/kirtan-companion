@@ -11,4 +11,6 @@
     <color name="clay_deep">#913E23</color>
     <color name="strap">#B38A50</color>
     <color name="on_clay">#F8F5EE</color>
+    <!-- Launcher icon background, sampled from the icon artwork. -->
+    <color name="icon_saffron">#F3A30E</color>
 </resources>
