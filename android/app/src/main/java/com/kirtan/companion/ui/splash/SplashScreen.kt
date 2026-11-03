@@ -41,9 +41,11 @@ import com.kirtan.companion.ui.theme.color
  * process start instead would hold the device through the whole time the app sits
  * in the background, and would take audio focus before the user asked for it.
  *
- * The wheel is not an `<img>` on the web either — it is a clay-filled div with
- * the PNG's transparency used as a CSS mask, so it recolours to the exact `--clay`
- * token. A tint [ColorFilter] is the same idea and re-tints with any future theme.
+ * Behind the wordmark sits the line-drawn mridanga and karatals (the web splash
+ * still uses the dharma wheel). Like the web's wheel, it is not drawn in its own
+ * colours: the PNG is an alpha-only mask of the drawing's lines, tinted to the
+ * `--clay` token, so it re-tints with any future theme. Its alpha is a little
+ * higher than the wheel's was because thin lines read fainter than a solid fill.
  */
 @Composable
 internal fun SplashScreen(
@@ -61,11 +63,11 @@ internal fun SplashScreen(
         contentAlignment = Alignment.Center,
     ) {
         Image(
-            painter = painterResource(R.drawable.dharma_wheel),
+            painter = painterResource(R.drawable.splash_mridanga),
             contentDescription = null,
             modifier = Modifier.size(560.dp),
             contentScale = ContentScale.Fit,
-            colorFilter = ColorFilter.tint(PaletteToken.CLAY.color.copy(alpha = 0.10f)),
+            colorFilter = ColorFilter.tint(PaletteToken.CLAY.color.copy(alpha = 0.14f)),
         )
 
         // The block sits 40dp above true centre, which is what puts the WORDMARK's
