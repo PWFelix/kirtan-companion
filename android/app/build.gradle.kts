@@ -56,8 +56,10 @@ android {
         // which the mixer's buffer sizing depends on.
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Bump BOTH for every build that goes to a tester: versionCode must go
+        // up for Android to accept the update, versionName is what they see.
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
