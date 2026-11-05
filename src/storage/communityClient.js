@@ -65,12 +65,15 @@ async function run(build, whileDoing) {
  */
 export async function publish(target, { authorId, authorName }) {
   const isBeat = target.kind === "beat";
+  // Publishing a copy makes a NEW item; the old item's id (and the beat's own
+  // id) would only mislead whoever adds this one.
+  const clean = ({ id, sourceItemId, ...beat }) => beat; // eslint-disable-line no-unused-vars
   const row = {
     author_id: authorId,
     author_name: authorName || "A devotee",
     kind: isBeat ? "beat" : "playlist",
     name: isBeat ? target.beat.name : target.name,
-    payload: isBeat ? { beat: target.beat } : { name: target.name, beats: target.beats },
+    payload: isBeat ? { beat: clean(target.beat) } : { name: target.name, beats: target.beats.map(clean) },
   };
   const data = await run(
     () => supabase.from("published_beats").insert(row).select("id, author_name, kind, name, copies, created_at").single(),

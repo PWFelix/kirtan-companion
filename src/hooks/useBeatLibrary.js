@@ -154,6 +154,11 @@ export function useBeatLibrary(provider = beatsProvider) {
    */
   async function saveBeat(newBeat) {
     const { id, ...fields } = newBeat;
+    // The editor builds a fresh beat and knows nothing of where it came from;
+    // carry the community origin over so an edited copy still counts as "in
+    // your library" (issue #11).
+    const origin = fields.sourceItemId ?? customBeats.find((b) => b.id === id)?.sourceItemId;
+    if (origin) fields.sourceItemId = origin;
     // Every name in the library EXCEPT this beat's own — otherwise editing a
     // beat without renaming it would suffix it a little further every save
     // ("My Beat (2)", "My Beat (2) (2)"). Built-ins are included, so a custom
@@ -224,8 +229,13 @@ export function useBeatLibrary(provider = beatsProvider) {
    *  - WRITE ONCE PER LIST. Importing a category touches both the beats and
    *    the categories. Calling createBeat in a loop would read stale state
    *    and drop beats, which is exactly the bug this shape prevents.
+   *
+   * `sourceItemId` is the community item being copied, stamped on every beat
+   * so the community list can tell it's already here (issue #11). It lives in
+   * the beat's body, so it syncs with the beat and needs no new column. It is
+   * always overwritten, so a payload can't claim an origin of its own.
    */
-  async function importShared(payload) {
+  async function importShared(payload, { sourceItemId = null } = {}) {
     if (!payload || (payload.kind !== "beat" && payload.kind !== "category")) {
       return { beats: [], catId: null };
     }
@@ -233,7 +243,11 @@ export function useBeatLibrary(provider = beatsProvider) {
     // Re-importing your own link shouldn't produce two rows with one name.
     const takenNames = new Set(allBeats.map((b) => b.name));
     const drafts = (payload.kind === "beat" ? [payload.beat] : payload.beats).map(
-      (draft) => ({ ...draft, name: uniqueName(draft.name, takenNames) })
+      (draft) => ({
+        ...draft,
+        name: uniqueName(draft.name, takenNames),
+        sourceItemId: sourceItemId ?? undefined,
+      })
     );
 
     let beats;
