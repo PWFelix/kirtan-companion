@@ -37,8 +37,8 @@ enum class Feel(val amount: Float, val label: String) {
  *
  * EARLY HITS. A stroke can't sound before the block it's placed in, so when the
  * feel is on, every stroke is delayed by a fixed [PAD_MS] and the variation is
- * applied around that. The whole drum then sits ~10 ms behind the playhead,
- * which is below what anyone sees.
+ * applied around that. The whole drum then sits ~18 ms behind the playhead,
+ * which is hard to see.
  *
  * REPEATABLE. The random stream is reseeded from the beat on every start, so a
  * beat has the same feel each time it plays — useful for comparing settings
@@ -121,19 +121,19 @@ class Humanizer(private val sampleRate: Int) {
     companion object {
         // Loudness: linear gain at full amount.
         const val DOWNBEAT_LEVEL = 1.0f
-        const val BEAT_LEVEL = 0.9f
-        const val OFFBEAT_LEVEL = 0.8f
-        const val GAIN_JITTER_DB = 1.5
+        const val BEAT_LEVEL = 0.82f
+        const val OFFBEAT_LEVEL = 0.65f
+        const val GAIN_JITTER_DB = 2.5
 
         // Timing, in ms at full amount.
-        const val PAD_MS = 10.0
-        const val MAX_LATE_MS = 25.0
+        const val PAD_MS = 18.0
+        const val MAX_LATE_MS = 40.0
         const val DRIFT_PULL = 0.9
-        const val DRIFT_STEP_MS = 1.5
-        const val DRIFT_MAX_MS = 8.0
+        const val DRIFT_STEP_MS = 3.0
+        const val DRIFT_MAX_MS = 15.0
         const val DOWNBEAT_DRIFT_SCALE = 0.4
-        const val JITTER_MS = 1.5
-        const val BAYAN_LAG_MS = 9.0
-        const val BAYAN_LAG_JITTER_MS = 1.5
+        const val JITTER_MS = 3.0
+        const val BAYAN_LAG_MS = 14.0
+        const val BAYAN_LAG_JITTER_MS = 3.0
     }
 }

@@ -53,7 +53,7 @@ class HumanizerTest {
     @Test
     fun `gain stays within a few dB of the accent`() {
         val (_, gains) = run(humanizer(Feel.LOOSE), steps = 2_000)
-        assertTrue(gains.all { it in 0.5f..1.5f })
+        assertTrue(gains.all { it in 0.25f..1.9f })
     }
 
     @Test
@@ -67,7 +67,7 @@ class HumanizerTest {
             bayan += h.delayFrames(LaneId.BAYAN, i % 8)
         }
         val lagMs = (bayan - dayan).toDouble() / 2_000 / rate * 1000
-        assertTrue("lag was $lagMs ms", lagMs in 4.0..10.0)
+        assertTrue("lag was $lagMs ms", lagMs in 7.0..14.0)
     }
 
     @Test
