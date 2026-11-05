@@ -1,6 +1,7 @@
 package com.kirtan.companion.storage
 
 import androidx.datastore.core.DataStore
+import com.kirtan.companion.engine.Feel
 import androidx.datastore.preferences.core.Preferences
 import com.kirtan.companion.data.EQ_BAND_COUNT
 import com.kirtan.companion.data.TUNE_MAX_CENTS
@@ -208,6 +209,8 @@ data class EqPrefsSnapshot(
      * device and expects to survive a reinstall of their settings.
      */
     val uiScale: Float,
+    /** How much human variation the drum plays with. Off on a fresh install. */
+    val feel: Feel = Feel.OFF,
     val dayan: EndSoundPrefs,
     val bayan: EndSoundPrefs,
 ) {
@@ -282,6 +285,7 @@ internal object EqPrefsCodec {
     private const val KEY_SHOW_BOLS = "showBols"
     private const val KEY_SHOW_STEP_LABELS = "showStepLabels"
     private const val KEY_UI_SCALE = "uiScale"
+    private const val KEY_FEEL = "feel"
     private const val KEY_BANDS = "bands"
     private const val KEY_TUNE = "tune"
     private const val KEY_OPEN = "open"
@@ -303,6 +307,7 @@ internal object EqPrefsCodec {
         put(KEY_SHOW_BOLS, snapshot.showBols)
         put(KEY_SHOW_STEP_LABELS, snapshot.showStepLabels)
         put(KEY_UI_SCALE, snapshot.uiScale)
+        put(KEY_FEEL, snapshot.feel.name)
         put(KEY_DAYAN, encodeEnd(snapshot.dayan))
         put(KEY_BAYAN, encodeEnd(snapshot.bayan))
     }.toString()
@@ -335,6 +340,7 @@ internal object EqPrefsCodec {
             showBols = boolOf(parsed[KEY_SHOW_BOLS], false),
             showStepLabels = boolOf(parsed[KEY_SHOW_STEP_LABELS], true),
             uiScale = scaleOf(parsed[KEY_UI_SCALE]),
+            feel = feelOf(parsed[KEY_FEEL]),
             dayan = endOf(parsed[KEY_DAYAN]),
             bayan = endOf(parsed[KEY_BAYAN]),
         )
@@ -412,6 +418,12 @@ internal object EqPrefsCodec {
 
     private fun boolOf(element: JsonElement?, default: Boolean): Boolean =
         (element as? JsonPrimitive)?.booleanOrNull ?: default
+
+    /** A stored feel by name; anything unknown is Off. */
+    private fun feelOf(element: JsonElement?): Feel {
+        val name = (element as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return Feel.OFF
+        return Feel.entries.firstOrNull { it.name == name } ?: Feel.OFF
+    }
 
     /**
      * The interface scale, clamped into [EqPrefsSnapshot.UI_SCALE_MIN]…MAX.

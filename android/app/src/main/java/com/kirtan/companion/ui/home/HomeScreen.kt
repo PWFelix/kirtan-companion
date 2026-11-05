@@ -1,5 +1,6 @@
 package com.kirtan.companion.ui.home
 
+import com.kirtan.companion.engine.Feel
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -473,6 +474,38 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 fontWeight = FontWeight.Medium,
+            )
+        }
+
+        // EXPERIMENT: human timing and loudness variation (engine/Humanizer.kt).
+        // Four fixed levels rather than a slider so it's easy to A/B by ear.
+        Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
+            SectionLabel("Feel")
+            Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
+                for (feel in Feel.entries) {
+                    if (feel == settings.feel) {
+                        PrimaryButton(
+                            label = feel.label,
+                            onClick = {},
+                            modifier = Modifier.weight(1f),
+                            minHeight = 44.dp,
+                            radius = dimens.radiusPad,
+                        )
+                    } else {
+                        SecondaryButton(
+                            label = feel.label,
+                            onClick = { transport.setFeel(feel) },
+                            modifier = Modifier.weight(1f),
+                            minHeight = 44.dp,
+                        )
+                    }
+                }
+            }
+            Text(
+                text = "Small changes in timing and loudness, so the drum sounds played " +
+                    "rather than programmed.",
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
             )
         }
 

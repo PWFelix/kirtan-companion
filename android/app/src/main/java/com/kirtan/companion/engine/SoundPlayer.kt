@@ -182,9 +182,10 @@ class SoundPlayer(
     /**
      * Trigger a stroke at [offsetInBlock] frames into the block about to be
      * rendered. A stroke whose samples never loaded is a silent no-op, matching
-     * the web player's "no sound named ..." path.
+     * the web player's "no sound named ..." path. [offsetInBlock] may run past
+     * the block (a humanised delay); [gain] scales just this stroke.
      */
-    fun play(key: StrokeKey, offsetInBlock: Int) {
+    fun play(key: StrokeKey, offsetInBlock: Int, gain: Float = 1f) {
         // Round-robin lives with the samples that own it, so the mixer keeps its
         // own cursor per stroke rather than asking the bank.
         val pool = bank[key] ?: return
@@ -196,7 +197,7 @@ class SoundPlayer(
 
         if ((voicesPerLane[lane] ?: 0) >= MAX_VOICES_PER_LANE) stealOldest(lane)
 
-        voices.add(Voice(sample, offsetInBlock))
+        voices.add(Voice(sample, offsetInBlock, gain))
         voicesPerLane[lane] = (voicesPerLane[lane] ?: 0) + 1
     }
 

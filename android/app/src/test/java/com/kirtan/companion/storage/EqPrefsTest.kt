@@ -312,6 +312,14 @@ class EqPrefsTest {
     }
 
     @Test
+    fun `feel round-trips, and anything unknown reads as Off`() {
+        val snapshot = EqPrefsSnapshot.DEFAULT.copy(feel = com.kirtan.companion.engine.Feel.HUMAN)
+        assertEquals(snapshot, EqPrefsCodec.decode(EqPrefsCodec.encode(snapshot)))
+        assertEquals(com.kirtan.companion.engine.Feel.OFF, EqPrefsCodec.decode("""{"feel":"wobbly"}""").feel)
+        assertEquals(com.kirtan.companion.engine.Feel.OFF, EqPrefsCodec.decode("""{"feel":3}""").feel)
+    }
+
+    @Test
     fun `the stored blob uses the web's per-end field names`() {
         // `bands`, `tune`, `open`, `tuneOpen` are `src/storage/eqPrefs.js`'s keys, so
         // a settings file carried across from the browser still means the same thing.
@@ -324,6 +332,8 @@ class EqPrefsTest {
                 // This port's own key: the web app has never persisted an
                 // interface scale, so there is no cross-platform name to honour.
                 "uiScale",
+                // Also Android-only for now: the humanised-feel experiment.
+                "feel",
             ),
             blob.keys,
         )

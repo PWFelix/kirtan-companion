@@ -1,5 +1,6 @@
 package com.kirtan.companion.ui.transport
 
+import com.kirtan.companion.engine.Feel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -220,6 +221,7 @@ class TransportViewModel(
             end.bands.forEachIndexed { i, db -> engine.setEqBand(lane, i, db) }
             engine.setEndPitch(lane, end.tuneCents)
         }
+        engine.setFeel(settings.feel)
     }
 
     // ── Tempo ──────────────────────────────────────────────────────────────
@@ -241,6 +243,12 @@ class TransportViewModel(
     fun setTempoLocked(locked: Boolean) {
         tempoLocked = locked
         publish(settings.copy(tempoLocked = locked))
+    }
+
+    /** How much human variation the drum plays with. See [com.kirtan.companion.engine.Humanizer]. */
+    fun setFeel(feel: Feel) {
+        engine.setFeel(feel)
+        publish(settings.copy(feel = feel))
     }
 
     /**

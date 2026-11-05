@@ -21,10 +21,15 @@ package com.kirtan.companion.engine
  * used because the rate is at most ±600 cents (×0.71 to ×1.41) and the material
  * is broadband percussion; a table-driven cubic interpolator would be the next
  * step up if the tuning range were ever widened or a pitched instrument added.
+ *
+ * [startOffset] may be longer than a block: the feel ([Humanizer]) delays
+ * strokes by up to a few tens of ms, so a voice can wait through whole blocks
+ * before it starts. [gain] is the stroke's loudness, also from the feel.
  */
 class Voice(
     val sample: PcmSample,
     var startOffset: Int,
+    val gain: Float = 1f,
 ) {
     /** Fractional read position in the sample, in source frames. */
     var position: Double = 0.0
@@ -51,15 +56,21 @@ class Voice(
         // expects from something labelled like head tension.
         val step = if (rate > 0.0) rate else 1.0
 
+        // Still waiting: the whole block passes before this voice begins.
+        if (startOffset >= count) {
+            startOffset -= count
+            return
+        }
         var i = if (startOffset > 0) startOffset else 0
         startOffset = 0
+        val g = gain
         var pos = position
 
         while (i < count && pos < last) {
             val i0 = pos.toInt()
             val frac = (pos - i0).toFloat()
             val s0 = data[i0]
-            out[i] += s0 + (data[i0 + 1] - s0) * frac
+            out[i] += (s0 + (data[i0 + 1] - s0) * frac) * g
             pos += step
             i++
         }

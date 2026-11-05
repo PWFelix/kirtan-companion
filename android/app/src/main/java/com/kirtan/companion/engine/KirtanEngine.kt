@@ -93,6 +93,7 @@ class KirtanEngine(
     private val clock = MusicalClock(sampleRate)
     private val soundPlayer = SoundPlayer(sampleRate, BLOCK_SIZE)
     private val sequencer = Sequencer(clock)
+    private val humanizer = Humanizer(sampleRate)
     private val renderer = AudioRenderer(sampleRate, BLOCK_SIZE, this)
     private val bank = SampleBank(assets)
 
@@ -212,6 +213,7 @@ class KirtanEngine(
      */
     fun setBeat(beat: Beat) {
         currentBeat = beat
+        humanizer.setBeat(beat)
         sequencer.beat = beat
         sequencer.invalidateGuard()
     }
@@ -246,6 +248,13 @@ class KirtanEngine(
     fun hasEq(lane: LaneId): Boolean = soundPlayer.hasEq(lane)
 
     fun setEndPitch(lane: LaneId, cents: Int) = soundPlayer.setEndPitch(lane, cents)
+
+    /** How much human variation the drum plays with. See [Humanizer]. */
+    fun setFeel(feel: Feel) {
+        humanizer.feel = feel
+    }
+
+    fun feel(): Feel = humanizer.feel
 
     /** Begin playing from the top of the bar. */
     fun start() {
@@ -333,6 +342,7 @@ class KirtanEngine(
         if (pendingStart.getAndSet(false)) {
             soundPlayer.stopAllVoices()
             sequencer.invalidateGuard()
+            humanizer.reset()
             clock.start(fromFrame)
         }
 
@@ -355,9 +365,14 @@ class KirtanEngine(
                 Log.v(TAG, "step ${event.step} frame=${event.frame} block=$fromFrame offset=$offset")
                 // Iterated inline rather than via a helper that builds a list:
                 // this runs ten times a second forever, so it allocates nothing.
+                humanizer.advance()
                 for (lane in LaneId.ORDERED) {
                     val stroke = beat.strokeAt(lane, event.step) ?: continue
-                    soundPlayer.play(StrokeKey(lane, stroke == Stroke.OPEN), offset)
+                    soundPlayer.play(
+                        StrokeKey(lane, stroke == Stroke.OPEN),
+                        offset + humanizer.delayFrames(lane, event.step),
+                        humanizer.gain(event.step),
+                    )
                 }
                 _events.tryEmit(EngineEvent.Step(event.step))
             }
