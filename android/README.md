@@ -209,6 +209,23 @@ permanently disabled), a dropped `ready = true` in the event handler, and
 `SimpleBasePlayer` throwing `IllegalStateException` when touched off the main
 thread. None of these is visible to a compiler or a JVM test.
 
+## Learn: falling strokes
+
+The Learn tab shows the loaded beat as a "falling notes" highway (`ui/learn/`).
+There are four columns, one per hand and stroke, each headed by its bol: Ge, Khe |
+Te, Ta. They are laid out the way the drum sits: bayan on the left, dayan on the
+right, open strokes on the outside. Each stroke lands on the hit line at the moment
+the drum sounds it, so a learner can read ahead and play along on a real mridanga.
+It is watch-only on purpose, with no scoring. It shares the transport with Home
+(same beat, tempo and play state), and its tempo buttons move in 5 BPM steps,
+because learners need *slower*.
+
+Position comes from `engine.getPhase() × steps`, read once per display frame. That
+value is already corrected for output latency, so the notes stay in time with the
+sound and never drift. The window is time-based (1.8 s ahead), so notes fall at a
+readable speed at any tempo. The note layout (`Highway.kt`) is pure and covered by
+`HighwayTest`.
+
 ## Sharing and importing
 
 Outbound: a beat's detail sheet and a list's page both offer Share, which gives

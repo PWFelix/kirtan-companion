@@ -61,6 +61,7 @@ import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.components.SectionLabel
 import com.kirtan.companion.ui.editor.BeatEditorScreen
 import com.kirtan.companion.ui.home.HomeScreen
+import com.kirtan.companion.ui.learn.LearnScreen
 import com.kirtan.companion.ui.icons.CheckDot
 import com.kirtan.companion.ui.library.LibraryViewModel
 import com.kirtan.companion.ui.nav.BottomNav
@@ -302,7 +303,11 @@ internal fun KirtanApp(
                     )
                 }
 
-                Tab.LEARN -> LearnScreen()
+                Tab.LEARN -> LearnScreen(
+                    transport = transport,
+                    library = library,
+                    beat = selectedBeat,
+                )
 
                 Tab.SETTINGS -> SettingsScreen(transport = transport, container = container)
             }
@@ -503,43 +508,6 @@ private fun ShippedRemoveSheet(
             )
             SecondaryButton(label = "Cancel", onClick = onDismiss)
         }
-    }
-}
-
-/**
- * The Learn tab.
- *
- * A placeholder, as it is on the web (`src/views/LearnView.jsx` is 33 lines).
- * PROJECT_PLAN §2 puts Group B — "teach me / help me learn" — explicitly LATER,
- * so this screen is meant to be thin; inventing content for it now would be
- * building ahead of the plan.
- */
-@Composable
-private fun LearnScreen() {
-    val dimens = KirtanTheme.dimens
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .widthIn(max = dimens.screenMaxWidth)
-            .padding(dimens.screenPaddingSide),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-    ) {
-        Text(
-            text = "Learn",
-            color = PaletteToken.SYAHI.color,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(dimens.space3))
-        Text(
-            text = "Guided learning comes later. For now, turn on bols in Settings " +
-                "to see the spoken name of every stroke under the beat.",
-            color = PaletteToken.SYAHI_SOFT.color,
-            fontSize = 13.4.sp,
-            lineHeight = 20.sp,
-            textAlign = TextAlign.Center,
-        )
     }
 }
 
