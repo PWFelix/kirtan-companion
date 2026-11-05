@@ -22,6 +22,10 @@
 	<!-- The Supabase project. A build WITHOUT these compiles the cloud features out
 	     (SupabaseConfig.isConfigured is false), so they are safe to ship and simply
 	     unused until a real project is configured. Taken from the shared backend. -->
+	<!-- Where outbound share links point (e.g. https://kirtan.example). Empty means
+	     links use the kirtan://beat?c=… scheme, which only opens this app. -->
+	<key>KIRTAN_SHARE_WEB_BASE</key>
+	<string></string>
 	<key>KIRTAN_SUPABASE_URL</key>
 	<string>https://jsmrjnzhlrwxfgxucbks.supabase.co</string>
 	<key>KIRTAN_SUPABASE_ANON_KEY</key>

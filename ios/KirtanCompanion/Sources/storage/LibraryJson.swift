@@ -50,6 +50,7 @@ enum LibraryJson {
     private static let keyGroups = "groups"
     private static let keyDescription = "description"
     private static let keyGroup = "group"
+    private static let keySourceItemId = "sourceItemId"
     private static let keyBeatIds = "beatIds"
 
     // ── Encoding ───────────────────────────────────────────────────────────
@@ -82,6 +83,9 @@ enum LibraryJson {
         }
         if let group = beat.group {
             pairs.append(JPair(key: keyGroup, value: .string(group)))
+        }
+        if let source = beat.sourceItemId {
+            pairs.append(JPair(key: keySourceItemId, value: .string(source)))
         }
         for lane in LaneId.ordered {
             if let cells = beat.pattern(lane) {
@@ -200,6 +204,7 @@ enum LibraryJson {
             description: obj.stringField(keyDescription),
             lanePatterns: lanes,
             group: obj.stringField(keyGroup),
+            sourceItemId: obj.stringField(keySourceItemId),
         )
     }
 

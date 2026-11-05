@@ -21,7 +21,8 @@ final class CommunityClient {
     private static let table = "published_beats"
     // The web app's browse column set — proven against the live project. `payload` carries
     // the snapshot so a card can preview the real pattern without a second request.
-    private static let columns = "id, author_id, author_name, kind, name, payload, copies, created_at"
+    private static let columns = "id, author_id, author_name, kind, name, payload, copies, rating_sum, rating_count, created_at"
+    private static let ratings = "published_ratings"
     private static let anonymousAuthor = "A devotee"
     private static let defaultLimit = 40
 
@@ -109,6 +110,50 @@ final class CommunityClient {
         }
     }
 
+    /// Set or clear the signed-in user's rating on an item. Upsert on (item_id, user_id): one
+    /// rating per person per item. Nil CLEARS — tapping your own star again takes it back,
+    /// and clearing is a delete rather than a zero, which would drag the average down. The
+    /// parent row's counters are kept by a database trigger.
+    func rate(itemId: String, userId: String, stars: Int?) async throws {
+        guard let stars else {
+            _ = try await client.delete(
+                table: Self.ratings,
+                filters: [("item_id", "eq.\(itemId)"), ("user_id", "eq.\(userId)")],
+                whileDoing: "remove that rating",
+            )
+            return
+        }
+        precondition((1...5).contains(stars), "a rating is 1 to 5 stars")
+        _ = try await client.upsert(
+            table: Self.ratings,
+            body: JValue.object([
+                JPair(key: "item_id", value: .str(itemId)),
+                JPair(key: "user_id", value: .str(userId)),
+                JPair(key: "stars", value: .int(stars)),
+            ]),
+            onConflict: "item_id,user_id",
+            whileDoing: "save that rating",
+        )
+    }
+
+    /// The signed-in user's own stars per item, so their stars show what they chose rather
+    /// than the community average. One query for the whole page.
+    func myRatings(userId: String, itemIds: [String]) async throws -> [String: Int] {
+        guard !itemIds.isEmpty else { return [:] }
+        let rows = try await client.select(
+            table: Self.ratings, columns: "item_id,stars",
+            filters: [("user_id", "eq.\(userId)"), ("item_id", "in.(\(itemIds.joined(separator: ",")))")],
+            whileDoing: "load your ratings",
+        )
+        var out: [String: Int] = [:]
+        for row in rows?.asArray() ?? [] {
+            guard let id = row.element("item_id")?.asString(),
+                  let stars = row.element("stars")?.asNumber() else { continue }
+            out[id] = Int(stars)
+        }
+        return out
+    }
+
     /// A published row as the payload LibraryRepository.importShared consumes. Nil when the
     /// row's snapshot will not decode — an item published by a future app version, or a
     /// damaged payload. Ids are stripped on the way out.
@@ -135,6 +180,9 @@ final class CommunityClient {
     private func beatWithoutId(_ beat: Beat) -> Beat {
         var copy = beat
         copy.id = nil
+        // Publishing a copy makes a NEW item; the old item's id would make other
+        // people's "In your library" wrong.
+        copy.sourceItemId = nil
         return copy
     }
 
@@ -151,6 +199,8 @@ final class CommunityClient {
             name: row?.element("name")?.asString() ?? "",
             payload: row?.element("payload") ?? JValue.object([]),
             copies: row?.element("copies")?.asNumber().map { Int($0) } ?? 0,
+            ratingSum: row?.element("rating_sum")?.asNumber().map { Int($0) } ?? 0,
+            ratingCount: row?.element("rating_count")?.asNumber().map { Int($0) } ?? 0,
             createdAt: parseTimestamp(row?.element("created_at")?.asString()),
         )
     }
@@ -177,8 +227,15 @@ struct PublishedItem: Identifiable {
     /// The snapshot: `{ beat }` or `{ name, beats }`, in LibraryJson's shape.
     let payload: JValue
     let copies: Int
+    /// Sum of all stars, maintained by a database trigger.
+    var ratingSum: Int = 0
+    /// How many people rated it; zero means "nobody yet", not "zero stars".
+    var ratingCount: Int = 0
     /// Epoch seconds, or nil when the server's timestamp could not be read.
     let createdAt: Int?
+
+    /// The community's average, or nil when nobody has rated it yet.
+    var averageStars: Double? { ratingCount > 0 ? Double(ratingSum) / Double(ratingCount) : nil }
 }
 
 // The PostgREST filters for a community search. Pure so the wiring is testable: EVERYTHING

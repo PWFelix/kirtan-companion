@@ -26,6 +26,15 @@ struct RootView: View {
     /// argument): skip the splash and drive a full start so the logs prove the whole
     /// path — decode, arm, start, and a clock that keeps advancing.
     private func autostartIfRequested() {
+        #if DEBUG
+        // Screenshot runs: past the splash, but SILENT — nothing should keep playing in a
+        // simulator nobody is listening to.
+        if ProcessInfo.processInfo.arguments.contains("-kirtanSkipSplash") {
+            running = true
+            Task { await container.begin() }
+            return
+        }
+        #endif
         guard ProcessInfo.processInfo.arguments.contains("-kirtanAutostart") else { return }
         running = true
         Task {

@@ -9,13 +9,14 @@ struct NavigationShell: View {
     let container: AppContainer
 
     enum Destination: String, CaseIterable, Identifiable {
-        case home, beats, settings
+        case home, beats, learn, settings
         var id: String { rawValue }
 
         var title: String {
             switch self {
             case .home: return "Play"
             case .beats: return "Beats"
+            case .learn: return "Learn"
             case .settings: return "Settings"
             }
         }
@@ -24,14 +25,18 @@ struct NavigationShell: View {
             switch self {
             case .home: return "play.circle.fill"
             case .beats: return "music.note.list"
+            case .learn: return "graduationcap"
             case .settings: return "slider.horizontal.3"
             }
         }
     }
 
     @State private var destination: Destination = NavigationShell.defaultDestination()
-    /// The editor opens full-screen over the shell and returns here on save/cancel.
-    @State private var editing: Bool = false
+    /// The editor opens full-screen over the shell and returns here on save/cancel. Nil
+    /// when closed; otherwise what it is editing (new, yours, a fork, or for everyone).
+    @State private var editorMode: BeatEditorView.EditorMode?
+
+    private var auth: AuthViewModel { container.auth }
 
     /// The tab to open on launch. In DEBUG it honours `-kirtanStartView <name>` so the
     /// harness can screenshot a specific screen; `.home` otherwise.
@@ -54,23 +59,48 @@ struct NavigationShell: View {
 
             BottomBar(
                 destination: $destination,
-                onEditor: { editing = true },
+                onEditor: { editorMode = .new },
             )
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
 
-            if editing {
+            if let editorMode {
                 Color.clear
-                    .onTapGesture { editing = false }
+                    .onTapGesture { self.editorMode = nil }
                     .ignoresSafeArea()
                 BeatEditorView(
                     container: container,
-                    onDone: { editing = false },
+                    mode: editorMode,
+                    onDone: { self.editorMode = nil },
                 )
+                .id(editorMode.title + (editorMode.seed?.id ?? ""))
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+
+            if let notice = auth.notice {
+                NoticeBanner(text: notice) { auth.notice = nil }
+                    .padding(.bottom, 96)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .animation(.easeInOut(duration: 0.22), value: editing)
+        .animation(.easeInOut(duration: 0.22), value: editorMode != nil)
+        .animation(.easeInOut(duration: 0.2), value: auth.notice)
+        // Inbound links and the first-sign-in offer can arrive on any tab.
+        .sheet(isPresented: Binding(get: { auth.pendingImport != nil }, set: { if !$0 { auth.pendingImport = nil } })) {
+            if let payload = auth.pendingImport {
+                ImportConfirmView(payload: payload, onDismiss: { auth.pendingImport = nil }) {
+                    auth.pendingImport = nil
+                    destination = .beats
+                    Task { await container.acceptImport(payload) }
+                }
+            }
+        }
+        .sheet(isPresented: Binding(get: { auth.pendingMigration != nil && auth.pendingImport == nil },
+                                    set: { if !$0 { auth.pendingMigration = nil } })) {
+            if let local = auth.pendingMigration {
+                MigrationSheetView(container: container, local: local)
+            }
+        }
     }
 
     @ViewBuilder
@@ -79,7 +109,9 @@ struct NavigationShell: View {
         case .home:
             HomeView(container: container)
         case .beats:
-            BeatsView(container: container)
+            BeatsView(container: container, onEdit: { editorMode = $0 })
+        case .learn:
+            LearnView()
         case .settings:
             SettingsView(container: container)
         }
@@ -105,8 +137,8 @@ struct BottomBar: View {
                     .clipShape(Circle())
                     .offset(y: -10)
             }
+            item(.learn)
             item(.settings)
-            Color.clear.frame(width: 52, height: 52) // balance the raised centre
         }
         .padding(8)
         .background(Palette.headWorn)
@@ -124,10 +156,55 @@ struct BottomBar: View {
                     .frame(width: 40, height: 26)
                 Text(dest.title)
                     .font(.caption2)
-                    .frame(width: 56)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .foregroundStyle(destination == dest ? Palette.clay : Palette.faint)
             .frame(maxWidth: .infinity)
         }
+    }
+}
+
+/// The Learn tab. A placeholder, as on the web (`src/views/LearnView.jsx`) and Android:
+/// guided lessons are a later phase of PROJECT_PLAN.md, and the bols toggle is the part
+/// of "learning" that exists today.
+struct LearnView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "graduationcap")
+                .font(.system(size: 40))
+                .foregroundStyle(Palette.strap)
+            Text("Learn")
+                .font(.system(size: 26, weight: .semibold, design: .serif))
+                .foregroundStyle(Palette.syahi)
+            Text("Guided learning comes later. For now, turn on bols in Settings to see the spoken name of every stroke under the beat.")
+                .font(.subheadline)
+                .foregroundStyle(Palette.syahiSoft)
+                .multilineTextAlignment(.center)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A short confirmation that clears itself, so a finished action never needs a tap.
+struct NoticeBanner: View {
+    let text: String
+    var onDone: () -> Void
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(Palette.onClay)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Palette.syahi, in: Capsule())
+            .padding(.horizontal, 24)
+            .onTapGesture(perform: onDone)
+            .task(id: text) {
+                try? await Task.sleep(for: .seconds(3.5))
+                onDone()
+            }
     }
 }

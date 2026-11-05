@@ -187,6 +187,11 @@ final class LibraryRepository {
                 var fields = newBeat
                 fields.id = nil
                 fields.name = name
+                // The editor builds a fresh Beat and knows nothing of where it came from;
+                // carry the community origin over so an edited copy still counts as "in
+                // your library" (issue #11).
+                fields.sourceItemId = newBeat.sourceItemId
+                    ?? current.customBeats.first { id != nil && $0.id == id }?.sourceItemId
                 let saved: Beat
                 if let id, editing {
                     saved = try await self.provider.updateBeat(id: id, patch: fields)
@@ -244,7 +249,10 @@ final class LibraryRepository {
     /// (ShareCodec carries none, so a stranger's link cannot name one of the user's beats and
     /// quietly replace it) and writes once per list (a loop of createBeat would read stale
     /// state and drop beats).
-    func importShared(_ payload: ShareCodec.SharePayload?) async -> ImportResult {
+    ///
+    /// `sourceItemId` is the community item being copied, stamped on every beat so the
+    /// community screen can tell it's already here. Nil for share links.
+    func importShared(_ payload: ShareCodec.SharePayload?, sourceItemId: String? = nil) async -> ImportResult {
         await withWrite {
             guard let payload else { return ImportResult(beats: [], categoryId: nil) }
 
@@ -268,6 +276,7 @@ final class LibraryRepository {
                 var d = beat
                 d.id = nil
                 d.name = uniqueName(beat.name, &taken)
+                d.sourceItemId = sourceItemId
                 drafts.append(d)
             }
 
@@ -376,6 +385,24 @@ final class LibraryRepository {
                 self.log.warn("[library] category not created", error)
                 self.state.error = storageErrorMessage(error)
                 return nil
+            }
+        }
+    }
+
+    /// Rename a progression. A clash with another list gets the same "(2)" suffix a new one
+    /// would, for the same reason: a row shows the name and nothing else. A blank name is
+    /// ignored rather than saved — a list with no name is a row nobody can find.
+    func renameCategory(_ categoryId: String, _ name: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return }
+        await withWrite {
+            let current = self.state.categories
+            guard let existing = current.first(where: { $0.id == categoryId }), existing.name != trimmed else { return }
+            var taken = Set(current.filter { $0.id != categoryId }.map { $0.name })
+            let unique = uniqueName(trimmed, &taken)
+            let next = current.map { $0.id == categoryId ? Category(id: $0.id, name: unique, beatIds: $0.beatIds) : $0 }
+            _ = await self.optimisticCategories(prev: current, next: next) {
+                _ = try await self.provider.updateCategory(id: categoryId, patch: CategoryPatch(name: unique))
             }
         }
     }

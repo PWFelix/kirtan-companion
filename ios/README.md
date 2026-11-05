@@ -112,8 +112,19 @@ the shared backend (see `Info.plist`'s `KIRTAN_SUPABASE_*`).
 The cloud surfaces are drawn: **Settings** shows the signed-in account (Sign in opens the
 OAuth redirect in an in-app browser and the `kirtan://` return lands the session; Sign
 out clears it), and **Beats** carries a *Community* segment that browses the public
-library — a search, a card per item with a mini pattern preview, and a one-tap copy into
-the local library.
+library — a search scoped to everything / names / authors, a card per item with a mini
+pattern preview, star ratings (yours, plus the community average), a one-tap copy that
+afterwards reads **In your library** (the copy remembers its `sourceItemId`), and
+unpublish for your own items.
+
+**At parity with Android (0.2.0):** a **Feel** setting in the mixer (a deterministic
+humanizer: timing drift, accents, a slightly lagging bayan); Share and Import sheets with
+`kirtan://beat?c=…` links (or a web base set in `KIRTAN_SHARE_WEB_BASE`); publish /
+unpublish from any beat's or list's "…" menu; editing saved beats; creating and renaming
+progressions; a first-sign-in offer to move the device library into the account; the
+built-in set served from `shipped_beats` (cached, validated, falling back to the compiled
+set); maintainer tools to edit or remove a built-in for everyone and promote a community
+beat into it; a Learn tab placeholder; the app icon and splash drawing.
 
 The **Beats library** is a sectioned scroll (built-in / your beats / each progression a
 beat belongs to) with a live search and per-beat delete. The web's desktop *hub-of-cards*
@@ -121,10 +132,9 @@ that drills into per-category pages with drag-reorder is deliberately flattened:
 list reads better, and the repository only reorders real user categories (not the virtual
 "Your beats" list), so drag-reorder is the one interaction left out.
 
-**Deferred:** nothing user-facing remains. The web's maintainer-only "promote a shared
-beat into the shipped set" is not ported (it writes to what the app ships, not a user's
-own copy), and beat drag-reorder (above) is omitted because it would need the repository
-to also order the virtual "Your beats" list.
+**Deferred:** beat drag-reorder (above) is omitted because it would need the repository
+to also order the virtual "Your beats" list. Guided learning (the Learn tab) is not built
+on any platform yet.
 
 ## Testing
 
@@ -134,12 +144,14 @@ xcodebuild -project KirtanCompanion.xcodeproj -scheme KirtanCompanion \
   -derivedDataPath ./build test
 ```
 
-Five suites (76 tests), all run on the simulator: `DataTests` (the beat/meter/share
+Seven suites (94 tests), all run on the simulator: `DataTests` (the beat/meter/share
 layer), `EngineTests` (the pure DSP — gain ramps, the biquad, the soft clip, the musical
 clock — no live `AVAudioEngine`), `StorageTests` (the pure mixer-prefs codec plus real
 round-trips against the store file), and `CloudTests` (the pure halves of the transport:
 PKCE, URL building, error mapping, row mapping, search filters — the exact places a
-shape mismatch between the two platforms hides). The live network path is not a unit test
+shape mismatch between the two platforms hides), `HumanizerTests` (the Feel), and
+`ParityTests` (served built-in validation and the row writer, `sourceItemId` provenance,
+category rename, deep links, rating averages). The live network path is not a unit test
 (a flaky network would fail CI); it is verified separately with an anonymous community
 browse against the configured project.
 

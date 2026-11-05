@@ -72,6 +72,11 @@ struct Beat: Hashable {
     /// The built-in beats' section heading — "Everyday", "Building up", etc. Display
     /// metadata, not a category: "builtin" is the category, group only sub-divides it.
     var group: String?
+    /// The community item this beat was copied from, or nil for a beat the user made (or
+    /// got from a share link). Kept in the beat's stored body, so it syncs with the beat
+    /// and needs no new column. Lets Community show "In your library" instead of letting
+    /// you add the same item twice (issue #11). Beats copied from a list carry the LIST's id.
+    var sourceItemId: String? = nil
 
     /// True when this beat is one of the built-ins rather than user-made. Asks
     /// ShippedBeats, not the compiled list: the built-in set is served from the

@@ -25,6 +25,8 @@ final class AppContainer {
     // it is a sibling of.
     let supabase: SupabaseClient?
     let community: CommunityClient?
+    /// The served built-in set and the maintainer writes. Nil without a cloud.
+    let shippedBeats: ShippedBeatsClient?
     /// The observable account slice views read; `supabase` is the engine underneath.
     let auth: AuthViewModel
     private let localProvider: BeatsProvider
@@ -41,6 +43,10 @@ final class AppContainer {
         let supabase = SupabaseClient.fromBundle(store: store)
         let community = supabase.map { CommunityClient(client: $0) }
         let auth = AuthViewModel(configured: supabase != nil)
+        let shippedBeats = supabase.map { ShippedBeatsClient(client: $0, store: store) }
+        // The cached set goes in before anything reads the built-ins, so a returning user
+        // never sees the compiled set disagree with their playlists for a moment.
+        shippedBeats?.loadCached()
 
         self.store = store
         self.prefs = prefs
@@ -52,6 +58,7 @@ final class AppContainer {
         self.supabase = supabase
         self.community = community
         self.auth = auth
+        self.shippedBeats = shippedBeats
     }
 
     /// The splash's Begin: decode the samples once, open the output and arm, hydrate
@@ -69,6 +76,7 @@ final class AppContainer {
         // the moment the user has said they want sound.
         if supabase != nil {
             Task { await self.restoreCloud() }
+            Task { await self.shippedBeats?.checkForUpdates(manual: false) }
         }
     }
 
@@ -86,15 +94,17 @@ final class AppContainer {
     func restoreCloud() async {
         guard let supabase else { return }
         await supabase.restore()
-        syncProviderToSession()
+        // A RESTORED session is not a fresh sign-in: no migration offer on every cold start.
+        await syncProviderToSession(freshSignIn: false)
     }
 
     /// The OAuth round trip came back through the `kirtan://` deep link. Finish it and
     /// re-point the library. A failure is thrown to the caller, not swallowed here.
     func handleAuthCallback(_ url: URL) async throws {
         guard let supabase else { return }
+        let wasSignedIn = supabase.session != nil
         _ = try await supabase.completeOAuth(callbackUrl: url.absoluteString)
-        syncProviderToSession()
+        await syncProviderToSession(freshSignIn: !wasSignedIn)
     }
 
     /// The URL to open in an in-app browser to begin an OAuth sign-in.
@@ -104,18 +114,56 @@ final class AppContainer {
 
     func signOut() async {
         await supabase?.signOut()
-        syncProviderToSession()
+        await syncProviderToSession(freshSignIn: false)
     }
 
     // The library follows the session: cloud beats for a signed-in user, the device store for
     // everyone else. `attachProvider` reloads from the new store.
-    private func syncProviderToSession() {
+    //
+    // A FRESH sign-in captures the device library BEFORE the swap — afterwards it is
+    // invisible — and, when the account is empty, offers to move it up (MigrationSheet).
+    // Only offered into an empty account: migration mints fresh ids, so pushing into one
+    // that already holds beats would duplicate them.
+    private func syncProviderToSession(freshSignIn: Bool) async {
         auth.setSession(supabase?.session)
+        auth.pendingMigration = nil
         if let session = supabase?.session, let cloud = SupabaseBeatsProvider.create(client: supabase, session: session) {
+            let local = freshSignIn ? (try? await localProvider.loadAll()) : nil
             library.attachProvider(cloud)
+            if let local, !(local.beats.isEmpty && local.categories.isEmpty) {
+                await library.reload()
+                if library.state.error == nil && library.state.customBeats.isEmpty && library.state.categories.isEmpty {
+                    auth.pendingMigration = local
+                }
+            }
         } else {
             library.attachProvider(localProvider)
         }
+        auth.isMaintainer = auth.session != nil ? (await shippedBeats?.isMaintainer() ?? false) : false
+    }
+
+    /// Write a confirmed import and say what happened. The ONE door for pasted codes and
+    /// deep links alike, so the two cannot drift in how they mint and de-duplicate.
+    func acceptImport(_ payload: ShareCodec.SharePayload) async {
+        let result = await library.importShared(payload)
+        if result.beats.isEmpty {
+            auth.notice = library.state.error ?? "Nothing was imported."
+        } else if result.categoryId != nil {
+            auth.notice = "Added \(result.beats.count) beats as a new list."
+        } else {
+            auth.notice = "Added “\(result.beats[0].name)” to Your beats."
+        }
+    }
+
+    /// The migration sheet's "Move them": copy the captured device library up.
+    func acceptMigration() async -> MigrationResult? {
+        guard let local = auth.pendingMigration else { return nil }
+        let result = await library.importLibrary(local)
+        auth.pendingMigration = nil
+        auth.notice = result.failed
+            ? (library.state.error ?? "Your beats could not be moved. They are still on this device.")
+            : "Moved \(result.beats) \(result.beats == 1 ? "beat" : "beats") to your account."
+        return result
     }
 
     /// Tear the output down. The engine and its device are left in a clean stopped

@@ -11,7 +11,38 @@ import SwiftUI
 /// `@State` here and nowhere else.
 struct BeatEditorView: View {
     let container: AppContainer
+    /// What the editor is doing, which decides both the seed and where Save writes.
+    var mode: EditorMode = .new
     var onDone: () -> Void
+
+    /// The editor's four jobs. A built-in is never edited in place by a player — it FORKS,
+    /// because it is not theirs; only a maintainer may write it back, for everyone.
+    enum EditorMode: Equatable {
+        /// A blank draft, saved as a new beat.
+        case new
+        /// One of your beats, saved over itself (same id, so playlists keep it).
+        case edit(Beat)
+        /// A built-in, saved as a new beat of your own.
+        case fork(Beat)
+        /// A built-in, written back to `shipped_beats` for every install (maintainers).
+        case everyone(Beat)
+
+        var seed: Beat? {
+            switch self {
+            case .new: return nil
+            case .edit(let b), .fork(let b), .everyone(let b): return b
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .new: return "New beat"
+            case .edit: return "Edit beat"
+            case .fork: return "Edit a copy"
+            case .everyone: return "Edit for everyone"
+            }
+        }
+    }
 
     private var transport: TransportViewModel { container.transport }
 
@@ -30,9 +61,23 @@ struct BeatEditorView: View {
     @State private var cellSize: CGFloat = 32
     /// The cell size when the current pinch began, so `magnification` scales relative to it.
     @State private var magnifyBase: CGFloat?
+    /// A seeded beat's own meter, kept verbatim until the user picks a preset. The presets
+    /// are uniform bars; a beat like matan (16 groups of 3) would be silently re-metered by
+    /// the nearest preset, so an edit that never touched the meter must not change it.
+    @State private var keptMeter: KeptMeter?
+    @State private var seeded = false
+    @State private var saving = false
+    @State private var saveError: String?
+
+    private struct KeptMeter: Equatable {
+        let groups: [Int]
+        let beatsPerBar: Double
+        let steps: Int
+        let cellsPerGroup: Int
+    }
 
     /// Whole cells in the bar: the meter (beats) × the subdivision (cells per beat).
-    private var steps: Int { max(1, Int(beatsPerBar.rounded()) * cellsPerGroup) }
+    private var steps: Int { keptMeter?.steps ?? max(1, Int(beatsPerBar.rounded()) * cellsPerGroup) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,13 +95,49 @@ struct BeatEditorView: View {
             }
             .background(Palette.head.ignoresSafeArea())
         }
+        .onAppear(perform: seed)
+        .alert("Not saved", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+            Button("OK", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
+    }
+
+    /// Load the beat being edited into the draft, once.
+    private func seed() {
+        guard !seeded, let beat = mode.seed else { return }
+        seeded = true
+        name = beat.name
+        bpm = beat.bpm
+        let n = beat.steps
+        func lane(_ id: LaneId) -> [Stroke?] {
+            let cells = beat.pattern(id) ?? []
+            return Array(cells.prefix(n)) + Array(repeating: nil, count: max(0, n - cells.count))
+        }
+        dayan = lane(.dayan)
+        bayan = lane(.bayan)
+        kartal = lane(.kartal)
+        let groups = groupsFor(beat)
+        let preset = MeterPreset.allCases.first {
+            $0.beatsPerBar == beat.beatsPerBar && $0.cellsPerGroup == beat.cellsPerGroup
+                && Int($0.beatsPerBar.rounded()) * $0.cellsPerGroup == n
+                && groups == Array(repeating: $0.cellsPerGroup, count: Int($0.beatsPerBar.rounded()))
+        }
+        if let preset {
+            beatsPerBar = preset.beatsPerBar
+            cellsPerGroup = preset.cellsPerGroup
+        } else {
+            beatsPerBar = beat.beatsPerBar
+            cellsPerGroup = beat.cellsPerGroup
+            keptMeter = KeptMeter(groups: groups, beatsPerBar: beat.beatsPerBar, steps: n, cellsPerGroup: beat.cellsPerGroup)
+        }
     }
 
     // MARK: header
 
     private var header: some View {
         HStack {
-            Text("New beat")
+            Text(mode.title)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Palette.syahi)
             Spacer()
@@ -86,7 +167,10 @@ struct BeatEditorView: View {
         HStack(spacing: 12) {
             control("Meter") {
                 Picker("Meter", selection: meterBinding) {
-                    ForEach(meters, id: \.label) { m in Text(m.label).tag(m) }
+                    if let keptMeter {
+                        Text("As written (\(keptMeter.steps))").tag(MeterPreset?.none)
+                    }
+                    ForEach(meters, id: \.label) { m in Text(m.label).tag(MeterPreset?.some(m)) }
                 }
                 .pickerStyle(.menu)
             }
@@ -109,10 +193,12 @@ struct BeatEditorView: View {
 
     private var meters: [MeterPreset] { MeterPreset.allCases }
 
-    private var meterBinding: Binding<MeterPreset> {
+    private var meterBinding: Binding<MeterPreset?> {
         Binding(
-            get: { MeterPreset.matching(beatsPerBar: beatsPerBar, cellsPerGroup: cellsPerGroup) },
-            set: { preset in
+            get: { keptMeter != nil ? nil : MeterPreset.matching(beatsPerBar: beatsPerBar, cellsPerGroup: cellsPerGroup) },
+            set: { choice in
+                guard let preset = choice else { return }
+                keptMeter = nil
                 beatsPerBar = preset.beatsPerBar
                 setCellsPerGroup(preset.cellsPerGroup)
             }
@@ -263,7 +349,7 @@ struct BeatEditorView: View {
                     .background(Palette.clay)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
     }
 
@@ -277,19 +363,29 @@ struct BeatEditorView: View {
         if kartal.prefix(steps).contains(where: { $0 != nil }) {
             patterns[.kartal] = Array(kartal.prefix(steps))
         }
-        return Beat(
-            id: nil,
+        // Editing in place keeps the id (playlists point at it) and the source; a fork and
+        // a new beat have none, so the library mints one.
+        let keepsIdentity: Bool
+        switch mode {
+        case .edit, .everyone: keepsIdentity = true
+        case .new, .fork: keepsIdentity = false
+        }
+        let seed = mode.seed
+        var beat = Beat(
+            id: keepsIdentity ? seed?.id : nil,
             name: name.trimmingCharacters(in: .whitespaces) == "" ? "New beat" : name,
-            note: "",
+            note: keepsIdentity ? (seed?.note ?? "") : "",
             bpm: bpm,
             steps: steps,
-            beatsPerBar: beatsPerBar,
-            cellsPerGroup: cellsPerGroup,
-            groups: Array(repeating: cellsPerGroup, count: max(1, Int(beatsPerBar.rounded()))),
-            description: nil,
+            beatsPerBar: keptMeter?.beatsPerBar ?? beatsPerBar,
+            cellsPerGroup: keptMeter?.cellsPerGroup ?? cellsPerGroup,
+            groups: keptMeter?.groups ?? Array(repeating: cellsPerGroup, count: max(1, Int(beatsPerBar.rounded()))),
+            description: keepsIdentity ? seed?.description : nil,
             lanePatterns: patterns,
-            group: nil
+            group: keepsIdentity ? seed?.group : nil
         )
+        if case .edit(let original) = mode { beat.sourceItemId = original.sourceItemId }
+        return beat
     }
 
     private func startPreview() {
@@ -304,10 +400,30 @@ struct BeatEditorView: View {
 
     private func save() {
         let beat = currentBeat()
+        saving = true
         Task {
-            _ = await container.library.saveBeat(beat)
+            defer { saving = false }
+            if case .everyone = mode {
+                // The served set, for every install. Refusals (RLS, a row the read path
+                // would reject, a beat retired meanwhile) come back as a sentence.
+                do {
+                    try await container.shippedBeats?.updateShippedBeat(beat)
+                } catch {
+                    saveError = storageErrorMessage(error)
+                    return
+                }
+                if previewing { transport.stopPreview() }
+                container.transport.loadBeat(beat)
+                onDone()
+                return
+            }
+            let saved = await container.library.saveBeat(beat)
             if previewing { transport.stopPreview() }
-            container.transport.loadBeat(beat)
+            guard let saved else {
+                saveError = container.library.state.error ?? StorageError.fallbackMessage
+                return
+            }
+            container.transport.loadBeat(saved)
             onDone()
         }
     }

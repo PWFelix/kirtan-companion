@@ -20,6 +20,23 @@ final class AuthViewModel {
     /// The signed-in account, or nil when signed out. Mirrors `SupabaseClient.session`.
     private(set) var session: AuthSession?
 
+    /// True when the signed-in user may change the built-in beat set. Probed once per
+    /// session change (AppContainer), never per render, and held here because two screens
+    /// gate a control on it. Fails closed: the database authorises the actual write.
+    var isMaintainer = false
+
+    /// The device library captured at a fresh sign-in when the account is empty, waiting
+    /// for the user to say whether to move it up. Nil means nothing is pending.
+    var pendingMigration: Library?
+
+    /// A beat or list that arrived through a `kirtan://beat` link, waiting on the import
+    /// confirmation. Held app-wide because a link can land on any tab.
+    var pendingImport: ShareCodec.SharePayload?
+
+    /// A one-line confirmation ("Added “Dadra” to Your beats.") shown briefly over any
+    /// screen. App-wide for the same reason: the action and the screen may differ.
+    var notice: String?
+
     init(configured: Bool) {
         self.configured = configured
     }

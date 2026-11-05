@@ -20,6 +20,13 @@ struct KirtanApp: App {
                     // The browser returns from an OAuth sign-in here (`kirtan://auth/callback`
                     // ?code=…). Anything else with this scheme is ignored.
                     guard url.scheme == "kirtan" else { return }
+                    // A shared beat (`kirtan://beat?c=…`) never writes on arrival: it
+                    // goes to the same confirmation a pasted code does.
+                    if url.host == "beat" {
+                        let code = ShareLinks.code(fromDeepLink: url)
+                        AppContainer.shared.auth.pendingImport = ShareCodec.decodeShare(code) ?? .invalid
+                        return
+                    }
                     Task { try? await AppContainer.shared.handleAuthCallback(url) }
                 }
         }

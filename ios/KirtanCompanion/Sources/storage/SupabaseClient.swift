@@ -261,8 +261,10 @@ final class SupabaseClient {
     }
 
     @discardableResult
-    func delete(table: String, filters: [(String, String)], whileDoing: String) async throws -> JValue? {
-        try await send(method: "DELETE", url: restUrl(config: config, table: table, filters: filters), body: nil, accept: Self.json, prefer: nil, useSessionToken: true, whileDoing: whileDoing)
+    func delete(table: String, filters: [(String, String)], returning: Bool = false, whileDoing: String) async throws -> JValue? {
+        // `returning` asks for the deleted rows back, because a DELETE that matches nothing
+        // is a 200 with an empty body — reading the rows is the only way to notice.
+        try await send(method: "DELETE", url: restUrl(config: config, table: table, filters: filters), body: nil, accept: Self.json, prefer: returning ? Self.returnRepresentation : nil, useSessionToken: true, whileDoing: whileDoing)
     }
 
     /// Insert-or-update by the named conflict column — the web provider's `upsert(…, onConflict:)`.
