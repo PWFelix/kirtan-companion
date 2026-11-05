@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
@@ -105,6 +105,13 @@ function BeatsView({
   const [communityError, setCommunityError] = useState("");
   const [communityQuery, setCommunityQuery] = useState("");
   const [copiedId, setCopiedId] = useState(null);       // "Added" flash on a card
+  // Community items the library already holds a copy of. Read from the
+  // library, not remembered at add time, so deleting the copy brings Add back
+  // and a copy made on another device counts too (issue #11).
+  const inLibrary = useMemo(
+    () => new Set(customBeats.map((b) => b.sourceItemId).filter(Boolean)),
+    [customBeats]
+  );
   // Publish-from-share state: null | "publishing" | "done" | an error string.
   const [publishState, setPublishState] = useState(null);
 
@@ -131,7 +138,10 @@ function BeatsView({
   // Copy a community item into the library (an import), then best-effort bump
   // its copy counter. The card flashes "Added" briefly.
   async function copyCommunity(row) {
-    const result = await onImportShare(toImportPayload(row));
+    // The card hides Add once a copy exists; this guards a double click that
+    // lands before the library state catches up.
+    if (inLibrary.has(row.id)) return;
+    const result = await onImportShare(toImportPayload(row), { sourceItemId: row.id });
     if (result?.beats?.length) {
       incrementCopies(row.id);
       setCopiedId(row.id);
@@ -437,6 +447,7 @@ function BeatsView({
   // Add button that imports it into the user's own library.
   function communityCard(row) {
     const added = copiedId === row.id;
+    const owned = inLibrary.has(row.id);
     const count = row.kind === "playlist" ? row.payload?.beats?.length ?? 0 : 0;
     return (
       <div key={row.id} style={st.beatRow}>
@@ -448,10 +459,12 @@ function BeatsView({
               {row.copies ? ` · ${row.copies} ${row.copies === 1 ? "copy" : "copies"}` : ""}
             </span>
           </div>
-          <button onClick={() => copyCommunity(row)} disabled={added}
-            aria-label={`Add ${row.name} to your library`}
-            style={{ ...st.addChip, ...(added ? st.addChipDone : null) }}>
-            {added ? "Added" : "+ Add"}
+          {/* Relabelled, not just disabled, once a copy exists: a greyed-out
+              Add with no reason looks broken. */}
+          <button onClick={() => copyCommunity(row)} disabled={added || owned}
+            aria-label={owned ? `${row.name} is in your library` : `Add ${row.name} to your library`}
+            style={{ ...st.addChip, ...(added || owned ? st.addChipDone : null) }}>
+            {added ? "Added" : owned ? "✓ In library" : "+ Add"}
           </button>
         </div>
         {row.kind === "beat" && row.payload?.beat && <BeatStrip beat={row.payload.beat} mini />}

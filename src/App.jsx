@@ -170,8 +170,8 @@ function App() {
   // takes it, then the engine and main view move to what just arrived. The
   // result goes back to the caller so the library screen can land the user
   // in the tab the beats went into (the ids only exist after the mint).
-  async function handleImportShare(payload) {
-    const result = await library.importShared(payload);
+  async function handleImportShare(payload, options) {
+    const result = await library.importShared(payload, options);
     if (result.beats.length) selectBeat(result.beats[0], result.catId ?? "custom");
     setPendingShare(null);
     return result;
