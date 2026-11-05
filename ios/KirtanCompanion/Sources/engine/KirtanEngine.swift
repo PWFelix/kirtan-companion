@@ -60,6 +60,18 @@ final class KirtanEngine: BlockRenderer {
     private let padLock = NSLock()
     private var pendingPads: [StrokeKey] = []
 
+    // A start() awaiting the audio thread. The clock must be anchored BY the audio
+    // thread, at the first frame of the block it is about to render. Anchoring it
+    // from the UI thread at framesRenderedNow raced the renderer: if that block was
+    // already rendering, step 0 fell before the next block's fromFrame and the
+    // first downbeat never played. Clearing voices from the UI thread also raced
+    // the voice list. (Same fix as the Android port's a095f5b.)
+    private let startLock = NSLock()
+    private var pendingStart = false
+
+    /// Human timing and loudness variation; see Humanizer.swift.
+    private let humanizer: Humanizer
+
     // Reused across blocks: the audio thread must not allocate.
     private var stepScratch = [StepEvent]()
 
@@ -74,6 +86,7 @@ final class KirtanEngine: BlockRenderer {
         self.sequencer = Sequencer(clock)
         self.bank = SampleBank(loader: loader)
         self.graph = AudioGraph(sampleRate: sampleRate, blockSize: KirtanEngine.BLOCK_SIZE)
+        self.humanizer = Humanizer(sampleRate: sampleRate)
         self.graph.attachRenderer(self)
     }
 
@@ -139,6 +152,7 @@ final class KirtanEngine: BlockRenderer {
     /// mid-kirtan keeps the downbeat where it was.
     func setBeat(_ beat: Beat) {
         currentBeat = beat
+        humanizer.setBeat(beat)
         sequencer.setBeat(beat)
         sequencer.invalidateGuard()
     }
@@ -146,6 +160,9 @@ final class KirtanEngine: BlockRenderer {
     func setBpm(_ bpm: Int) {
         clock.setBpm(Double(bpm), atFrame: graph.framesRenderedNow)
     }
+
+    /// How much human variation the drum plays with. Takes effect on the next stroke.
+    func setFeel(_ feel: Feel) { humanizer.feel = feel }
 
     func setVolume(_ value: Float) { soundPlayer.setVolume(value) }
     func volume() -> Float { soundPlayer.volume() }
@@ -168,9 +185,9 @@ final class KirtanEngine: BlockRenderer {
             return // no beat loaded; nothing to start
         }
         if !arm() { return }
-        clock.start(atFrame: graph.framesRenderedNow)
-        soundPlayer.stopAllVoices()
-        sequencer.invalidateGuard()
+        // Anchored by the audio thread at the top of its next block; see pendingStart.
+        clock.stop()
+        startLock.lock(); pendingStart = true; startLock.unlock()
         isPlaying = true
         emit(.started)
     }
@@ -178,6 +195,7 @@ final class KirtanEngine: BlockRenderer {
     func stop() {
         guard isPlaying else { return }
         isPlaying = false
+        startLock.lock(); pendingStart = false; startLock.unlock()
         clock.stop()
         // Voices are left to ring out rather than cut: stopping mid-decay is a
         // click, and a drum allowed to finish sounds like a drum that was stopped.
@@ -212,6 +230,19 @@ final class KirtanEngine: BlockRenderer {
     /// only then is the block mixed — so a stroke scheduled for frame 137 of 256
     /// sounds at frame 137 and not at the next block boundary.
     func render(fromFrame: Int64, count: Int, out: inout [Float]) {
+        // 0. A pending start anchors the clock HERE, at this block's first frame,
+        //    so step 0 is always inside this block.
+        startLock.lock()
+        let starting = pendingStart
+        pendingStart = false
+        startLock.unlock()
+        if starting {
+            soundPlayer.stopAllVoices()
+            sequencer.invalidateGuard()
+            humanizer.reset()
+            clock.start(atFrame: fromFrame)
+        }
+
         // 1. Pad taps queued from the UI thread.
         padLock.lock()
         let pads = pendingPads
@@ -227,9 +258,14 @@ final class KirtanEngine: BlockRenderer {
                 let offset = min(max(Int(event.frame - fromFrame), 0), count - 1)
                 // Iterated inline: this runs ten times a second forever, so it
                 // allocates nothing.
+                humanizer.advance()
                 for lane in LaneId.ordered {
                     guard let stroke = beat.strokeAt(lane, event.step) else { continue }
-                    soundPlayer.play(StrokeKey(lane: lane, open: stroke == .open), offsetInBlock: offset)
+                    soundPlayer.play(
+                        StrokeKey(lane: lane, open: stroke == .open),
+                        offsetInBlock: offset + humanizer.delayFrames(lane, step: event.step),
+                        gain: humanizer.gain(step: event.step)
+                    )
                 }
                 emit(.step(event.step))
             }

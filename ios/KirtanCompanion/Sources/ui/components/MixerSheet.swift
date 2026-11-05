@@ -17,6 +17,7 @@ struct MixerSheet: View {
             ScrollView {
                 VStack(spacing: 20) {
                     masterSection
+                    feelSection
 
                     ForEach(LaneId.ordered, id: \.self) { lane in
                         laneSection(lane)
@@ -56,6 +57,27 @@ struct MixerSheet: View {
                 Image(systemName: "speaker.wave.3.fill").foregroundStyle(Palette.faint)
             }
             .tint(Palette.clay)
+        }
+        .sectionCard()
+    }
+
+    /// EXPERIMENT: human timing and loudness variation (engine/Humanizer.swift).
+    /// Four fixed levels rather than a slider, so it is easy to A/B by ear.
+    private var feelSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Feel")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Palette.syahiSoft)
+            Picker("Feel", selection: Binding(
+                get: { transport.settings.feel },
+                set: { transport.setFeel($0) }
+            )) {
+                ForEach(Feel.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text("Small changes in timing and loudness, so the drum sounds played rather than programmed.")
+                .font(.caption)
+                .foregroundStyle(Palette.syahiSoft)
         }
         .sectionCard()
     }

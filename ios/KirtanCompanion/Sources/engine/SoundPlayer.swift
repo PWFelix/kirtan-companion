@@ -139,14 +139,14 @@ final class SoundPlayer {
 
     /// Trigger a stroke `offsetInBlock` frames into the block about to be rendered.
     /// A stroke whose samples never loaded is a silent no-op.
-    func play(_ key: StrokeKey, offsetInBlock: Int) {
+    func play(_ key: StrokeKey, offsetInBlock: Int, gain: Float = 1) {
         guard let o = keyOrdinal[key], o < pools.count, !pools[o].isEmpty else { return }
         let cursor = lastIndex[key] ?? -1
         let index = pickIndex(count: pools[o].count, lastIndex: cursor, random: &rng)
         lastIndex[key] = index
         // Restart the picked variant's slot in place (position 0, ringing again).
         // Fixed pool → the overlap never grows past the number of variants.
-        pools[o][index] = Voice(pools[o][index].sample, lane: key.lane, startOffset: offsetInBlock)
+        pools[o][index] = Voice(pools[o][index].sample, lane: key.lane, startOffset: offsetInBlock, gain: gain)
     }
 
     /// Silence everything already sounding — used on stop.

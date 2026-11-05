@@ -73,6 +73,25 @@ struct SplashView: View {
     var onBegin: () -> Void
 
     var body: some View {
+        content
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            // Line drawing of a mridanga and karatalas, faint behind the wordmark —
+            // the same art and tint (clay at 14%) as the Android splash. The asset is
+            // an alpha mask, rendered as a template so the tint is ours to choose.
+            Image("SplashMridanga")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 560)
+                .foregroundStyle(Palette.clay.opacity(0.14))
+                .accessibilityHidden(true)
+        }
+        .clipped()
+        .background(Palette.head.ignoresSafeArea())
+    }
+
+    private var content: some View {
         VStack(spacing: 24) {
             Spacer()
 
@@ -99,6 +118,5 @@ struct SplashView: View {
             .padding(.horizontal, 40)
             .padding(.bottom, 48)
         }
-        .background(Palette.head.ignoresSafeArea())
     }
 }

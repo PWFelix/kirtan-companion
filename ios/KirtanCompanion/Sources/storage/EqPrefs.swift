@@ -63,6 +63,8 @@ struct EqPrefsSnapshot: Equatable {
     var showStepLabels: Bool
     /// Interface scale: a multiplier applied to every point in the app. See the UI layer.
     var uiScale: Double
+    /// How much human variation the drum plays with (Mixer → Feel). Off on a fresh install.
+    var feel: Feel = .off
     var dayan: EndSoundPrefs
     var bayan: EndSoundPrefs
 
@@ -158,6 +160,7 @@ enum EqPrefsCodec {
     private static let keyShowBols = "showBols"
     private static let keyShowStepLabels = "showStepLabels"
     private static let keyUiScale = "uiScale"
+    private static let keyFeel = "feel"
     private static let keyDayan = "dayan"
     private static let keyBayan = "bayan"
 
@@ -179,6 +182,7 @@ enum EqPrefsCodec {
             (keyShowBols, .bool(snapshot.showBols)),
             (keyShowStepLabels, .bool(snapshot.showStepLabels)),
             (keyUiScale, .number(snapshot.uiScale)),
+            (keyFeel, .string(snapshot.feel.rawValue)),
             (keyDayan, encodeEnd(snapshot.dayan)),
             (keyBayan, encodeEnd(snapshot.bayan)),
         ).write()
@@ -208,6 +212,7 @@ enum EqPrefsCodec {
             showBols: boolOf(obj.element(keyShowBols), false),
             showStepLabels: boolOf(obj.element(keyShowStepLabels), true),
             uiScale: scaleOf(obj.element(keyUiScale)),
+            feel: obj.element(keyFeel)?.asString().flatMap(Feel.init(rawValue:)) ?? .off,
             dayan: endOf(obj.element(keyDayan)),
             bayan: endOf(obj.element(keyBayan)),
         )

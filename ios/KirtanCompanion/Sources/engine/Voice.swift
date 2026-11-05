@@ -9,7 +9,10 @@
 // triggered in, which is what makes timing sample-accurate. A stroke scheduled
 // for frame 137 of a 256-frame block contributes silence for 137 frames and
 // then its first sample at 137 — no rounding to the block boundary, so the grid
-// cannot smear. It is consumed on the first render and zeroed.
+// cannot smear. It may exceed one block (the Feel humanizer delays strokes by up
+// to ~60 ms): each silent block then just counts it down.
+//
+// `gain` scales the whole voice — the humanizer's per-stroke loudness.
 //
 // Resampling by `rate` is what per-end tuning does: the pitch slider sets a
 // playback rate, and a higher rate both raises the pitch and shortens the decay,
@@ -26,13 +29,17 @@ struct Voice {
     var position: Double = 0
     var finished = false
 
-    /// Frames into the block this voice should start; zero after its first render.
+    /// Frames from the start of the current block until this voice starts;
+    /// zero once it is sounding.
     var startOffset: Int
+    /// Linear gain for this stroke.
+    var gain: Float
 
-    init(_ sample: PcmSample, lane: LaneId, startOffset: Int) {
+    init(_ sample: PcmSample, lane: LaneId, startOffset: Int, gain: Float = 1) {
         self.sample = sample
         self.lane = lane
         self.startOffset = startOffset
+        self.gain = gain
     }
 
     /// Add this voice into `out` for `count` frames, advancing by `rate` per
@@ -50,15 +57,20 @@ struct Voice {
         // does, and what a player expects from something labelled like head tension.
         let step = rate > 0 ? rate : 1.0
 
+        if startOffset >= count {
+            startOffset -= count   // still waiting: silent for this whole block
+            return
+        }
         var i = max(0, startOffset)
         startOffset = 0
         var pos = position
+        let g = gain
 
         while i < count && pos < Double(last) {
             let i0 = Int(pos)
             let frac = Float(pos - Double(i0))
             let s0 = data[i0]
-            out[i] += s0 + (data[i0 + 1] - s0) * frac
+            out[i] += (s0 + (data[i0 + 1] - s0) * frac) * g
             pos += step
             i += 1
         }

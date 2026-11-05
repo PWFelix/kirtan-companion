@@ -148,6 +148,7 @@ final class TransportViewModel {
             for (i, db) in end.bands.enumerated() { engine.setEqBand(lane, i, db) }
             engine.setEndPitch(lane, end.tuneCents)
         }
+        engine.setFeel(settings.feel)
     }
 
     // ── Tempo ──────────────────────────────────────────────────────────────
@@ -164,6 +165,13 @@ final class TransportViewModel {
     /// `loadBeat` leave the BPM alone instead of adopting the beat's suggestion.
     func setTempoLocked(_ locked: Bool) {
         var s = settings; s.tempoLocked = locked
+        publish(s)
+    }
+
+    /// How much human variation the drum plays with. See engine/Humanizer.swift.
+    func setFeel(_ feel: Feel) {
+        engine.setFeel(feel)
+        var s = settings; s.feel = feel
         publish(s)
     }
 
