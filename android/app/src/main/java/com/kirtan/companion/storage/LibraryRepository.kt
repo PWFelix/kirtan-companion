@@ -271,7 +271,16 @@ class LibraryRepository(
         val taken = LinkedHashSet(
             (builtIns.value + current.customBeats).filter { it.id != id }.map { it.name },
         )
-        val fields = newBeat.copy(id = null, name = uniqueName(newBeat.name, taken))
+        // The editor builds a fresh Beat and knows nothing of where it came from;
+        // carry the community origin over so an edited copy still counts as "in
+        // your library" (issue #11).
+        val origin = newBeat.sourceItemId
+            ?: current.customBeats.firstOrNull { id != null && it.id == id }?.sourceItemId
+        val fields = newBeat.copy(
+            id = null,
+            name = uniqueName(newBeat.name, taken),
+            sourceItemId = origin,
+        )
 
         try {
             val editing = id != null && current.customBeats.any { it.id == id }
@@ -358,8 +367,14 @@ class LibraryRepository(
      *    categories; calling [BeatsProvider.createBeat] in a loop would read stale
      *    state and drop beats, which is the bug [BeatsProvider.createBeats] exists
      *    to prevent.
+     *
+     * @param sourceItemId the community item being copied, stamped on every beat
+     *   so the community screen can tell it's already here. Null for share links.
      */
-    suspend fun importShared(payload: ShareCodec.SharePayload?): ImportResult =
+    suspend fun importShared(
+        payload: ShareCodec.SharePayload?,
+        sourceItemId: String? = null,
+    ): ImportResult =
         writeMutex.withLock {
             val incoming: List<Beat> = when (payload) {
                 is ShareCodec.SharePayload.BeatPayload -> listOf(payload.beat)
@@ -374,7 +389,11 @@ class LibraryRepository(
                 (builtIns.value + _state.value.customBeats).map { it.name },
             )
             val drafts = incoming.map { beat ->
-                beat.copy(id = null, name = uniqueName(beat.name, takenBeatNames))
+                beat.copy(
+                    id = null,
+                    name = uniqueName(beat.name, takenBeatNames),
+                    sourceItemId = sourceItemId,
+                )
             }
 
             val created = try {

@@ -112,6 +112,14 @@ data class Beat(
      * only sub-divides it visually. Null for editor-made beats.
      */
     val group: String? = null,
+    /**
+     * The community item this beat was copied from, or null for a beat the user
+     * made (or got from a share link). Kept in the beat's stored body, so it
+     * syncs with the beat and needs no new column. Lets the community screen
+     * show "In your library" instead of letting you add the same item twice
+     * (issue #11). Every beat copied from a list carries the LIST's id.
+     */
+    val sourceItemId: String? = null,
 ) {
     /**
      * True when this beat is one of the built-ins rather than user-made.

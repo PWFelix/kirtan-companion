@@ -117,8 +117,10 @@ class CommunityClient(
             is ShareCodec.SharePayload.BeatPayload -> {
                 kind = PublishedKind.BEAT
                 name = payload.beat.name
+                // sourceItemId is cleared: publishing a copy makes a NEW item,
+                // and the old item's id would make other people's cards wrong.
                 body = buildJsonObject {
-                    put("beat", LibraryJson.encodeBody(payload.beat.copy(id = null)))
+                    put("beat", LibraryJson.encodeBody(payload.beat.copy(id = null, sourceItemId = null)))
                 }
             }
             is ShareCodec.SharePayload.CategoryPayload -> {
@@ -127,7 +129,7 @@ class CommunityClient(
                 body = buildJsonObject {
                     put("name", payload.name)
                     put("beats", buildJsonArray {
-                        payload.beats.forEach { add(LibraryJson.encodeBody(it.copy(id = null))) }
+                        payload.beats.forEach { add(LibraryJson.encodeBody(it.copy(id = null, sourceItemId = null))) }
                     })
                 }
             }

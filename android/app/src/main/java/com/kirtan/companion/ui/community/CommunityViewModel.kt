@@ -16,8 +16,11 @@ import com.kirtan.companion.storage.PublishedItem
 import com.kirtan.companion.storage.storageErrorMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -72,6 +75,17 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
 
     /** False when this build has no cloud at all. */
     val available: Boolean get() = community != null
+
+    /**
+     * Ids of the community items the library already holds a copy of.
+     *
+     * Read from the library itself rather than remembered at add time, so
+     * deleting your copy brings the Add button back, and a copy made on another
+     * device (it syncs with the beat) counts too (issue #11).
+     */
+    val inLibrary: StateFlow<Set<String>> = container.library.state
+        .map { state -> state.customBeats.mapNotNullTo(HashSet()) { it.sourceItemId } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     /**
      * True when the signed-in user may change the built-in beat set for everyone.
@@ -161,13 +175,19 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun add(item: PublishedItem, onDone: (String?) -> Unit) {
         val client = community ?: return
+        // The card hides Add once a copy exists; this guards a double tap that
+        // lands before the library state catches up.
+        if (item.id in inLibrary.value) {
+            onDone("“${item.name}” is already in your library.")
+            return
+        }
         val payload = client.toImportPayload(item)
         if (payload == null) {
             onDone("That item couldn't be read — it may have been published by a newer version of the app.")
             return
         }
         viewModelScope.launch {
-            val result = container.library.importShared(payload)
+            val result = container.library.importShared(payload, sourceItemId = item.id)
             val message = when {
                 result.beats.isEmpty() -> "Nothing was added."
                 result.categoryId != null ->

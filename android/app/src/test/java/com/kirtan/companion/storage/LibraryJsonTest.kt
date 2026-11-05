@@ -33,6 +33,13 @@ class LibraryJsonTest {
     // ── Round tripping ─────────────────────────────────────────────────────
 
     @Test
+    fun `the community origin round-trips, and is omitted when absent`() {
+        val beat = BEATS.first().copy(id = "b1", sourceItemId = "item-1")
+        assertEquals(beat, LibraryJson.decodeBeat(LibraryJson.encodeStored(beat)))
+        assertFalse("sourceItemId" in LibraryJson.encodeBody(BEATS.first()))
+    }
+
+    @Test
     fun `every built-in beat round-trips losslessly`() {
         for (beat in BEATS) {
             val decoded = LibraryJson.decodeBeat(LibraryJson.encodeStored(beat))

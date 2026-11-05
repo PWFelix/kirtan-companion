@@ -73,6 +73,7 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
     val scope by vm.scope.collectAsState()
     val myRatings by vm.myRatings.collectAsState()
     val isMaintainer by vm.isMaintainer.collectAsState()
+    val inLibrary by vm.inLibrary.collectAsState()
     var query by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf<String?>(null) }
     /** The card whose beat is about to become a built-in, while its sheet is open. */
@@ -191,6 +192,7 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
                 mine = session?.userId != null && session?.userId == item.authorId,
                 signedIn = session != null,
                 myStars = myRatings[item.id],
+                inLibrary = item.id in inLibrary,
                 // Gated on the flag AND on the snapshot decoding to a single beat:
                 // a button that opens a sheet and then says "only a single beat can
                 // become a built-in" is a button that should not have been there.
@@ -224,6 +226,7 @@ private fun CommunityCard(
     mine: Boolean,
     signedIn: Boolean,
     myStars: Int?,
+    inLibrary: Boolean,
     canPromote: Boolean,
     onAdd: () -> Unit,
     onUnpublish: () -> Unit,
@@ -285,10 +288,13 @@ private fun CommunityCard(
         beats?.firstOrNull()?.let { beat -> BeatStrip(beat = beat, mini = true) }
 
         Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
+            // Disabled AND relabelled once a copy exists: a greyed-out "Add" with
+            // no reason looks broken. Deleting the copy brings Add back (#11).
             SecondaryButton(
-                label = "Add to library",
+                label = if (inLibrary) "✓ In your library" else "Add to library",
                 modifier = Modifier.weight(1f),
                 minHeight = 44.dp,
+                enabled = !inLibrary,
                 onClick = onAdd,
             )
             if (mine) {

@@ -565,6 +565,62 @@ class LibraryRepositoryTest {
         }
     }
 
+    // ── Community origin (issue #11) ───────────────────────────────────────
+
+    @Test
+    fun `a community copy remembers the item it came from`() {
+        runTest {
+            val repo = repository(FakeBeatsProvider())
+            advanceUntilIdle()
+
+            repo.importShared(
+                ShareCodec.SharePayload.CategoryPayload(
+                    name = "Sunday",
+                    beats = listOf(testBeat(name = "A"), testBeat(name = "B")),
+                ),
+                sourceItemId = "item-1",
+            )
+            repo.importShared(ShareCodec.SharePayload.BeatPayload(testBeat(name = "Link")))
+
+            val byName = repo.state.value.customBeats.associateBy { it.name }
+            assertEquals("item-1", byName.getValue("A").sourceItemId)
+            assertEquals("item-1", byName.getValue("B").sourceItemId)
+            assertNull("a share link is not a community item", byName.getValue("Link").sourceItemId)
+        }
+    }
+
+    @Test
+    fun `an incoming payload cannot claim a community origin`() {
+        runTest {
+            val repo = repository(FakeBeatsProvider())
+            advanceUntilIdle()
+
+            val result = repo.importShared(
+                ShareCodec.SharePayload.BeatPayload(testBeat(name = "X").copy(sourceItemId = "forged")),
+            )
+
+            assertNull(result.beats.single().sourceItemId)
+        }
+    }
+
+    @Test
+    fun `editing a community copy keeps its origin`() {
+        runTest {
+            val repo = repository(FakeBeatsProvider())
+            advanceUntilIdle()
+            val copy = repo.importShared(
+                ShareCodec.SharePayload.BeatPayload(testBeat(name = "Copy")),
+                sourceItemId = "item-1",
+            ).beats.single()
+
+            // The editor rebuilds the beat from its draft, without the origin.
+            val edited = repo.saveBeat(testBeat(id = copy.id, name = "Copy", bpm = 120))!!
+
+            assertEquals("item-1", edited.sourceItemId)
+            assertEquals(120, edited.bpm)
+        }
+    }
+
     @Test
     fun `a second category with the same name is suffixed`() {
         runTest {

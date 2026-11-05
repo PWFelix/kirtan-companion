@@ -82,6 +82,7 @@ internal object LibraryJson {
     private const val KEY_GROUPS = "groups"
     private const val KEY_DESCRIPTION = "description"
     private const val KEY_GROUP = "group"
+    private const val KEY_SOURCE_ITEM_ID = "sourceItemId"
     private const val KEY_BEAT_IDS = "beatIds"
 
     // ── Encoding ───────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ internal object LibraryJson {
         }
         beat.description?.let { put(KEY_DESCRIPTION, it) }
         beat.group?.let { put(KEY_GROUP, it) }
+        beat.sourceItemId?.let { put(KEY_SOURCE_ITEM_ID, it) }
         for (lane in LaneId.ORDERED) {
             val cells = beat.pattern(lane) ?: continue
             put(lane.wireId, encodePattern(cells))
@@ -278,6 +280,7 @@ internal object LibraryJson {
             description = obj.stringField(KEY_DESCRIPTION),
             lanePatterns = lanes,
             group = obj.stringField(KEY_GROUP),
+            sourceItemId = obj.stringField(KEY_SOURCE_ITEM_ID),
         )
     }
 
