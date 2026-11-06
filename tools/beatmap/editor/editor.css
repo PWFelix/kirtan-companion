@@ -1,0 +1,46 @@
+/* Desktop correction tool. Warm, low-glare dark palette for long sessions;
+   the lane colours are the app's dayan clay and bayan umber, lifted for dark. */
+:root {
+  --bg: #1d1915;
+  --panel: #27221c;
+  --line: #3a332b;
+  --ink: #efe6d8;
+  --muted: #a39684;
+  --accent: #e08a4f;
+  font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { display: flex; flex-direction: column; overflow: hidden; }
+
+.bar {
+  display: flex; align-items: center; gap: 18px;
+  padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.bar.status { border-top: 1px solid var(--line); border-bottom: 0; gap: 16px; font-variant-numeric: tabular-nums; }
+.title { font-size: 15px; min-width: 220px; }
+.group { display: flex; align-items: center; gap: 12px; }
+.group:last-child { margin-left: auto; }
+.muted { color: var(--muted); }
+.grow { flex: 1; }
+.keys { font-size: 11.5px; text-align: right; }
+
+button, select {
+  font: inherit; color: var(--ink); background: #342d25;
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+button.primary { background: var(--accent); color: #1d1915; border-color: var(--accent); font-weight: 700; min-width: 84px; }
+button.dirty { background: var(--accent); color: #1d1915; font-weight: 700; }
+label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+label.check { color: var(--ink); cursor: pointer; }
+a { color: var(--accent); }
+
+main { flex: 1; position: relative; min-height: 0; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+#error {
+  position: fixed; inset: 30% 20% auto; padding: 20px; border-radius: 8px;
+  background: #5a2a20; color: #fff; font-size: 15px;
+}

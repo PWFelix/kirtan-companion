@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>Beat-map editor · Mrdanga Hero</title>
+<link rel="stylesheet" href="/editor/editor.css">
+</head>
+<body>
+<header class="bar">
+  <div class="title"><b id="song">…</b> <span id="artist" class="muted"></span></div>
+  <div class="group">
+    <button id="play" class="primary" title="Space">▶ Play</button>
+    <label>Speed
+      <select id="rate" title="[ and ]">
+        <option value="0.5">50%</option><option value="0.6">60%</option>
+        <option value="0.75">75%</option><option value="0.9">90%</option>
+        <option value="1" selected>100%</option>
+      </select>
+    </label>
+    <label>Hear
+      <select id="source" title="1 / 2 / 3">
+        <option value="mix">1 · full recording</option>
+        <option value="drums">2 · mridanga only</option>
+        <option value="backing">3 · without mridanga</option>
+      </select>
+    </label>
+    <label class="check" title="C"><input type="checkbox" id="chart"> chart</label>
+    <label class="check" title="M"><input type="checkbox" id="click"> beat click</label>
+    <label class="check" title="P: recording left, chart right"><input type="checkbox" id="split"> split ears</label>
+  </div>
+  <div class="group">
+    <a id="preview" href="/preview" target="_blank">Play-through ↗</a>
+    <button id="save" title="Cmd/Ctrl+S">Saved</button>
+  </div>
+</header>
+
+<main id="stage"><canvas id="cv"></canvas></main>
+
+<footer class="bar status">
+  <span id="pos">0:00.0</span>
+  <span id="where"></span>
+  <span id="bpm"></span>
+  <span id="counts" class="muted"></span>
+  <span class="grow"></span>
+  <span class="muted keys">
+    click a lane: add a stroke, or confirm a faint one; click again to remove ·
+    drag a beat in the ruler: move it (its strokes follow) ·
+    Alt-click ruler: insert / delete a beat ·
+    S: sam at playhead · N: next unsure stroke ·
+    ←/→ seek (Shift: 10 s) · −/=: zoom · ⌘Z / ⇧⌘Z
+  </span>
+</footer>
+
+<div id="error" hidden></div>
+<script type="module" src="/editor/editor.js"></script>
+</body>
+</html>

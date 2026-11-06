@@ -1,0 +1,6 @@
+# Generated maps hold the artists' audio and its stems. That is licensed
+# material: never commit it. Share map.json files deliberately, not by accident.
+maps/
+.venv/
+__pycache__/
+*.egg-info/

@@ -1,0 +1,20 @@
+[project]
+name = "beatmap"
+version = "0.1.0"
+description = "Mrdanga Hero beat-map tooling: extract a draft mridanga chart from a kirtan recording, correct it, preview it."
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "demucs>=4.0",
+  "librosa>=0.11",
+  "soundfile",
+  "torchcodec",
+  "numpy",
+  "scipy",
+]
+
+[project.scripts]
+beatmap = "beatmap.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
