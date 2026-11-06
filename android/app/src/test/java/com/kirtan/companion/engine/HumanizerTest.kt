@@ -168,4 +168,24 @@ class HumanizerTest {
         // And only Drag flams: Human keeps the bayan behind on Ge+Ta too.
         assertTrue(handGap(Feel.HUMAN, 6) < 0)
     }
+
+    @Test
+    fun `drag puts sam late and flams it wider`() {
+        val beat = testBeat(dayan = "O-------", bayan = "O-------")
+        fun mean(feel: Feel, lane: LaneId, stepMs: Double): Double {
+            val h = Humanizer(rate).apply { setBeat(beat); this.feel = feel; reset() }
+            var sum = 0.0
+            repeat(2_000) { h.advance(); sum += h.delayFrames(lane, 0, stepMs) * 1000.0 / rate }
+            return sum / 2_000
+        }
+        val stepMs = 268.0
+        // Sam's bayan: behind Human's by the sam drag (plus the small laid-back share).
+        val behind = mean(Feel.DRAG, LaneId.BAYAN, stepMs) - mean(Feel.HUMAN, LaneId.BAYAN, stepMs)
+        val expected = Humanizer.DRAG_SAM_STEPS * stepMs + 30.0 * Humanizer.DRAG_SAM_SCALE -
+            Humanizer.BAYAN_LAG_MS * Feel.HUMAN.amount
+        assertEquals(expected, behind, 2.0)
+        // The flam on sam is the wide one.
+        val gap = mean(Feel.DRAG, LaneId.DAYAN, stepMs) - mean(Feel.DRAG, LaneId.BAYAN, stepMs)
+        assertEquals(Humanizer.FLAM_SAM_MS, gap, 1.5)
+    }
 }

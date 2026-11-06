@@ -144,8 +144,13 @@ class Humanizer(private val sampleRate: Int) {
         val shape = dragShape
         ms += feel.dragMs * (if (step in shape.indices) shape[step] else 1f)
         // Ge+Ta in Drag: a flam, the bottom end first and the Ta a grace later.
-        if (flam && lane == LaneId.DAYAN) ms += FLAM_MS
-        if (feel.dragMs > 0.0 && shape.isNotEmpty()) ms += rampMs(step, shape.size, stepMs)
+        // Sam's is wider: the "1" is announced, not just struck.
+        if (flam && lane == LaneId.DAYAN) ms += if (step == 0) FLAM_SAM_MS else FLAM_MS
+        if (feel.dragMs > 0.0 && shape.isNotEmpty()) {
+            ms += rampMs(step, shape.size, stepMs)
+            // Sam too sits back: the ramp resets there, but not onto the grid.
+            if (step == 0) ms += (DRAG_SAM_STEPS * stepMs).coerceAtMost(DRAG_SAM_MAX_MS)
+        }
         return msToFrames(PAD_MS + ms)
     }
 
@@ -207,5 +212,10 @@ class Humanizer(private val sampleRate: Int) {
         const val DRAG_RAMP_MAX_MS = 200.0
         /** Drag's Ge+Ta flam: how far the dayan's Ta trails the bayan's Ge. */
         const val FLAM_MS = 28.0
+        /** ...and on sam, wider. */
+        const val FLAM_SAM_MS = 50.0
+        /** Drag's lateness on sam itself, in steps — the "1" is late too, just less. */
+        const val DRAG_SAM_STEPS = 0.15
+        const val DRAG_SAM_MAX_MS = 80.0
     }
 }

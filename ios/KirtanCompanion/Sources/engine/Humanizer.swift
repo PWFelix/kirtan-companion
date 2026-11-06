@@ -84,6 +84,9 @@ final class Humanizer {
     static let DRAG_RAMP_CURVE = 1.6
     static let DRAG_RAMP_MAX_MS = 200.0
     static let FLAM_MS = 28.0
+    static let FLAM_SAM_MS = 50.0
+    static let DRAG_SAM_STEPS = 0.15
+    static let DRAG_SAM_MAX_MS = 80.0
 
     private let sampleRate: Int
     var feel: Feel = .off
@@ -146,9 +149,14 @@ final class Humanizer {
         let shape = dragShape
         ms += feel.dragMs * (step >= 0 && step < shape.count ? shape[step] : 1)
         // Ge+Ta in Drag: a flam, the bottom end first and the Ta a grace later.
-        if flam && lane == .dayan { ms += Humanizer.FLAM_MS }
+        // Sam's is wider: the "1" is announced, not just struck.
+        if flam && lane == .dayan { ms += step == 0 ? Humanizer.FLAM_SAM_MS : Humanizer.FLAM_MS }
         // Drag's progressive part: later and later through the bar, sam back on time.
-        if feel.dragMs > 0 && !shape.isEmpty { ms += rampMs(step: step, steps: shape.count, stepMs: stepMs) }
+        if feel.dragMs > 0 && !shape.isEmpty {
+            ms += rampMs(step: step, steps: shape.count, stepMs: stepMs)
+            // Sam too sits back: the ramp resets there, but not onto the grid.
+            if step == 0 { ms += min(Humanizer.DRAG_SAM_STEPS * stepMs, Humanizer.DRAG_SAM_MAX_MS) }
+        }
         return msToFrames(Humanizer.PAD_MS + ms)
     }
 
