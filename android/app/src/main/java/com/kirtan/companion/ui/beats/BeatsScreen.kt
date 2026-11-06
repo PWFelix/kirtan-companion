@@ -225,6 +225,8 @@ internal fun BeatsScreen(
                 builtInMeta = shippedSourceLine(shipped.source, builtIns.size),
                 onOpenCategory = { page = BeatsPage.Category(it) },
                 onOpenDetail = { detail = it },
+                onShareBeat = { shareTarget = ShareTarget.BeatTarget(it) },
+                onDeleteBeat = { pendingDelete = it },
                 onOpenImport = { importOpen = true },
                 onOpenCommunity = { page = BeatsPage.Community },
             )
@@ -371,6 +373,8 @@ private fun LandingPage(
     builtInMeta: String,
     onOpenCategory: (String) -> Unit,
     onOpenDetail: (Beat) -> Unit,
+    onShareBeat: (Beat) -> Unit,
+    onDeleteBeat: (Beat) -> Unit,
     onOpenImport: () -> Unit,
     onOpenCommunity: () -> Unit,
 ) {
@@ -386,6 +390,8 @@ private fun LandingPage(
                 onQueryChange = onSearchChange,
                 allBeats = allBeats,
                 onOpenDetail = onOpenDetail,
+                onShareBeat = onShareBeat,
+                onDeleteBeat = onDeleteBeat,
             )
         }
 
@@ -452,9 +458,14 @@ private fun SearchCard(
     onQueryChange: (String) -> Unit,
     allBeats: List<Beat>,
     onOpenDetail: (Beat) -> Unit,
+    onShareBeat: (Beat) -> Unit,
+    onDeleteBeat: (Beat) -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
     val shape = RoundedCornerShape(dimens.radiusSectionCard)
+    // Reset with the query: a row left open under one search shouldn't stay
+    // open when the results change around it.
+    var openRow by remember(query) { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -516,7 +527,16 @@ private fun SearchCard(
                 if (matches.isEmpty()) {
                     Hint("No beat is named “$query”.")
                 } else {
-                    matches.forEach { beat -> BeatRow(beat = beat, onClick = { onOpenDetail(beat) }) }
+                    matches.forEach { beat ->
+                        SwipeBeatRow(
+                            beat = beat,
+                            openRow = openRow,
+                            onOpenRowChange = { openRow = it },
+                            onOpenDetail = onOpenDetail,
+                            onShareBeat = onShareBeat,
+                            onDeleteBeat = onDeleteBeat,
+                        )
+                    }
                 }
             }
         }
@@ -629,26 +649,14 @@ private fun CategoryPage(
     var openRow by remember(categoryId) { mutableStateOf<String?>(null) }
 
     @Composable
-    fun SwipeBeat(beat: Beat) {
-        val key = "beat-${beat.id}"
-        val actions = buildList {
-            add(SwipeAction("Share", KcIcons.Share, SwipeColors.shareBg, SwipeColors.shareFg) { onShareBeat(beat) })
-            // Built-ins can't be deleted, only customised; theirs is Share alone.
-            if (!beat.isBuiltIn && beat.id != null) {
-                add(SwipeAction("Delete", KcIcons.Trash, SwipeColors.deleteBg, SwipeColors.deleteFg) { onDeleteBeat(beat) })
-            }
-        }
-        SwipeActionsRow(
-            open = openRow == key,
-            onOpenChange = { open -> openRow = if (open) key else openRow.takeIf { it != key } },
-            actions = actions,
-        ) {
-            // A tap on an open row closes it rather than opening the beat.
-            BeatRow(beat = beat, onClick = {
-                if (openRow != null) openRow = null else onOpenDetail(beat)
-            })
-        }
-    }
+    fun SwipeBeat(beat: Beat) = SwipeBeatRow(
+        beat = beat,
+        openRow = openRow,
+        onOpenRowChange = { openRow = it },
+        onOpenDetail = onOpenDetail,
+        onShareBeat = onShareBeat,
+        onDeleteBeat = onDeleteBeat,
+    )
 
     LazyColumn(
         modifier = modifier,
@@ -725,6 +733,40 @@ private fun CategoryPage(
                 SwipeBeat(beats[index])
             }
         }
+    }
+}
+
+/**
+ * A library row that swipes left for Share (and Delete, for the user's own beats).
+ * Shared by the list pages and the landing page's search results; [openRow] is
+ * the list's one open row, so opening another closes the last.
+ */
+@Composable
+private fun SwipeBeatRow(
+    beat: Beat,
+    openRow: String?,
+    onOpenRowChange: (String?) -> Unit,
+    onOpenDetail: (Beat) -> Unit,
+    onShareBeat: (Beat) -> Unit,
+    onDeleteBeat: (Beat) -> Unit,
+) {
+    val key = "beat-${beat.id}"
+    val actions = buildList {
+        add(SwipeAction("Share", KcIcons.Share, SwipeColors.shareBg, SwipeColors.shareFg) { onShareBeat(beat) })
+        // Built-ins can't be deleted, only customised; theirs is Share alone.
+        if (!beat.isBuiltIn && beat.id != null) {
+            add(SwipeAction("Delete", KcIcons.Trash, SwipeColors.deleteBg, SwipeColors.deleteFg) { onDeleteBeat(beat) })
+        }
+    }
+    SwipeActionsRow(
+        open = openRow == key,
+        onOpenChange = { open -> onOpenRowChange(if (open) key else openRow.takeIf { it != key }) },
+        actions = actions,
+    ) {
+        // A tap on an open row closes it rather than opening the beat.
+        BeatRow(beat = beat, onClick = {
+            if (openRow != null) onOpenRowChange(null) else onOpenDetail(beat)
+        })
     }
 }
 
