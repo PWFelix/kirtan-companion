@@ -27,6 +27,10 @@ import kotlin.math.max
  * drum sits in front of a player — bayan (left hand) on the left, dayan (right
  * hand) on the right, the open strokes on the outside. Kartal is left off: it is
  * the congregation's part, not the mridanga player's.
+ *
+ * The enum's order is the RIGHT-handed layout. A left-handed player sits the
+ * drum the other way round — dayan under the left hand — so [Highway.columnsFor]
+ * mirrors it: dayan on the left, and the open strokes still on the outside.
  */
 enum class HighwayColumn(val lane: LaneId, val stroke: Stroke) {
     BAYAN_OPEN(LaneId.BAYAN, Stroke.OPEN),
@@ -58,6 +62,10 @@ data class HighwayFrame(
 )
 
 object Highway {
+
+    /** The columns left to right; mirrored for a left-handed player. */
+    fun columnsFor(leftHanded: Boolean): List<HighwayColumn> =
+        if (leftHanded) HighwayColumn.entries.reversed() else HighwayColumn.entries
 
     /** How much time the screen shows ahead of the hit line. */
     const val LOOKAHEAD_SECONDS = 1.8

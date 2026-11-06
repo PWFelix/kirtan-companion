@@ -42,6 +42,7 @@ import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.Stroke
 import com.kirtan.companion.ui.components.HairlineIconButton
 import com.kirtan.companion.ui.components.PrimaryButton
+import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.icons.KcIcons
 import com.kirtan.companion.ui.library.LibraryViewModel
 import com.kirtan.companion.ui.theme.KirtanTheme
@@ -118,10 +119,18 @@ internal fun LearnScreen(
             )
         }
 
+        val leftHanded = state.settings.learnLeftHanded
+        SecondaryButton(
+            label = if (leftHanded) "Left-handed · dayan on the left" else "Right-handed · dayan on the right",
+            onClick = { transport.setLearnLeftHanded(!leftHanded) },
+            minHeight = 38.dp,
+        )
+
         HighwayCanvas(
             beat = beat,
             bpm = state.bpm,
             playing = state.playing,
+            columns = Highway.columnsFor(leftHanded),
             getPhase = { transport.getPhase() },
             modifier = Modifier.weight(1f).fillMaxWidth(),
         )
@@ -173,6 +182,7 @@ private fun HighwayCanvas(
     beat: Beat,
     bpm: Int,
     playing: Boolean,
+    columns: List<HighwayColumn>,
     getPhase: () -> Double,
     modifier: Modifier = Modifier,
 ) {
@@ -197,7 +207,6 @@ private fun HighwayCanvas(
     val soft = PaletteToken.SYAHI_SOFT.color
 
     Canvas(modifier = modifier) {
-        val columns = HighwayColumn.entries
         val gap = 6.dp.toPx()
         val colW = (size.width - gap * (columns.size - 1)) / columns.size
         val labelH = 34.dp.toPx()
@@ -240,7 +249,7 @@ private fun HighwayCanvas(
 
         // Notes. One that has just landed glows its column's target.
         for (note in frame.notes) {
-            val i = note.column.ordinal
+            val i = columns.indexOf(note.column)
             val cx = colX(i) + colW / 2
             val y = yFor(note.rel)
             if (y < -noteR || y > hitY + noteR * 3) continue

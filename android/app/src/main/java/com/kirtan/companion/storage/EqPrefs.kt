@@ -211,6 +211,13 @@ data class EqPrefsSnapshot(
     val uiScale: Float,
     /** How much human variation the drum plays with. Off on a fresh install. */
     val feel: Feel = Feel.OFF,
+    /**
+     * The Learn highway drawn for a left-handed player: dayan columns on the
+     * left, bayan on the right. A player who sits the drum the other way round
+     * needs the screen to mirror their hands, or every stroke lands on the
+     * wrong side. Off (right-handed) on a fresh install.
+     */
+    val learnLeftHanded: Boolean = false,
     val dayan: EndSoundPrefs,
     val bayan: EndSoundPrefs,
 ) {
@@ -286,6 +293,7 @@ internal object EqPrefsCodec {
     private const val KEY_SHOW_STEP_LABELS = "showStepLabels"
     private const val KEY_UI_SCALE = "uiScale"
     private const val KEY_FEEL = "feel"
+    private const val KEY_LEARN_LEFT_HANDED = "learnLeftHanded"
     private const val KEY_BANDS = "bands"
     private const val KEY_TUNE = "tune"
     private const val KEY_OPEN = "open"
@@ -308,6 +316,7 @@ internal object EqPrefsCodec {
         put(KEY_SHOW_STEP_LABELS, snapshot.showStepLabels)
         put(KEY_UI_SCALE, snapshot.uiScale)
         put(KEY_FEEL, snapshot.feel.name)
+        put(KEY_LEARN_LEFT_HANDED, snapshot.learnLeftHanded)
         put(KEY_DAYAN, encodeEnd(snapshot.dayan))
         put(KEY_BAYAN, encodeEnd(snapshot.bayan))
     }.toString()
@@ -341,6 +350,7 @@ internal object EqPrefsCodec {
             showStepLabels = boolOf(parsed[KEY_SHOW_STEP_LABELS], true),
             uiScale = scaleOf(parsed[KEY_UI_SCALE]),
             feel = feelOf(parsed[KEY_FEEL]),
+            learnLeftHanded = boolOf(parsed[KEY_LEARN_LEFT_HANDED], false),
             dayan = endOf(parsed[KEY_DAYAN]),
             bayan = endOf(parsed[KEY_BAYAN]),
         )

@@ -77,4 +77,15 @@ class HighwayTest {
         assertEquals("Gi", Highway.bolAt(doubleTime, 0))
         assertEquals(Stroke.OPEN, daspahir.pattern(LaneId.BAYAN)!![0])
     }
+
+    @Test
+    fun leftHandedMirrorsTheColumns() {
+        val right = Highway.columnsFor(leftHanded = false)
+        val left = Highway.columnsFor(leftHanded = true)
+        assertEquals(listOf("Ge", "Khe", "Te", "Ta"), right.map { it.bol })
+        // Dayan under the left hand, open strokes still on the outside.
+        assertEquals(listOf("Ta", "Te", "Khe", "Ge"), left.map { it.bol })
+        assertEquals(LaneId.DAYAN, left.first().lane)
+        assertEquals(Stroke.OPEN, left.last().stroke)
+    }
 }

@@ -251,6 +251,11 @@ class TransportViewModel(
         publish(settings.copy(feel = feel))
     }
 
+    /** Mirror the Learn highway for a left-handed player. Display only. */
+    fun setLearnLeftHanded(leftHanded: Boolean) {
+        publish(settings.copy(learnLeftHanded = leftHanded))
+    }
+
     /**
      * Tap tempo: average the gaps between the last few taps.
      *

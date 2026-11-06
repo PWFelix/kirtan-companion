@@ -320,6 +320,14 @@ class EqPrefsTest {
     }
 
     @Test
+    fun `left-handed Learn round-trips and defaults to right-handed`() {
+        val snapshot = EqPrefsSnapshot.DEFAULT.copy(learnLeftHanded = true)
+        assertEquals(snapshot, EqPrefsCodec.decode(EqPrefsCodec.encode(snapshot)))
+        assertFalse(EqPrefsCodec.decode("{}").learnLeftHanded)
+        assertFalse(EqPrefsCodec.decode("""{"learnLeftHanded":"yes"}""").learnLeftHanded)
+    }
+
+    @Test
     fun `the stored blob uses the web's per-end field names`() {
         // `bands`, `tune`, `open`, `tuneOpen` are `src/storage/eqPrefs.js`'s keys, so
         // a settings file carried across from the browser still means the same thing.
@@ -334,6 +342,8 @@ class EqPrefsTest {
                 "uiScale",
                 // Also Android-only for now: the humanised-feel experiment.
                 "feel",
+                // And the Learn highway's left-handed mirror.
+                "learnLeftHanded",
             ),
             blob.keys,
         )
