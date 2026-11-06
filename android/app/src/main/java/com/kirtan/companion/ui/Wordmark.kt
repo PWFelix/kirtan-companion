@@ -165,8 +165,8 @@ internal fun Wordmark(size: Dp, modifier: Modifier = Modifier) {
 //   passes would put half of that timing in this file. Until then the wordmark
 //   renders in its final, fully-unfurled form everywhere, including the splash.
 
-/** मृदंग (mṛdaṅga) — the Devanagari line above the wordmark. */
-private const val DevanagariLine = "मृदंग"
+/** मृदङ्गधीर (mṛdaṅga-dhīra) — the Devanagari line above the wordmark. */
+private const val DevanagariLine = "मृदङ्गधीर"
 
 /** The inline-content slot the tilak is registered under. */
 private const val TilakSlot = "tilak"

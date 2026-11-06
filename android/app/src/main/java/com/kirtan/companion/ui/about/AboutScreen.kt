@@ -85,6 +85,15 @@ internal fun AboutScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(dimens.space4),
         ) {
+            // The name's gloss, under the lockup it explains.
+            Text(
+                text = "Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, " +
+                    "courageous or heroic in relation to the mṛdaṅga.",
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 14.sp,
+                lineHeight = 21.sp,
+                textAlign = TextAlign.Center,
+            )
             Text(
                 text = "paraṁ vijayate śrī-kṛṣṇa-saṅkīrtanam",
                 color = PaletteToken.CLAY.color,
