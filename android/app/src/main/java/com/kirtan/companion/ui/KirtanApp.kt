@@ -287,6 +287,7 @@ internal fun KirtanApp(
                         engine = transport.engine,
                         transport = transport,
                         initialBeat = editorInitial,
+                        savesAsCopy = editorInitial?.isBuiltIn == true && !editorForEveryone,
                         onSave = { beat, callback ->
                             // Routed, not decided: a shipped save is confirmed by a
                             // sheet first, so the editor's callback is held until the
@@ -295,7 +296,14 @@ internal fun KirtanApp(
                             if (editorForEveryone) {
                                 pendingShippedSave = PendingShippedSave(beat, callback)
                             } else {
-                                library.saveBeat(beat, callback)
+                                library.saveBeat(beat) { saved ->
+                                    // A built-in can't be changed, so its edit lands as
+                                    // a NEW beat. Select it, or Home and Learn keep
+                                    // playing the untouched original and the save
+                                    // looks like it did nothing.
+                                    if (saved != null && saved.id != beat.id) library.selectBeat(saved)
+                                    callback(saved)
+                                }
                             }
                         },
                         onBack = editorReturn?.let { from -> { tab = from } },

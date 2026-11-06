@@ -107,6 +107,12 @@ internal fun BeatEditorScreen(
     onBack: (() -> Unit)?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Saving will create the user's own copy rather than change [initialBeat]
+     * (a built-in edited by anyone but a maintainer saving for everyone). Said
+     * on the button, because otherwise Save looks like it silently did nothing.
+     */
+    savesAsCopy: Boolean = false,
 ) {
     val dimens = KirtanTheme.dimens
     val colors = KirtanTheme.colors
@@ -294,8 +300,20 @@ internal fun BeatEditorScreen(
 
         // ── Pinned Save ──
         Spacer(Modifier.height(dimens.space3))
+        if (savesAsCopy) {
+            Text(
+                text = "Built-in beats stay as they are. Saving adds your version to your library and plays it.",
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = dimens.space2),
+            )
+        }
         PrimaryButton(
-            label = if (saving) "Saving…" else "Save beat",
+            label = when {
+                saving -> "Saving…"
+                savesAsCopy -> "Save as my version"
+                else -> "Save beat"
+            },
             enabled = !saving,
             onClick = ::handleSave,
         )

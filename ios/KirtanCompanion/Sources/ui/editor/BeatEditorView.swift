@@ -341,7 +341,8 @@ struct BeatEditorView: View {
             Button {
                 save()
             } label: {
-                Label("Save", systemImage: "checkmark")
+                // A fork never changes the built-in: say so, or Save looks inert.
+                Label(isFork ? "Save as my version" : "Save", systemImage: "checkmark")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Palette.onClay)
                     .frame(maxWidth: .infinity)
@@ -397,6 +398,8 @@ struct BeatEditorView: View {
         transport.stopPreview()
         previewing = false
     }
+
+    private var isFork: Bool { if case .fork = mode { return true } else { return false } }
 
     private func save() {
         let beat = currentBeat()
