@@ -252,7 +252,7 @@ function App() {
   }
 
   if (view === "learn") {
-    return <LearnView onBack={() => setView("home")} nav={bottomNav} />;
+    return <LearnView transport={transport} beat={beat} onCycle={cycleBeat} nav={bottomNav} />;
   }
 
   if (view === "settings") {
