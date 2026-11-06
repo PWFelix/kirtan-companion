@@ -137,6 +137,7 @@ internal fun BeatsScreen(
     var importOpen by remember { mutableStateOf(false) }
     var importPreview by remember { mutableStateOf<ShareCodec.SharePayload?>(null) }
     var importResult by remember { mutableStateOf<String?>(null) }
+    var pendingDelete by remember { mutableStateOf<Beat?>(null) }
 
     // A deep-linked payload joins the same confirm-then-write path as a pasted
     // one, so an inbound link can never land in the library unreviewed.
@@ -247,6 +248,8 @@ internal fun BeatsScreen(
                 canCheckForUpdates = library.canCheckForUpdates,
                 onCheckForUpdates = { library.checkForBeatUpdates() },
                 onOpenDetail = { detail = it },
+                onShareBeat = { shareTarget = ShareTarget.BeatTarget(it) },
+                onDeleteBeat = { pendingDelete = it },
                 onShareList = { name, beats ->
                     shareTarget = ShareTarget.CategoryTarget(name, beats)
                 },
@@ -264,6 +267,32 @@ internal fun BeatsScreen(
             weight = FontWeight.ExtraBold,
             onClick = { onStart() },
         )
+    }
+
+    pendingDelete?.let { target ->
+        // A swipe is easy to make by accident; deleting someone's beat should
+        // not be. One deliberate tap on the revealed button, then this.
+        com.kirtan.companion.ui.components.KcSheet(
+            title = "Delete ${target.name}?",
+            onDismiss = { pendingDelete = null },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space3)) {
+                Text(
+                    text = "It will be removed from your library and from every list it is in.",
+                    color = PaletteToken.SYAHI_SOFT.color,
+                    fontSize = 13.4.sp,
+                )
+                PrimaryButton(
+                    label = "Delete",
+                    icon = KcIcons.Trash,
+                    onClick = {
+                        target.id?.let { library.deleteBeat(it) }
+                        pendingDelete = null
+                    },
+                )
+                SecondaryButton(label = "Cancel", onClick = { pendingDelete = null })
+            }
+        }
     }
 
     detail?.let { target ->
@@ -590,10 +619,36 @@ private fun CategoryPage(
     canCheckForUpdates: Boolean,
     onCheckForUpdates: () -> Unit,
     onOpenDetail: (Beat) -> Unit,
+    onShareBeat: (Beat) -> Unit,
+    onDeleteBeat: (Beat) -> Unit,
     onShareList: (String, List<Beat>) -> Unit,
     onPublishList: (String, List<Beat>) -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
+    // One open row at a time: opening another closes the last.
+    var openRow by remember(categoryId) { mutableStateOf<String?>(null) }
+
+    @Composable
+    fun SwipeBeat(beat: Beat) {
+        val key = "beat-${beat.id}"
+        val actions = buildList {
+            add(SwipeAction("Share", KcIcons.Share, SwipeColors.shareBg, SwipeColors.shareFg) { onShareBeat(beat) })
+            // Built-ins can't be deleted, only customised; theirs is Share alone.
+            if (!beat.isBuiltIn && beat.id != null) {
+                add(SwipeAction("Delete", KcIcons.Trash, SwipeColors.deleteBg, SwipeColors.deleteFg) { onDeleteBeat(beat) })
+            }
+        }
+        SwipeActionsRow(
+            open = openRow == key,
+            onOpenChange = { open -> openRow = if (open) key else openRow.takeIf { it != key } },
+            actions = actions,
+        ) {
+            // A tap on an open row closes it rather than opening the beat.
+            BeatRow(beat = beat, onClick = {
+                if (openRow != null) openRow = null else onOpenDetail(beat)
+            })
+        }
+    }
 
     LazyColumn(
         modifier = modifier,
@@ -659,7 +714,7 @@ private fun CategoryPage(
                 if (inGroup.isNotEmpty()) {
                     item(key = "heading-$group") { SectionLabel(group) }
                     items(count = inGroup.size, key = { i -> "beat-${inGroup[i].id}" }) { index ->
-                        BeatRow(beat = inGroup[index], onClick = { onOpenDetail(inGroup[index]) })
+                        SwipeBeat(inGroup[index])
                     }
                 }
             }
@@ -667,7 +722,7 @@ private fun CategoryPage(
             item { Hint("Nothing here yet.") }
         } else {
             items(count = beats.size, key = { i -> "beat-${beats[i].id}" }) { index ->
-                BeatRow(beat = beats[index], onClick = { onOpenDetail(beats[index]) })
+                SwipeBeat(beats[index])
             }
         }
     }

@@ -165,21 +165,20 @@ internal fun Wordmark(size: Dp, modifier: Modifier = Modifier) {
 //   passes would put half of that timing in this file. Until then the wordmark
 //   renders in its final, fully-unfurled form everywhere, including the splash.
 
-/** कीर्तन — the Devanagari line above the wordmark. */
-private const val DevanagariLine = "कीर्तन"
+/** मृदंग (mṛdaṅga) — the Devanagari line above the wordmark. */
+private const val DevanagariLine = "मृदंग"
 
 /** The inline-content slot the tilak is registered under. */
 private const val TilakSlot = "tilak"
 
 /**
- * `Kirtan&nbsp;Compan` + tilak + `on`. The non-breaking space is the JSX's
- * `&nbsp;`: the two words must never be split across lines, and `maxLines = 1`
- * above makes that belt and braces rather than the only defence.
+ * `Mrdanga&nbsp;Hero` — trying the name out (was "Kirtan Compan" + tilak + "on").
+ * The tilak stood in for Companion's i; this name has none, so it is set plain
+ * and the tilak slot simply goes unused. The non-breaking space keeps the two
+ * words on one line.
  */
 private val WordmarkLine = buildAnnotatedString {
-    append("Kirtan\u00A0Compan")
-    appendInlineContent(TilakSlot)
-    append("on")
+    append("Mrdanga\u00A0Hero")
 }
 
 // ── The lockup's em fractions, from `.kc-wordmark` / `.kc-wm-*` in index.css ──

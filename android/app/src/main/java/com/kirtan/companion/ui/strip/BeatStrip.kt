@@ -58,7 +58,6 @@ import kotlin.math.roundToInt
 /** The gap between cells, and the minimum a cell may be squeezed to. */
 private val CELL_GAP = 2.dp
 private val CELL_MIN_FULL = 34.dp
-private val CELL_MIN_MINI = 9.dp
 private val CELL_HEIGHT_FULL = 46.dp
 private val CELL_HEIGHT_MINI = 16.dp
 
@@ -122,7 +121,10 @@ internal fun BeatStrip(
         }
     }
 
-    val cellMin = if (mini) CELL_MIN_MINI else CELL_MIN_FULL
+    // A mini strip never scrolls: it is a preview inside a library row that
+    // swipes sideways for Share/Delete, and a scrolling strip would swallow the
+    // swipe. Long beats squeeze their cells to fit instead.
+    val cellMin = if (mini) 0.dp else CELL_MIN_FULL
     val cellHeight = if (mini) CELL_HEIGHT_MINI else CELL_HEIGHT_FULL
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {

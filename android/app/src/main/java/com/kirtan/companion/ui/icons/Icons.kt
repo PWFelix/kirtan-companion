@@ -470,6 +470,29 @@ internal object KcIcons {
         }
     }
 
+    /** A bin, for the library's swipe-to-delete. */
+    val Trash: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
+        strokedIcon("Trash", 18.dp) {
+            // Lid and handle.
+            moveTo(4f, 6.5f)
+            lineTo(20f, 6.5f)
+            moveTo(9.5f, 6.5f)
+            lineTo(9.5f, 4f)
+            lineTo(14.5f, 4f)
+            lineTo(14.5f, 6.5f)
+            // Can.
+            moveTo(6f, 6.5f)
+            lineTo(7f, 20f)
+            lineTo(17f, 20f)
+            lineTo(18f, 6.5f)
+            // Ribs.
+            moveTo(10f, 10f)
+            lineTo(10f, 16.5f)
+            moveTo(14f, 10f)
+            lineTo(14f, 16.5f)
+        }
+    }
+
     /**
      * The Browse tab's globe. It marks the one tab whose beats come from
      * OUTSIDE this device — today by pasted code, later from the community
