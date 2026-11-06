@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Painted mridanga on saffron. The foreground is the drum cut out of the
+     chosen artwork and sized to sit inside the 66dp safe zone, so no launcher
+     mask clips it. The monochrome layer keeps only the drum's light parts, so
+     Android 13+ themed icons still show its shape. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/icon_saffron" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
+</adaptive-icon>

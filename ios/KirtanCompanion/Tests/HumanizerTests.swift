@@ -1,0 +1,151 @@
+import Foundation
+import XCTest
+
+// The Feel humanizer and the two engine changes that carry it (a per-voice gain,
+// and a start delay longer than one block). Mirrors the Android HumanizerTest.
+
+final class HumanizerTests: XCTestCase {
+    let sr = 48_000
+
+    private func beat() -> Beat {
+        Beat(
+            id: "test", name: "Test Beat", note: "", bpm: 90, steps: 8,
+            beatsPerBar: 4, cellsPerGroup: 2, groups: nil, description: nil,
+            lanePatterns: [
+                .dayan: [.closed, nil, .open, .open, .closed, nil, .open, .open],
+                .bayan: [.open, nil, nil, .closed, nil, .open, .open, nil],
+            ]
+        )
+    }
+
+    private func humanizer(_ feel: Feel) -> Humanizer {
+        let h = Humanizer(sampleRate: sr)
+        h.setBeat(beat())
+        h.feel = feel
+        h.reset()
+        return h
+    }
+
+    private func run(_ h: Humanizer, steps: Int = 64) -> ([Int], [Float]) {
+        var delays: [Int] = [], gains: [Float] = []
+        for i in 0..<steps {
+            h.advance()
+            for lane in LaneId.ordered {
+                delays.append(h.delayFrames(lane, step: i % 8))
+                gains.append(h.gain(step: i % 8))
+            }
+        }
+        return (delays, gains)
+    }
+
+    func testOffChangesNothing() {
+        let h = humanizer(.off)
+        let (d, g) = run(h)
+        XCTAssertTrue(d.allSatisfy { $0 == 0 })
+        XCTAssertTrue(g.allSatisfy { $0 == 1 })
+        XCTAssertEqual(h.padFrames(), 0)
+    }
+
+    func testDelaysStayInsideTheWindow() {
+        for feel in Feel.allCases {
+            let max = Int((Humanizer.PAD_MS + Humanizer.MAX_LATE_MS + feel.dragMs) * Double(sr) / 1000) + 1
+            let (d, _) = run(humanizer(feel), steps: 2_000)
+            XCTAssertTrue(d.allSatisfy { (0...max).contains($0) }, "\(feel)")
+        }
+    }
+
+    func testGainStaysWithinAFewDb() {
+        let (_, g) = run(humanizer(.loose), steps: 2_000)
+        XCTAssertTrue(g.allSatisfy { $0 >= Humanizer.MIN_GAIN && $0 <= 1 })
+    }
+
+    func testBayanLandsAfterDayan() {
+        let h = humanizer(.human)
+        var dayan = 0, bayan = 0
+        for i in 0..<2_000 {
+            h.advance()
+            dayan += h.delayFrames(.dayan, step: i % 8)
+            bayan += h.delayFrames(.bayan, step: i % 8)
+        }
+        let lagMs = Double(bayan - dayan) / 2_000 / Double(sr) * 1000
+        XCTAssertTrue((7.0...14.0).contains(lagMs), "lag was \(lagMs) ms")
+    }
+
+    func testDownbeatIsLoudestOnAverage() {
+        let h = humanizer(.loose)
+        var sums = [Double](repeating: 0, count: 8)
+        for i in 0..<4_000 { sums[i % 8] += Double(h.gain(step: i % 8)) }
+        XCTAssertTrue(sums.dropFirst().allSatisfy { sums[0] > $0 })
+    }
+
+    func testSameBeatSameFeelEveryStart() {
+        let h = humanizer(.human)
+        let first = run(h)
+        h.reset()
+        let second = run(h)
+        XCTAssertEqual(first.0, second.0)
+        XCTAssertEqual(first.1, second.1)
+    }
+
+    func testVoiceCanWaitLongerThanABlock() {
+        let sample = PcmSample(data: [Float](repeating: 1, count: 1_000), sampleRate: sr)
+        var voice = Voice(sample, lane: .dayan, startOffset: 300, gain: 0.5)
+        var out = [Float](repeating: 0, count: 256)
+        voice.render(into: &out, count: 256, rate: 1)
+        XCTAssertTrue(out.allSatisfy { $0 == 0 }, "silent through the first block")
+        voice.render(into: &out, count: 256, rate: 1)
+        XCTAssertEqual(out[43], 0)
+        XCTAssertEqual(out[44], 0.5)
+    }
+
+    func testFeelRoundTripsThroughPrefs() {
+        var s = EqPrefsSnapshot.default
+        s.feel = .human
+        XCTAssertEqual(EqPrefsCodec.decode(EqPrefsCodec.encode(s)).feel, .human)
+        XCTAssertEqual(EqPrefsCodec.decode(#"{"feel":"wobbly"}"#).feel, .off)
+        XCTAssertEqual(EqPrefsCodec.decode(#"{"feel":3}"#).feel, .off)
+    }
+
+    // Drag: Human's variation shifted late — least on sam, most between beats.
+    func testDragSitsBehindTheBeat() {
+        func lateness(_ feel: Feel) -> [Double] {
+            let h = humanizer(feel)
+            var sums = [Double](repeating: 0, count: 8)
+            let n = 4_000
+            for i in 0..<n {
+                h.advance()
+                sums[i % 8] += Double(h.delayFrames(.dayan, step: i % 8)) * 1000 / Double(sr) - Humanizer.PAD_MS
+            }
+            return sums.map { $0 / Double(n / 8) }
+        }
+        let drag = lateness(.drag), human = lateness(.human)
+        XCTAssertEqual(drag[0] - human[0], 30 * Humanizer.DRAG_SAM_SCALE, accuracy: 3)
+        XCTAssertEqual(drag[4] - human[4], 30 * Humanizer.DRAG_BEAT_SCALE, accuracy: 3)
+        XCTAssertEqual(drag[3] - human[3], 30, accuracy: 3)
+        for feel in Feel.allCases where feel != .drag { XCTAssertEqual(feel.dragMs, 0) }
+    }
+
+    func testDragRampsThroughTheBarAndResetsOnSam() {
+        let h = humanizer(.drag)
+        let ramp = (0..<32).map { h.rampMs(step: $0, steps: 32, stepMs: 375) }
+        XCTAssertEqual(ramp[0], 0)
+        XCTAssertTrue(zip(ramp, ramp.dropFirst()).allSatisfy { $1 > $0 })
+        XCTAssertLessThanOrEqual(ramp.last!, Humanizer.DRAG_RAMP_MAX_MS)
+        XCTAssertEqual(h.rampMs(step: 16, steps: 32, stepMs: 200), 2 * h.rampMs(step: 16, steps: 32, stepMs: 100), accuracy: 1e-9)
+    }
+
+    // Drag flams Ge+Ta (fixture step 2: dayan O + bayan nil; step 6: dayan O + bayan O).
+    func testDragFlamsGeTaWithTheBayanLeading() {
+        func gap(_ feel: Feel, _ step: Int) -> Double {
+            let h = humanizer(feel)
+            var sum = 0.0
+            for _ in 0..<2_000 {
+                h.advance()
+                sum += Double(h.delayFrames(.dayan, step: step) - h.delayFrames(.bayan, step: step)) * 1000 / Double(sr)
+            }
+            return sum / 2_000
+        }
+        XCTAssertEqual(gap(.drag, 6), Humanizer.FLAM_MS, accuracy: 1.5)
+        XCTAssertLessThan(gap(.human, 6), 0)
+    }
+}

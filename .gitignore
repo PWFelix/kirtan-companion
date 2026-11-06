@@ -33,3 +33,8 @@ reference/
 
 # Local Claude Code agent definitions (keep on disk, not in the repo)
 .claude/code-reviewer.md
+
+# Qwen Code local scratch (device screenshots, agent temp files)
+.qwen/
+# Skills CLI lockfile; the skills it pins live in the gitignored .qwen/skills
+skills-lock.json

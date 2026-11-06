@@ -67,12 +67,18 @@ const REST_CHAR = "-";
 
 // Bounds. Generous enough that no real beat hits them, tight enough that a
 // hostile payload can't allocate anything interesting.
+//
+// The four pattern bounds are EXPORTED because shippedBeats.js needs the same
+// ones: a beat that reaches the built-in set always arrived through this
+// format first (a maintainer promotes a community beat), so the set of
+// patterns the two accept has to be one set, defined once. The other three
+// are about the code/URL envelope and stay private to this module.
 const MAX_CODE_LEN = 8000;   // ~a category of ten beats, with headroom
 const MAX_NAME_LEN = 40;
-const MAX_GROUPS = 32;       // numbered beats in one pattern
-const MAX_GROUP_CELLS = 12;  // cells in one numbered beat
-const MAX_STEPS = 64;        // total cells — this is the DoS bound that matters
-const MAX_CPQ = 12;
+export const MAX_GROUPS = 32;       // numbered beats in one pattern
+export const MAX_GROUP_CELLS = 12;  // cells in one numbered beat
+export const MAX_STEPS = 64;        // total cells — this is the DoS bound that matters
+export const MAX_CPQ = 12;
 const MAX_CAT_BEATS = 50;
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);

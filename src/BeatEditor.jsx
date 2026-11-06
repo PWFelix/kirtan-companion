@@ -133,7 +133,7 @@ const PAD_SETS = {
   ],
 };
 
-function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
+function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav, forEveryone, saveError }) {
   const [groups, setGroups] = useState(() => seedGroups(initialBeat));
   const [meter, setMeter]   = useState(() => meterFor(seedGroups(initialBeat), seedCpq(initialBeat)));
   const [dayan, setDayan] = useState(initialBeat ? [...initialBeat.dayan] : emptyGrid(sum(seedGroups(initialBeat))));
@@ -266,6 +266,13 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
    *  - The editor stays OPEN if the save failed. Unmounting is how a draft is
    *    discarded here, so closing on a failed write would throw the user's
    *    work away and leave them only an error message about it.
+   *
+   * WHERE the draft goes is the caller's business, and the one thing this
+   * function doesn't know: `onSave` writes to the user's library, or — for a
+   * maintainer's in-place edit of a built-in — to the table every install
+   * reads. Both answer the same way, with the saved beat or with nothing, and
+   * a refusal reaches the user as the `saveError` prop, which is why it can be
+   * read in front of the work it applies to.
    */
   async function handleSave() {
     if (saving) return;
@@ -449,9 +456,21 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
       </div>
 
       <div style={st.footer}>
+        {/* A refused save has to say why HERE. This editor stays open when a
+            save fails — unmounting is how a draft is discarded — and while it
+            is open it has replaced the screen any error strip belongs to, so a
+            message left with the caller is one the maintainer cannot read.
+            Without this the only feedback would be a button that stopped
+            spinning. */}
+        {saveError && <p style={st.saveError} role="alert">{saveError}</p>}
         <button onClick={handleSave} disabled={saving}
           style={{ ...st.saveBtn, ...(saving ? st.saveBtnBusy : null) }}>
-          {saving ? "Saving…" : "Save beat"}
+          {/* The label is the only thing in here that says WHERE a save goes, and
+              an in-place edit of a built-in goes to every install. "Save beat"
+              in that mode would read exactly like the private save it isn't:
+              the two editors are otherwise identical, because a beat being
+              corrected and a beat being forked are the same shape. */}
+          {saving ? "Saving…" : forEveryone ? "Save for everyone" : "Save beat"}
         </button>
       </div>
 
@@ -530,7 +549,13 @@ const st = {
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
 
-  footer: { flexShrink: 0, display: "flex", justifyContent: "flex-end" },
+  // A column rather than a row, so a refusal can sit above the button; the
+  // button keeps its right-alignment.
+  footer: { flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "var(--space-2)" },
+  // Stretched and left-aligned: a refusal is a sentence, and it wraps to two
+  // lines on a narrow phone. --clay, the colour the promote sheet's refusal
+  // wears — this is the same kind of news, from the same table.
+  saveError: { margin: 0, alignSelf: "stretch", textAlign: "left", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--clay)", lineHeight: 1.5 },
   saveBtn: { minHeight: 48, padding: "0 28px", borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
   // Dimmed rather than greyed: the button keeps its colour so the press
   // clearly registered, it just isn't pressable again.

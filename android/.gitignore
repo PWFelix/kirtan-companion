@@ -1,0 +1,18 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Release signing. The keystore lives outside the repo (~/.android) but guard
+# against it ever being copied in: a committed signing key means anyone can
+# publish updates that existing installs will accept.
+keystore.properties
+*.keystore
+*.jks

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- No AppCompat here: Compose supplies its own theming, so the Activity
+         theme only has to stop the platform window from flashing white before
+         the first frame. windowBackground is the rawhide head colour. -->
+    <style name="Theme.KirtanCompanion" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/head</item>
+        <item name="android:statusBarColor">@color/head</item>
+        <item name="android:navigationBarColor">@color/head</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
