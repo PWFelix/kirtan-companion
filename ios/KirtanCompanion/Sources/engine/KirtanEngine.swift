@@ -259,11 +259,12 @@ final class KirtanEngine: BlockRenderer {
                 // Iterated inline: this runs ten times a second forever, so it
                 // allocates nothing.
                 humanizer.advance()
+                let stepMs = 60_000 / clock.bpm * beat.beatsPerBar / Double(max(1, beat.steps))
                 for lane in LaneId.ordered {
                     guard let stroke = beat.strokeAt(lane, event.step) else { continue }
                     soundPlayer.play(
                         StrokeKey(lane: lane, open: stroke == .open),
-                        offsetInBlock: offset + humanizer.delayFrames(lane, step: event.step),
+                        offsetInBlock: offset + humanizer.delayFrames(lane, step: event.step, stepMs: stepMs),
                         gain: humanizer.gain(step: event.step)
                     )
                 }

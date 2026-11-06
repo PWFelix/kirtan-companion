@@ -366,11 +366,12 @@ class KirtanEngine(
                 // Iterated inline rather than via a helper that builds a list:
                 // this runs ten times a second forever, so it allocates nothing.
                 humanizer.advance()
+                val stepMs = 60_000.0 / clock.bpm * beat.beatsPerBar / beat.steps.coerceAtLeast(1)
                 for (lane in LaneId.ORDERED) {
                     val stroke = beat.strokeAt(lane, event.step) ?: continue
                     soundPlayer.play(
                         StrokeKey(lane, stroke == Stroke.OPEN),
-                        offset + humanizer.delayFrames(lane, event.step),
+                        offset + humanizer.delayFrames(lane, event.step, stepMs),
                         humanizer.gain(event.step),
                     )
                 }

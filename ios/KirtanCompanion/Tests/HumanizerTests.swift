@@ -124,4 +124,13 @@ final class HumanizerTests: XCTestCase {
         XCTAssertEqual(drag[3] - human[3], 30, accuracy: 3)
         for feel in Feel.allCases where feel != .drag { XCTAssertEqual(feel.dragMs, 0) }
     }
+
+    func testDragRampsThroughTheBarAndResetsOnSam() {
+        let h = humanizer(.drag)
+        let ramp = (0..<32).map { h.rampMs(step: $0, steps: 32, stepMs: 375) }
+        XCTAssertEqual(ramp[0], 0)
+        XCTAssertTrue(zip(ramp, ramp.dropFirst()).allSatisfy { $1 > $0 })
+        XCTAssertLessThanOrEqual(ramp.last!, Humanizer.DRAG_RAMP_MAX_MS)
+        XCTAssertEqual(h.rampMs(step: 16, steps: 32, stepMs: 200), 2 * h.rampMs(step: 16, steps: 32, stepMs: 100), accuracy: 1e-9)
+    }
 }

@@ -80,6 +80,9 @@ final class Humanizer {
     static let BAYAN_LAG_JITTER_MS = 3.0
     static let DRAG_SAM_SCALE = 0.3
     static let DRAG_BEAT_SCALE = 0.7
+    static let DRAG_RAMP_STEPS = 0.45
+    static let DRAG_RAMP_CURVE = 1.6
+    static let DRAG_RAMP_MAX_MS = 200.0
 
     private let sampleRate: Int
     var feel: Feel = .off
@@ -124,7 +127,7 @@ final class Humanizer {
     }
 
     /// Frames to delay this stroke from its grid position, pad included. Never negative.
-    func delayFrames(_ lane: LaneId, step: Int) -> Int {
+    func delayFrames(_ lane: LaneId, step: Int, stepMs: Double = 0) -> Int {
         let amount = feel.amount
         guard amount > 0 else { return 0 }
         var ms = drift * (step == 0 ? Humanizer.DOWNBEAT_DRIFT_SCALE : 1) + rng.gaussian() * Humanizer.JITTER_MS
@@ -132,6 +135,8 @@ final class Humanizer {
         ms = clamp(ms * amount, -Humanizer.PAD_MS, Humanizer.MAX_LATE_MS)
         let shape = dragShape
         ms += feel.dragMs * (step >= 0 && step < shape.count ? shape[step] : 1)
+        // Drag's progressive part: later and later through the bar, sam back on time.
+        if feel.dragMs > 0 && !shape.isEmpty { ms += rampMs(step: step, steps: shape.count, stepMs: stepMs) }
         return msToFrames(Humanizer.PAD_MS + ms)
     }
 
@@ -147,6 +152,13 @@ final class Humanizer {
         let j = Humanizer.GAIN_JITTER_DB
         let db = clamp(rng.gaussian() * j * amount, -2 * j, 2 * j)
         return min(1, max(Humanizer.MIN_GAIN, Float(shaped * pow(10, db / 20))))
+    }
+
+    /// 0 on sam, growing towards the bar's end; in steps so it feels the same at any tempo.
+    func rampMs(step: Int, steps: Int, stepMs: Double) -> Double {
+        let position = Double(step) / Double(max(1, steps))
+        return min(pow(position, Humanizer.DRAG_RAMP_CURVE) * Humanizer.DRAG_RAMP_STEPS * stepMs,
+                   Humanizer.DRAG_RAMP_MAX_MS)
     }
 
     private func msToFrames(_ ms: Double) -> Int {

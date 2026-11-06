@@ -18,10 +18,10 @@ enum class Feel(val amount: Float, val label: String, val dragMs: Double = 0.0) 
     LOOSE(1f, "Loose"),
 
     /**
-     * Laid back, the Bengali way: Human's variation, plus the whole drum sitting
-     * consistently BEHIND the beat. Not slower — the tempo is unchanged — just
-     * late against it, most between the beats and least on sam, so the "1" the
-     * singers lean on still lands nearly on time.
+     * Laid back, the Bengali way: Human's variation, plus the drum sitting
+     * BEHIND the beat and falling further behind as the cycle goes on — it
+     * feels like it is slowing through the tal — then landing sam on time, so
+     * the "1" the singers lean on never moves. The tempo itself is unchanged.
      */
     DRAG(0.75f, "Drag", dragMs = 30.0),
 }
@@ -40,10 +40,14 @@ enum class Feel(val amount: Float, val label: String, val dragMs: Double = 0.0) 
  *     slow random walk pulled back towards the grid, so the feel wanders the way
  *     a player's does, plus a little per-stroke jitter on top. The downbeat
  *     drifts less, so the "1" stays solid for people singing.
- *  3. DRAG (only [Feel.DRAG]). A constant lateness on top: [DRAG_SAM_SCALE]
- *     of it on sam, [DRAG_BEAT_SCALE] on other beat starts, all of it on the
- *     cells between. Because it is constant rather than random it reads as a
- *     style ("laid back"), not as sloppiness.
+ *  3. DRAG (only [Feel.DRAG]). Two deliberate, non-random latenesses:
+ *     a small laid-back offset ([Feel.dragMs]: [DRAG_SAM_SCALE] of it on sam,
+ *     [DRAG_BEAT_SCALE] on beat starts, all of it between), plus a RAMP that
+ *     grows through the bar — position^[DRAG_RAMP_CURVE] × [DRAG_RAMP_STEPS]
+ *     of a step, capped at [DRAG_RAMP_MAX_MS] — so each gap is a little longer
+ *     than the last and the cycle sounds like it is slowing, until sam snaps
+ *     back on the grid. The ramp is in steps, not ms, so it feels the same at
+ *     any tempo. Because none of it is random it reads as a style, not sloppiness.
  *  4. TWO HANDS. The bayan lands a few ms after the dayan, as it does on a real
  *     two-headed drum, rather than both samples starting on the same frame.
  *
@@ -118,7 +122,7 @@ class Humanizer(private val sampleRate: Int) {
      * Frames to delay this stroke from its grid position, including the pad.
      * Never negative.
      */
-    fun delayFrames(lane: LaneId, step: Int): Int {
+    fun delayFrames(lane: LaneId, step: Int, stepMs: Double = 0.0): Int {
         val amount = feel.amount
         if (amount <= 0f) return 0
         var ms = drift * (if (step == 0) DOWNBEAT_DRIFT_SCALE else 1.0) +
@@ -127,6 +131,7 @@ class Humanizer(private val sampleRate: Int) {
         ms = (ms * amount).coerceIn(-PAD_MS, MAX_LATE_MS)
         val shape = dragShape
         ms += feel.dragMs * (if (step in shape.indices) shape[step] else 1f)
+        if (feel.dragMs > 0.0 && shape.isNotEmpty()) ms += rampMs(step, shape.size, stepMs)
         return msToFrames(PAD_MS + ms)
     }
 
@@ -147,6 +152,12 @@ class Humanizer(private val sampleRate: Int) {
         val shaped = 1f - amount * (1f - accent)
         val db = (rng.nextGaussian() * GAIN_JITTER_DB * amount).coerceIn(-2 * GAIN_JITTER_DB, 2 * GAIN_JITTER_DB)
         return (shaped * 10.0.pow(db / 20.0).toFloat()).coerceIn(MIN_GAIN, 1f)
+    }
+
+    /** The progressive part of the drag: 0 on sam, growing towards the bar's end. */
+    internal fun rampMs(step: Int, steps: Int, stepMs: Double): Double {
+        val position = step.toDouble() / steps.coerceAtLeast(1)
+        return (position.pow(DRAG_RAMP_CURVE) * DRAG_RAMP_STEPS * stepMs).coerceAtMost(DRAG_RAMP_MAX_MS)
     }
 
     private fun msToFrames(ms: Double): Int = (ms * sampleRate / 1000.0).roundToInt().coerceAtLeast(0)
@@ -174,5 +185,11 @@ class Humanizer(private val sampleRate: Int) {
         // Drag: share of Feel.dragMs by position in the bar.
         const val DRAG_SAM_SCALE = 0.3f
         const val DRAG_BEAT_SCALE = 0.7f
+        /** Lateness reached by the end of the bar, in steps. */
+        const val DRAG_RAMP_STEPS = 0.45
+        /** >1: the slowing gathers towards the end of the cycle rather than evenly. */
+        const val DRAG_RAMP_CURVE = 1.6
+        /** However slow the tempo, never more than this behind. */
+        const val DRAG_RAMP_MAX_MS = 200.0
     }
 }

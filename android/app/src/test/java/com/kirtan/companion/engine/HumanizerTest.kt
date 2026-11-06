@@ -129,4 +129,21 @@ class HumanizerTest {
     fun `only drag drags`() {
         for (feel in Feel.entries) if (feel != Feel.DRAG) assertEquals(0.0, feel.dragMs, 0.0)
     }
+
+    @Test
+    fun `drag falls progressively behind through the bar and lands sam on time`() {
+        val h = humanizer(Feel.DRAG)
+        val stepMs = 375.0 // daspahir at 40 BPM: 32 cells over 8 pulses
+        val ramp = (0 until 32).map { h.rampMs(it, 32, stepMs) }
+        assertEquals(0.0, ramp[0], 0.0)
+        // Each gap longer than the last: the lateness grows, and grows faster.
+        assertTrue(ramp.zipWithNext().all { (a, b) -> b > a })
+        val gaps = ramp.zipWithNext { a, b -> b - a }
+        assertTrue(gaps.last() > gaps.first())
+        assertTrue(ramp.last() <= Humanizer.DRAG_RAMP_MAX_MS)
+        // Tempo-relative: at a fast tempo it is the same share of a step.
+        assertEquals(h.rampMs(16, 32, 100.0) * 2, h.rampMs(16, 32, 200.0), 1e-9)
+        // And it reaches the engine: a late stroke is later than with no tempo given.
+        assertTrue(Feel.entries.filter { it != Feel.DRAG }.all { it.dragMs == 0.0 })
+    }
 }
