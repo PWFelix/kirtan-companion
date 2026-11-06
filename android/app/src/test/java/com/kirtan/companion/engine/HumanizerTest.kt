@@ -146,4 +146,26 @@ class HumanizerTest {
         // And it reaches the engine: a late stroke is later than with no tempo given.
         assertTrue(Feel.entries.filter { it != Feel.DRAG }.all { it.dragMs == 0.0 })
     }
+
+    /** Mean (dayan − bayan) onset gap at [step], in ms. Positive: bayan first. */
+    private fun handGap(feel: Feel, step: Int): Double {
+        val h = humanizer(feel)
+        var sum = 0.0
+        val n = 2_000
+        repeat(n) {
+            h.advance()
+            sum += (h.delayFrames(LaneId.DAYAN, step) - h.delayFrames(LaneId.BAYAN, step)) * 1000.0 / rate
+        }
+        return sum / n
+    }
+
+    @Test
+    fun `drag flams Ge+Ta with the bayan leading`() {
+        // Fixture step 6 is dayan O + bayan O (Ge+Ta); step 3 is dayan O + bayan X.
+        assertEquals(Humanizer.FLAM_MS, handGap(Feel.DRAG, 6), 1.5)
+        // Not a flam elsewhere: the usual bayan lag, scaled by the feel.
+        assertEquals(-Humanizer.BAYAN_LAG_MS * Feel.DRAG.amount, handGap(Feel.DRAG, 3), 1.5)
+        // And only Drag flams: Human keeps the bayan behind on Ge+Ta too.
+        assertTrue(handGap(Feel.HUMAN, 6) < 0)
+    }
 }

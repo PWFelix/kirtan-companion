@@ -83,12 +83,15 @@ final class Humanizer {
     static let DRAG_RAMP_STEPS = 0.45
     static let DRAG_RAMP_CURVE = 1.6
     static let DRAG_RAMP_MAX_MS = 200.0
+    static let FLAM_MS = 28.0
 
     private let sampleRate: Int
     var feel: Feel = .off
 
     private var accents: [Double] = []
     private var dragShape: [Double] = []
+    /// Steps where Ge and Ta (bayan open + dayan open) fall together: Drag flams them.
+    private var flamSteps: [Bool] = []
     private var seed: UInt64 = 0
     private var rng = SplitMix64(seed: 0)
     private var drift = 0.0
@@ -104,6 +107,11 @@ final class Humanizer {
         }
         levels[0] = Humanizer.DOWNBEAT_LEVEL
         accents = levels
+        let dayan = beat.pattern(.dayan), bayan = beat.pattern(.bayan)
+        flamSteps = (0..<levels.count).map { i in
+            (dayan.map { i < $0.count ? $0[i] : nil } ?? nil) == .open &&
+                (bayan.map { i < $0.count ? $0[i] : nil } ?? nil) == .open
+        }
         dragShape = levels.map {
             $0 == Humanizer.DOWNBEAT_LEVEL ? Humanizer.DRAG_SAM_SCALE
                 : $0 == Humanizer.BEAT_LEVEL ? Humanizer.DRAG_BEAT_SCALE : 1
@@ -131,10 +139,14 @@ final class Humanizer {
         let amount = feel.amount
         guard amount > 0 else { return 0 }
         var ms = drift * (step == 0 ? Humanizer.DOWNBEAT_DRIFT_SCALE : 1) + rng.gaussian() * Humanizer.JITTER_MS
-        if lane == .bayan { ms += Humanizer.BAYAN_LAG_MS + rng.gaussian() * Humanizer.BAYAN_LAG_JITTER_MS }
+        let flam = feel == .drag && step >= 0 && step < flamSteps.count && flamSteps[step]
+        // On a flam the bayan LEADS, so it loses its usual lag behind the dayan.
+        if lane == .bayan && !flam { ms += Humanizer.BAYAN_LAG_MS + rng.gaussian() * Humanizer.BAYAN_LAG_JITTER_MS }
         ms = clamp(ms * amount, -Humanizer.PAD_MS, Humanizer.MAX_LATE_MS)
         let shape = dragShape
         ms += feel.dragMs * (step >= 0 && step < shape.count ? shape[step] : 1)
+        // Ge+Ta in Drag: a flam, the bottom end first and the Ta a grace later.
+        if flam && lane == .dayan { ms += Humanizer.FLAM_MS }
         // Drag's progressive part: later and later through the bar, sam back on time.
         if feel.dragMs > 0 && !shape.isEmpty { ms += rampMs(step: step, steps: shape.count, stepMs: stepMs) }
         return msToFrames(Humanizer.PAD_MS + ms)

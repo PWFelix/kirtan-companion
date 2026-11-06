@@ -133,4 +133,19 @@ final class HumanizerTests: XCTestCase {
         XCTAssertLessThanOrEqual(ramp.last!, Humanizer.DRAG_RAMP_MAX_MS)
         XCTAssertEqual(h.rampMs(step: 16, steps: 32, stepMs: 200), 2 * h.rampMs(step: 16, steps: 32, stepMs: 100), accuracy: 1e-9)
     }
+
+    // Drag flams Ge+Ta (fixture step 2: dayan O + bayan nil; step 6: dayan O + bayan O).
+    func testDragFlamsGeTaWithTheBayanLeading() {
+        func gap(_ feel: Feel, _ step: Int) -> Double {
+            let h = humanizer(feel)
+            var sum = 0.0
+            for _ in 0..<2_000 {
+                h.advance()
+                sum += Double(h.delayFrames(.dayan, step: step) - h.delayFrames(.bayan, step: step)) * 1000 / Double(sr)
+            }
+            return sum / 2_000
+        }
+        XCTAssertEqual(gap(.drag, 6), Humanizer.FLAM_MS, accuracy: 1.5)
+        XCTAssertLessThan(gap(.human, 6), 0)
+    }
 }

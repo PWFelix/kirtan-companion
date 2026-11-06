@@ -3,6 +3,7 @@ package com.kirtan.companion.engine
 import com.kirtan.companion.data.groupsFor
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.LaneId
+import com.kirtan.companion.data.model.Stroke
 import java.util.Random
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -76,6 +77,10 @@ class Humanizer(private val sampleRate: Int) {
 
     private val rng = Random(0L)
 
+    /** Steps where Ge and Ta (bayan open + dayan open) fall together: Drag flams them. */
+    @Volatile
+    private var flamSteps: BooleanArray = BooleanArray(0)
+
     /** Per-step share of [Feel.dragMs]: least on sam, most between beats. */
     @Volatile
     private var dragShape: FloatArray = FloatArray(0)
@@ -92,6 +97,11 @@ class Humanizer(private val sampleRate: Int) {
         }
         levels[0] = DOWNBEAT_LEVEL
         accents = levels
+        val dayan = beat.pattern(LaneId.DAYAN)
+        val bayan = beat.pattern(LaneId.BAYAN)
+        flamSteps = BooleanArray(levels.size) {
+            dayan?.getOrNull(it) == Stroke.OPEN && bayan?.getOrNull(it) == Stroke.OPEN
+        }
         dragShape = FloatArray(levels.size) {
             when (levels[it]) {
                 DOWNBEAT_LEVEL -> DRAG_SAM_SCALE
@@ -127,10 +137,14 @@ class Humanizer(private val sampleRate: Int) {
         if (amount <= 0f) return 0
         var ms = drift * (if (step == 0) DOWNBEAT_DRIFT_SCALE else 1.0) +
             rng.nextGaussian() * JITTER_MS
-        if (lane == LaneId.BAYAN) ms += BAYAN_LAG_MS + rng.nextGaussian() * BAYAN_LAG_JITTER_MS
+        val flam = feel == Feel.DRAG && flamSteps.getOrElse(step) { false }
+        // On a flam the bayan LEADS, so it loses its usual lag behind the dayan.
+        if (lane == LaneId.BAYAN && !flam) ms += BAYAN_LAG_MS + rng.nextGaussian() * BAYAN_LAG_JITTER_MS
         ms = (ms * amount).coerceIn(-PAD_MS, MAX_LATE_MS)
         val shape = dragShape
         ms += feel.dragMs * (if (step in shape.indices) shape[step] else 1f)
+        // Ge+Ta in Drag: a flam, the bottom end first and the Ta a grace later.
+        if (flam && lane == LaneId.DAYAN) ms += FLAM_MS
         if (feel.dragMs > 0.0 && shape.isNotEmpty()) ms += rampMs(step, shape.size, stepMs)
         return msToFrames(PAD_MS + ms)
     }
@@ -191,5 +205,7 @@ class Humanizer(private val sampleRate: Int) {
         const val DRAG_RAMP_CURVE = 1.6
         /** However slow the tempo, never more than this behind. */
         const val DRAG_RAMP_MAX_MS = 200.0
+        /** Drag's Ge+Ta flam: how far the dayan's Ta trails the bayan's Ge. */
+        const val FLAM_MS = 28.0
     }
 }
