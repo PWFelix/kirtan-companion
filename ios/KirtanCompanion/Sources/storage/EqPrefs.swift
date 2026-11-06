@@ -65,6 +65,8 @@ struct EqPrefsSnapshot: Equatable {
     var uiScale: Double
     /// How much human variation the drum plays with (Mixer → Feel). Off on a fresh install.
     var feel: Feel = .off
+    /// The Learn highway mirrored for a left-handed player (dayan columns on the left).
+    var learnLeftHanded: Bool = false
     var dayan: EndSoundPrefs
     var bayan: EndSoundPrefs
 
@@ -161,6 +163,7 @@ enum EqPrefsCodec {
     private static let keyShowStepLabels = "showStepLabels"
     private static let keyUiScale = "uiScale"
     private static let keyFeel = "feel"
+    private static let keyLearnLeftHanded = "learnLeftHanded"
     private static let keyDayan = "dayan"
     private static let keyBayan = "bayan"
 
@@ -183,6 +186,7 @@ enum EqPrefsCodec {
             (keyShowStepLabels, .bool(snapshot.showStepLabels)),
             (keyUiScale, .number(snapshot.uiScale)),
             (keyFeel, .string(snapshot.feel.rawValue)),
+            (keyLearnLeftHanded, .bool(snapshot.learnLeftHanded)),
             (keyDayan, encodeEnd(snapshot.dayan)),
             (keyBayan, encodeEnd(snapshot.bayan)),
         ).write()
@@ -213,6 +217,7 @@ enum EqPrefsCodec {
             showStepLabels: boolOf(obj.element(keyShowStepLabels), true),
             uiScale: scaleOf(obj.element(keyUiScale)),
             feel: obj.element(keyFeel)?.asString().flatMap(Feel.init(rawValue:)) ?? .off,
+            learnLeftHanded: boolOf(obj.element(keyLearnLeftHanded), false),
             dayan: endOf(obj.element(keyDayan)),
             bayan: endOf(obj.element(keyBayan)),
         )

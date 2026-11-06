@@ -54,4 +54,15 @@ final class HighwayTests: XCTestCase {
         XCTAssertEqual(Highway.bolAt(daspahir, step: 4), "Te")
         XCTAssertEqual(Highway.bolAt(doubleTime, step: 0), "Gi")
     }
+
+    func testLeftHandedMirrorsTheColumns() {
+        XCTAssertEqual(Highway.columns(leftHanded: false).map(\.bol), ["Ge", "Khe", "Te", "Ta"])
+        XCTAssertEqual(Highway.columns(leftHanded: true).map(\.bol), ["Ta", "Te", "Khe", "Ge"])
+    }
+
+    func testLeftHandedPrefRoundTrips() {
+        var s = EqPrefsSnapshot.default; s.learnLeftHanded = true
+        XCTAssertTrue(EqPrefsCodec.decode(EqPrefsCodec.encode(s)).learnLeftHanded)
+        XCTAssertFalse(EqPrefsCodec.decode("{}").learnLeftHanded)
+    }
 }

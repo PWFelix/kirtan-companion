@@ -171,6 +171,12 @@ final class TransportViewModel {
     }
 
     /// How much human variation the drum plays with. See engine/Humanizer.swift.
+    /// Mirror the Learn highway for a left-handed player. Display only.
+    func setLearnLeftHanded(_ leftHanded: Bool) {
+        var s = settings; s.learnLeftHanded = leftHanded
+        publish(s)
+    }
+
     func setFeel(_ feel: Feel) {
         engine.setFeel(feel)
         var s = settings; s.feel = feel

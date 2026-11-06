@@ -58,6 +58,13 @@ struct HighwayFrame {
 }
 
 enum Highway {
+    /// The columns left to right. allCases is the right-handed layout; a left-handed
+    /// player sits the drum the other way round, so it mirrors: dayan on the left,
+    /// open strokes still on the outside.
+    static func columns(leftHanded: Bool) -> [HighwayColumn] {
+        leftHanded ? HighwayColumn.allCases.reversed() : HighwayColumn.allCases
+    }
+
     /// How much time the screen shows ahead of the hit line.
     static let lookaheadSeconds = 1.8
     /// How far past the hit line a note keeps drawing (fading) before it goes.

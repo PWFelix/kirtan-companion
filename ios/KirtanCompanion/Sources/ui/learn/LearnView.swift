@@ -19,10 +19,12 @@ struct LearnView: View {
         VStack(spacing: 14) {
             if let beat {
                 header(beat)
+                handToggle
                 HighwayCanvas(
                     beat: beat,
                     bpm: transport.bpm,
                     playing: transport.playing,
+                    columns: Highway.columns(leftHanded: transport.settings.learnLeftHanded),
                     engine: transport.engineHandle
                 )
                 controls(beat)
@@ -52,6 +54,18 @@ struct LearnView: View {
             }
             .frame(maxWidth: .infinity)
             iconButton("chevron.right", "Next beat") { cycle(1) }
+        }
+    }
+
+    /// Left-handed players sit the drum the other way round; mirror the columns.
+    private var handToggle: some View {
+        let left = transport.settings.learnLeftHanded
+        return Button { transport.setLearnLeftHanded(!left) } label: {
+            Text(left ? "Left-handed · dayan on the left" : "Right-handed · dayan on the right")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Palette.syahi)
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.rule, lineWidth: 1))
         }
     }
 
@@ -103,6 +117,7 @@ private struct HighwayCanvas: View {
     let beat: Beat
     let bpm: Int
     let playing: Bool
+    let columns: [HighwayColumn]
     let engine: KirtanEngine
 
     var body: some View {
@@ -117,7 +132,6 @@ private struct HighwayCanvas: View {
     private func draw(_ ctx: inout GraphicsContext, size: CGSize, position: Double) {
         let lookahead = Highway.lookaheadSteps(bpm: bpm, cellsPerQuarter: cpqFor(beat))
         let frame = Highway.frame(beat, position: position, lookahead: lookahead)
-        let columns = HighwayColumn.allCases
         let gap: CGFloat = 6
         let colW = (size.width - gap * CGFloat(columns.count - 1)) / CGFloat(columns.count)
         let labelH: CGFloat = 34
@@ -148,7 +162,7 @@ private struct HighwayCanvas: View {
 
         // Notes; one that has just landed glows its column's target.
         for note in frame.notes {
-            let cx = colX(note.column.rawValue) + colW / 2
+            let cx = colX(columns.firstIndex(of: note.column) ?? 0) + colW / 2
             let y = yFor(note.rel)
             guard y >= -noteR, y <= hitY + noteR * 3 else { continue }
             let color = Palette.lane(note.column.lane)
