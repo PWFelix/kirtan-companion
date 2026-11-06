@@ -75,7 +75,9 @@ struct MixerSheet: View {
                 ForEach(Feel.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
-            Text("Small changes in timing and loudness, so the drum sounds played rather than programmed.")
+            Text(transport.settings.feel == .drag
+                 ? "Laid back, the Bengali way: the drum sits just behind the beat, least on sam, so the \"1\" stays solid for singing."
+                 : "Small changes in timing and loudness, so the drum sounds played rather than programmed.")
                 .font(.caption)
                 .foregroundStyle(Palette.syahiSoft)
         }

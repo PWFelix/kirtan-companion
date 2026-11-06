@@ -11,11 +11,19 @@ import kotlin.math.roundToInt
  * How much "human error" the drum plays with. One control rather than a page
  * of milliseconds: each level scales every kind of variation below together.
  */
-enum class Feel(val amount: Float, val label: String) {
+enum class Feel(val amount: Float, val label: String, val dragMs: Double = 0.0) {
     OFF(0f, "Off"),
     TIGHT(0.4f, "Tight"),
     HUMAN(0.75f, "Human"),
     LOOSE(1f, "Loose"),
+
+    /**
+     * Laid back, the Bengali way: Human's variation, plus the whole drum sitting
+     * consistently BEHIND the beat. Not slower — the tempo is unchanged — just
+     * late against it, most between the beats and least on sam, so the "1" the
+     * singers lean on still lands nearly on time.
+     */
+    DRAG(0.75f, "Drag", dragMs = 30.0),
 }
 
 /**
@@ -32,7 +40,11 @@ enum class Feel(val amount: Float, val label: String) {
  *     slow random walk pulled back towards the grid, so the feel wanders the way
  *     a player's does, plus a little per-stroke jitter on top. The downbeat
  *     drifts less, so the "1" stays solid for people singing.
- *  3. TWO HANDS. The bayan lands a few ms after the dayan, as it does on a real
+ *  3. DRAG (only [Feel.DRAG]). A constant lateness on top: [DRAG_SAM_SCALE]
+ *     of it on sam, [DRAG_BEAT_SCALE] on other beat starts, all of it on the
+ *     cells between. Because it is constant rather than random it reads as a
+ *     style ("laid back"), not as sloppiness.
+ *  4. TWO HANDS. The bayan lands a few ms after the dayan, as it does on a real
  *     two-headed drum, rather than both samples starting on the same frame.
  *
  * EARLY HITS. A stroke can't sound before the block it's placed in, so when the
@@ -60,6 +72,10 @@ class Humanizer(private val sampleRate: Int) {
 
     private val rng = Random(0L)
 
+    /** Per-step share of [Feel.dragMs]: least on sam, most between beats. */
+    @Volatile
+    private var dragShape: FloatArray = FloatArray(0)
+
     /** The slow timing walk, in ms; positive is late. */
     private var drift = 0.0
 
@@ -72,6 +88,13 @@ class Humanizer(private val sampleRate: Int) {
         }
         levels[0] = DOWNBEAT_LEVEL
         accents = levels
+        dragShape = FloatArray(levels.size) {
+            when (levels[it]) {
+                DOWNBEAT_LEVEL -> DRAG_SAM_SCALE
+                BEAT_LEVEL -> DRAG_BEAT_SCALE
+                else -> 1f
+            }
+        }
         seed = (beat.id ?: beat.name).hashCode().toLong()
     }
 
@@ -102,6 +125,8 @@ class Humanizer(private val sampleRate: Int) {
             rng.nextGaussian() * JITTER_MS
         if (lane == LaneId.BAYAN) ms += BAYAN_LAG_MS + rng.nextGaussian() * BAYAN_LAG_JITTER_MS
         ms = (ms * amount).coerceIn(-PAD_MS, MAX_LATE_MS)
+        val shape = dragShape
+        ms += feel.dragMs * (if (step in shape.indices) shape[step] else 1f)
         return msToFrames(PAD_MS + ms)
     }
 
@@ -145,5 +170,9 @@ class Humanizer(private val sampleRate: Int) {
         const val JITTER_MS = 3.0
         const val BAYAN_LAG_MS = 14.0
         const val BAYAN_LAG_JITTER_MS = 3.0
+
+        // Drag: share of Feel.dragMs by position in the bar.
+        const val DRAG_SAM_SCALE = 0.3f
+        const val DRAG_BEAT_SCALE = 0.7f
     }
 }

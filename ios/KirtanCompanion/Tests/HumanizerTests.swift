@@ -47,8 +47,8 @@ final class HumanizerTests: XCTestCase {
     }
 
     func testDelaysStayInsideTheWindow() {
-        let max = Int((Humanizer.PAD_MS + Humanizer.MAX_LATE_MS) * Double(sr) / 1000) + 1
         for feel in Feel.allCases {
+            let max = Int((Humanizer.PAD_MS + Humanizer.MAX_LATE_MS + feel.dragMs) * Double(sr) / 1000) + 1
             let (d, _) = run(humanizer(feel), steps: 2_000)
             XCTAssertTrue(d.allSatisfy { (0...max).contains($0) }, "\(feel)")
         }
@@ -104,5 +104,24 @@ final class HumanizerTests: XCTestCase {
         XCTAssertEqual(EqPrefsCodec.decode(EqPrefsCodec.encode(s)).feel, .human)
         XCTAssertEqual(EqPrefsCodec.decode(#"{"feel":"wobbly"}"#).feel, .off)
         XCTAssertEqual(EqPrefsCodec.decode(#"{"feel":3}"#).feel, .off)
+    }
+
+    // Drag: Human's variation shifted late — least on sam, most between beats.
+    func testDragSitsBehindTheBeat() {
+        func lateness(_ feel: Feel) -> [Double] {
+            let h = humanizer(feel)
+            var sums = [Double](repeating: 0, count: 8)
+            let n = 4_000
+            for i in 0..<n {
+                h.advance()
+                sums[i % 8] += Double(h.delayFrames(.dayan, step: i % 8)) * 1000 / Double(sr) - Humanizer.PAD_MS
+            }
+            return sums.map { $0 / Double(n / 8) }
+        }
+        let drag = lateness(.drag), human = lateness(.human)
+        XCTAssertEqual(drag[0] - human[0], 30 * Humanizer.DRAG_SAM_SCALE, accuracy: 3)
+        XCTAssertEqual(drag[4] - human[4], 30 * Humanizer.DRAG_BEAT_SCALE, accuracy: 3)
+        XCTAssertEqual(drag[3] - human[3], 30, accuracy: 3)
+        for feel in Feel.allCases where feel != .drag { XCTAssertEqual(feel.dragMs, 0) }
     }
 }

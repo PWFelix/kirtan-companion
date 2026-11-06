@@ -45,7 +45,7 @@ class HumanizerTest {
     fun `delays are never negative and stay inside the window`() {
         for (feel in Feel.entries) {
             val (delays, _) = run(humanizer(feel), steps = 2_000)
-            val max = msToFrames(Humanizer.PAD_MS + Humanizer.MAX_LATE_MS) + 1
+            val max = msToFrames(Humanizer.PAD_MS + Humanizer.MAX_LATE_MS + feel.dragMs) + 1
             assertTrue("$feel", delays.all { it in 0..max })
         }
     }
@@ -100,5 +100,33 @@ class HumanizerTest {
         voice.render(out, 256, 1.0)
         assertEquals(0f, out[43])
         assertEquals(0.5f, out[44])
+    }
+
+    /** Mean dayan delay, in ms beyond the pad, for each of the 8 steps. */
+    private fun meanLateness(feel: Feel): DoubleArray {
+        val h = humanizer(feel)
+        val sums = DoubleArray(8)
+        val n = 4_000
+        repeat(n) { i ->
+            h.advance()
+            sums[i % 8] += h.delayFrames(LaneId.DAYAN, i % 8) * 1000.0 / rate - Humanizer.PAD_MS
+        }
+        return DoubleArray(8) { sums[it] / (n / 8) }
+    }
+
+    @Test
+    fun `drag sits behind the beat, least on sam and most between beats`() {
+        val drag = meanLateness(Feel.DRAG)
+        val human = meanLateness(Feel.HUMAN)
+        // Same variation as Human, shifted late by the drag shape.
+        assertEquals(30.0 * Humanizer.DRAG_SAM_SCALE, drag[0] - human[0], 3.0)
+        assertEquals(30.0 * Humanizer.DRAG_BEAT_SCALE, drag[4] - human[4], 3.0)
+        assertEquals(30.0, drag[3] - human[3], 3.0)
+        assertTrue(drag[0] < drag[4] && drag[4] < drag[3])
+    }
+
+    @Test
+    fun `only drag drags`() {
+        for (feel in Feel.entries) if (feel != Feel.DRAG) assertEquals(0.0, feel.dragMs, 0.0)
     }
 }

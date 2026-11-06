@@ -161,6 +161,7 @@ internal fun PrimaryButton(
     minHeight: Dp = 58.dp,
     radius: Dp = KirtanTheme.dimens.radiusPlayBar,
     weight: FontWeight = FontWeight.Bold,
+    sidePadding: Dp = KirtanTheme.dimens.space4,
 ) {
     val dimens = KirtanTheme.dimens
     val shape = RoundedCornerShape(radius)
@@ -177,7 +178,7 @@ internal fun PrimaryButton(
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = dimens.space4),
+            .padding(horizontal = sidePadding),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -211,6 +212,7 @@ internal fun SecondaryButton(
     icon: ImageVector? = null,
     enabled: Boolean = true,
     minHeight: Dp = 46.dp,
+    sidePadding: Dp = KirtanTheme.dimens.space4,
 ) {
     val dimens = KirtanTheme.dimens
     val shape = RoundedCornerShape(dimens.radiusPad)
@@ -227,7 +229,7 @@ internal fun SecondaryButton(
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = dimens.space4),
+            .padding(horizontal = sidePadding),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {

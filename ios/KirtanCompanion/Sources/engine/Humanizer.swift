@@ -8,6 +8,9 @@ enum Feel: String, CaseIterable {
     case tight = "TIGHT"
     case human = "HUMAN"
     case loose = "LOOSE"
+    /// Laid back, the Bengali way: Human's variation plus the whole drum sitting
+    /// consistently behind the beat — most between beats, least on sam.
+    case drag = "DRAG"
 
     var amount: Double {
         switch self {
@@ -15,6 +18,7 @@ enum Feel: String, CaseIterable {
         case .tight: return 0.4
         case .human: return 0.75
         case .loose: return 1
+        case .drag: return 0.75
         }
     }
 
@@ -24,8 +28,12 @@ enum Feel: String, CaseIterable {
         case .tight: return "Tight"
         case .human: return "Human"
         case .loose: return "Loose"
+        case .drag: return "Drag"
         }
     }
+
+    /// Constant lateness, in ms, before the per-step shape.
+    var dragMs: Double { self == .drag ? 30 : 0 }
 }
 
 // Small, deliberate imperfections that stop the loop sounding like a machine.
@@ -70,11 +78,14 @@ final class Humanizer {
     static let JITTER_MS = 3.0
     static let BAYAN_LAG_MS = 14.0
     static let BAYAN_LAG_JITTER_MS = 3.0
+    static let DRAG_SAM_SCALE = 0.3
+    static let DRAG_BEAT_SCALE = 0.7
 
     private let sampleRate: Int
     var feel: Feel = .off
 
     private var accents: [Double] = []
+    private var dragShape: [Double] = []
     private var seed: UInt64 = 0
     private var rng = SplitMix64(seed: 0)
     private var drift = 0.0
@@ -90,6 +101,10 @@ final class Humanizer {
         }
         levels[0] = Humanizer.DOWNBEAT_LEVEL
         accents = levels
+        dragShape = levels.map {
+            $0 == Humanizer.DOWNBEAT_LEVEL ? Humanizer.DRAG_SAM_SCALE
+                : $0 == Humanizer.BEAT_LEVEL ? Humanizer.DRAG_BEAT_SCALE : 1
+        }
         seed = fnv1a(beat.id ?? beat.name)
     }
 
@@ -115,6 +130,8 @@ final class Humanizer {
         var ms = drift * (step == 0 ? Humanizer.DOWNBEAT_DRIFT_SCALE : 1) + rng.gaussian() * Humanizer.JITTER_MS
         if lane == .bayan { ms += Humanizer.BAYAN_LAG_MS + rng.gaussian() * Humanizer.BAYAN_LAG_JITTER_MS }
         ms = clamp(ms * amount, -Humanizer.PAD_MS, Humanizer.MAX_LATE_MS)
+        let shape = dragShape
+        ms += feel.dragMs * (step >= 0 && step < shape.count ? shape[step] : 1)
         return msToFrames(Humanizer.PAD_MS + ms)
     }
 

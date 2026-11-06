@@ -478,10 +478,12 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
         }
 
         // EXPERIMENT: human timing and loudness variation (engine/Humanizer.kt).
-        // Four fixed levels rather than a slider so it's easy to A/B by ear.
+        // Fixed levels rather than a slider so it's easy to A/B by ear.
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
             SectionLabel("Feel")
-            Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
+            // Five segments on a 360dp phone: tight gaps and side padding, or
+            // "Human" and "Loose" ellipsize.
+            Row(horizontalArrangement = Arrangement.spacedBy(dimens.space1)) {
                 for (feel in Feel.entries) {
                     if (feel == settings.feel) {
                         PrimaryButton(
@@ -490,6 +492,7 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
                             modifier = Modifier.weight(1f),
                             minHeight = 44.dp,
                             radius = dimens.radiusPad,
+                            sidePadding = 2.dp,
                         )
                     } else {
                         SecondaryButton(
@@ -497,13 +500,19 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
                             onClick = { transport.setFeel(feel) },
                             modifier = Modifier.weight(1f),
                             minHeight = 44.dp,
+                            sidePadding = 2.dp,
                         )
                     }
                 }
             }
             Text(
-                text = "Small changes in timing and loudness, so the drum sounds played " +
-                    "rather than programmed.",
+                text = if (settings.feel == Feel.DRAG) {
+                    "Laid back, the Bengali way: the drum sits just behind the beat, " +
+                        "least on sam, so the \"1\" stays solid for singing."
+                } else {
+                    "Small changes in timing and loudness, so the drum sounds played " +
+                        "rather than programmed."
+                },
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
             )
