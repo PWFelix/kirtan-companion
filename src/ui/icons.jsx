@@ -191,6 +191,16 @@ export function ShareIcon() {
   );
 }
 
+// Bin, for the library rows' swipe-to-delete.
+export function TrashIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 6.5h16M9.5 6.5V4h5v2.5M6 6.5 7 20h10l1-13.5M10 10v6.5M14 10v6.5" />
+    </svg>
+  );
+}
+
 // Globe for the Browse tab. It marks the one tab whose beats come from
 // OUTSIDE this device — today by pasted code, later from the community
 // library (PROJECT_PLAN §7), which is why it isn't a paste/clipboard glyph.

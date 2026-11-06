@@ -233,8 +233,8 @@ input[type="range"].kc-range::-moz-range-thumb {
   transform: translate(-50%, -50%);
   width: 110vmin; aspect-ratio: 1;
   background: var(--clay); opacity: 0.1;
-  -webkit-mask: url(/images/dharma-wheel.png) center / contain no-repeat;
-  mask: url(/images/dharma-wheel.png) center / contain no-repeat;
+  -webkit-mask: url(/images/splash-mridanga.png) center / contain no-repeat;
+  mask: url(/images/splash-mridanga.png) center / contain no-repeat;
   pointer-events: none;
   animation: kc-wheel-in 1100ms ease-out both;
 }

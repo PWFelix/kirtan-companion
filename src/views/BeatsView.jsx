@@ -8,9 +8,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { BEATS } from "../data/beats.js";
 import BeatStrip from "../BeatStrip.jsx";
+import SwipeRow from "../ui/SwipeRow.jsx";
 import * as sh from "../ui/styles.js";
 import {
-  InfoIcon, StartIcon, ShareIcon, GlobeIcon, CheckIcon, CheckDot, RadioDot,
+  InfoIcon, StartIcon, ShareIcon, TrashIcon, GlobeIcon, CheckIcon, CheckDot, RadioDot,
   ChevronRightIcon, SearchIcon, BackIcon,
 } from "../ui/icons.jsx";
 import { encodeBeat, encodeCategory, decodeShare, codeFromInput, shareUrl } from "../data/shareCodec.js";
@@ -80,6 +81,8 @@ function BeatsView({
   const [page, setPage] = useState({ name: "landing" });
   const [search, setSearch] = useState("");                 // library search box
   const [detailBeat, setDetailBeat] = useState(null);       // beat shown in the info sheet
+  // Which row is swiped open ("context:id"); one at a time, as on the apps.
+  const [swipedRow, setSwipedRow] = useState(null);
   const [createCatOpen, setCreateCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [addBeatsOpen, setAddBeatsOpen] = useState(false);
@@ -327,8 +330,32 @@ function BeatsView({
       </div>
     );
   };
+  // Swipe left for Share, and Delete on the user's own beats (built-ins can't
+  // be deleted). Delete still goes through the confirm sheet.
+  const swipeable = (b, context, body) => {
+    const key = `${context}:${b.id}`;
+    const actions = [{
+      label: "Share", icon: <ShareIcon />, background: "var(--strap)", color: "var(--on-clay)",
+      onClick: () => openShare({ kind: "beat", beat: b }),
+    }];
+    if (isCustomBeat(b.id)) actions.push({
+      label: "Delete", icon: <TrashIcon />, background: "var(--danger)", color: "var(--on-clay)",
+      onClick: () => askConfirm(
+        `Delete the beat “${b.name}”? This can't be undone, and it also leaves any playlists it's in.`,
+        "Delete",
+        () => onDeleteBeat(b.id)
+      ),
+    });
+    return (
+      <SwipeRow open={swipedRow === key}
+        onOpenChange={(o) => setSwipedRow(o ? key : (cur) => (cur === key ? null : cur))}
+        actions={actions}>
+        {body}
+      </SwipeRow>
+    );
+  };
   const renderRow = (b, context) => (
-    <div key={b.id} style={{ display: "contents" }}>{rowBody(b, context)}</div>
+    <div key={b.id}>{swipeable(b, context, rowBody(b, context))}</div>
   );
 
   // ── Landing: the section cards ─────────────────────────────────────────
@@ -602,7 +629,7 @@ function BeatsView({
           <SortableContext items={beats.map(b => b.id)} strategy={verticalListSortingStrategy}>
             {beats.map(b => (
               <SortableRow key={b.id} id={b.id}>
-                {(bits) => rowBody(b, browsedCat.id, bits)}
+                {(bits) => swipeable(b, browsedCat.id, rowBody(b, browsedCat.id, bits))}
               </SortableRow>
             ))}
           </SortableContext>
