@@ -1,7 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as sh from "../ui/styles.js";
 import { BackIcon, ChevronRightIcon, PlayIcon, PauseIcon } from "../ui/icons.jsx";
-import { COLUMNS, TRAIL_STEPS, highwayFrame, lookaheadSteps } from "../data/highway.js";
+import { COLUMNS, TRAIL_STEPS, columnsFor, highwayFrame, lookaheadSteps } from "../data/highway.js";
+
+// Left-handed mirror. Only Learn reads it, so it lives here, not in a hook.
+const LEFT_KEY = "kirtan-learn-left-handed";
+const loadLeft = () => { try { return localStorage.getItem(LEFT_KEY) === "1"; } catch { return false; } };
 import { cpqFor } from "../data/meter.js";
 
 /**
@@ -19,6 +23,13 @@ import { cpqFor } from "../data/meter.js";
  */
 function LearnView({ transport, beat, onCycle, nav }) {
   const { playing, ready, bpm, nudgeBpm, togglePlay, getPhase } = transport;
+  const [leftHanded, setLeftHanded] = useState(loadLeft);
+  const columns = useMemo(() => columnsFor(leftHanded), [leftHanded]);
+  const flipHands = () => {
+    const next = !leftHanded;
+    setLeftHanded(next);
+    try { localStorage.setItem(LEFT_KEY, next ? "1" : "0"); } catch { /* private mode: session only */ }
+  };
 
   return (
     <div className="kc-screen" style={sh.screenFixed}>
@@ -35,7 +46,12 @@ function LearnView({ transport, beat, onCycle, nav }) {
         </button>
       </header>
 
-      <HighwayCanvas beat={beat} bpm={bpm} playing={playing} getPhase={getPhase} />
+      <button onClick={flipHands} style={st.hands} aria-pressed={leftHanded}>
+        {leftHanded ? "Left-handed · dayan on the left" : "Right-handed · dayan on the right"}
+      </button>
+
+      <HighwayCanvas beat={beat} bpm={bpm} playing={playing} getPhase={getPhase}
+        columns={columns} />
 
       <div style={st.controls}>
         {/* Learning wants SLOWER more than anything: 5 BPM steps. */}
@@ -59,7 +75,7 @@ function LearnView({ transport, beat, onCycle, nav }) {
  * first bar at rest while stopped so the learner can read what's coming.
  * Colours are read from the design tokens, so it re-tints with the theme.
  */
-function HighwayCanvas({ beat, bpm, playing, getPhase }) {
+function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -80,13 +96,14 @@ function HighwayCanvas({ beat, bpm, playing, getPhase }) {
       const lookahead = lookaheadSteps(bpm, cpqFor(beat));
       const frame = highwayFrame(beat, position, lookahead);
       const gap = 6, labelH = 34;
-      const colW = (w - gap * (COLUMNS.length - 1)) / COLUMNS.length;
+      const colW = (w - gap * (columns.length - 1)) / columns.length;
+      const colOf = (n) => columns.indexOf(COLUMNS[n.column]);
       const hitY = h - labelH - 28;
       const pxPerStep = hitY / lookahead;
       const r = Math.min(20, Math.max(7, Math.min(colW, pxPerStep) * 0.36));
       const colX = (i) => i * (colW + gap);
       const yFor = (rel) => hitY - rel * pxPerStep;
-      const laneColor = (i) => c[COLUMNS[i].lane];
+      const laneColor = (i) => c[columns[i].lane];
       const circle = (x, y, rad) => { ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); };
       const hline = (y, color, width) => {
         ctx.strokeStyle = color; ctx.lineWidth = width;
@@ -95,7 +112,7 @@ function HighwayCanvas({ beat, bpm, playing, getPhase }) {
 
       // Column tracks.
       ctx.fillStyle = c.worn;
-      COLUMNS.forEach((_, i) => { ctx.beginPath(); ctx.roundRect(colX(i), 0, colW, h - labelH, 10); ctx.fill(); });
+      columns.forEach((_, i) => { ctx.beginPath(); ctx.roundRect(colX(i), 0, colW, h - labelH, 10); ctx.fill(); });
 
       // Beat lines; sam, the bar's first, bolder.
       for (const l of frame.lines) {
@@ -110,28 +127,29 @@ function HighwayCanvas({ beat, bpm, playing, getPhase }) {
       // Notes: open = filled disc, closed = ring (the strip's language). One
       // that has just landed glows its column's target.
       for (const n of frame.notes) {
-        const cx = colX(n.column) + colW / 2, y = yFor(n.rel);
+        const ci = colOf(n);
+        const cx = colX(ci) + colW / 2, y = yFor(n.rel);
         if (y < -r || y > hitY + r * 3) continue;
         const landed = n.rel <= 0;
         const alpha = landed ? Math.min(1, Math.max(0, 1 + n.rel / TRAIL_STEPS)) : 1;
         if (playing && landed && n.rel > -0.6) {
-          ctx.globalAlpha = 0.25 * alpha; ctx.fillStyle = laneColor(n.column);
+          ctx.globalAlpha = 0.25 * alpha; ctx.fillStyle = laneColor(ci);
           circle(cx, hitY, r * 2); ctx.fill();
         }
         ctx.globalAlpha = alpha;
         if (COLUMNS[n.column].stroke === "O") {
-          ctx.fillStyle = laneColor(n.column); circle(cx, y, r); ctx.fill();
+          ctx.fillStyle = laneColor(ci); circle(cx, y, r); ctx.fill();
         } else {
-          ctx.strokeStyle = laneColor(n.column); ctx.lineWidth = 4; circle(cx, y, r - 2); ctx.stroke();
+          ctx.strokeStyle = laneColor(ci); ctx.lineWidth = 4; circle(cx, y, r - 2); ctx.stroke();
         }
         ctx.globalAlpha = 1;
       }
 
       // Targets on the hit line, with each column's bol underneath.
       ctx.textAlign = "center";
-      COLUMNS.forEach((col, i) => {
+      columns.forEach((col, i) => {
         const cx = colX(i) + colW / 2;
-        const hot = playing && frame.notes.some((n) => n.column === i && n.rel <= 0 && n.rel > -0.5);
+        const hot = playing && frame.notes.some((n) => colOf(n) === i && n.rel <= 0 && n.rel > -0.5);
         ctx.globalAlpha = hot ? 1 : 0.35;
         ctx.strokeStyle = laneColor(i); ctx.lineWidth = hot ? 4 : 2;
         circle(cx, hitY, r + 4); ctx.stroke();
@@ -171,7 +189,7 @@ function HighwayCanvas({ beat, bpm, playing, getPhase }) {
     const onResize = () => { if (!playing) draw(); };
     window.addEventListener("resize", onResize);
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", onResize); };
-  }, [beat, bpm, playing, getPhase]);
+  }, [beat, bpm, playing, getPhase, columns]);
 
   return <canvas ref={ref} style={st.canvas} role="img" aria-label="Falling strokes" />;
 }
@@ -180,6 +198,10 @@ const st = {
   titleWrap: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center" },
   title: { ...sh.subTitle, fontSize: 22, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" },
   subtitle: { fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)" },
+  hands: {
+    flexShrink: 0, minHeight: 38, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent",
+    color: "var(--syahi)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 14, cursor: "pointer",
+  },
   canvas: { flex: 1, minHeight: 0, width: "100%", display: "block" },
   controls: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
   stepBtn: { ...sh.backBtn, fontSize: 22, fontFamily: "var(--font-body)" },

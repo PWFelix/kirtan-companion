@@ -24,6 +24,13 @@ export const COLUMNS = [
   { lane: "dayan", stroke: "O" },
 ].map((c) => ({ ...c, bol: BOLS[c.lane][c.stroke] }));
 
+/**
+ * The columns left to right. COLUMNS is the right-handed layout; a left-handed
+ * player sits the drum the other way round (dayan under the left hand), so it
+ * mirrors — dayan on the left, the open strokes still on the outside.
+ */
+export const columnsFor = (leftHanded) => (leftHanded ? [...COLUMNS].reverse() : COLUMNS);
+
 /** How much time the screen shows ahead of the hit line, in seconds. */
 export const LOOKAHEAD_SECONDS = 1.8;
 /** How far past the hit line a note keeps drawing (fading), in steps. */
