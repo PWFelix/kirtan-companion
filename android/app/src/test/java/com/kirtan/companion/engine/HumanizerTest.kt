@@ -51,9 +51,9 @@ class HumanizerTest {
     }
 
     @Test
-    fun `gain stays within a few dB of the accent`() {
+    fun `gain shades a stroke but never loses it or boosts it`() {
         val (_, gains) = run(humanizer(Feel.LOOSE), steps = 2_000)
-        assertTrue(gains.all { it in 0.25f..1.9f })
+        assertTrue(gains.all { it in Humanizer.MIN_GAIN..1f })
     }
 
     @Test

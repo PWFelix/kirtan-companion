@@ -105,7 +105,15 @@ class Humanizer(private val sampleRate: Int) {
         return msToFrames(PAD_MS + ms)
     }
 
-    /** Gain for this stroke, 1.0 meaning unchanged. */
+    /**
+     * Gain for this stroke, 1.0 meaning unchanged.
+     *
+     * Bounded to [MIN_GAIN, 1]: a feel may shade a stroke, never lose it. The
+     * first version let Loose stack a -3.7 dB off-beat level on -5 dB of jitter
+     * while boosting accents above unity into the limiter — ~10 dB between
+     * neighbours, and an off-beat Ta at 40 BPM simply vanished on a phone
+     * speaker. Accents now come only from lowering the rest, never from boosting.
+     */
     fun gain(step: Int): Float {
         val amount = feel.amount
         if (amount <= 0f) return 1f
@@ -113,7 +121,7 @@ class Humanizer(private val sampleRate: Int) {
         val accent = if (step in levels.indices) levels[step] else OFFBEAT_LEVEL
         val shaped = 1f - amount * (1f - accent)
         val db = (rng.nextGaussian() * GAIN_JITTER_DB * amount).coerceIn(-2 * GAIN_JITTER_DB, 2 * GAIN_JITTER_DB)
-        return shaped * 10.0.pow(db / 20.0).toFloat()
+        return (shaped * 10.0.pow(db / 20.0).toFloat()).coerceIn(MIN_GAIN, 1f)
     }
 
     private fun msToFrames(ms: Double): Int = (ms * sampleRate / 1000.0).roundToInt().coerceAtLeast(0)
@@ -122,8 +130,10 @@ class Humanizer(private val sampleRate: Int) {
         // Loudness: linear gain at full amount.
         const val DOWNBEAT_LEVEL = 1.0f
         const val BEAT_LEVEL = 0.82f
-        const val OFFBEAT_LEVEL = 0.65f
-        const val GAIN_JITTER_DB = 2.5
+        const val OFFBEAT_LEVEL = 0.75f
+        const val GAIN_JITTER_DB = 1.5
+        /** The quietest any stroke may be: -4.4 dB, audible on a phone speaker. */
+        const val MIN_GAIN = 0.6f
 
         // Timing, in ms at full amount.
         const val PAD_MS = 18.0

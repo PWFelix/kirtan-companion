@@ -56,7 +56,7 @@ final class HumanizerTests: XCTestCase {
 
     func testGainStaysWithinAFewDb() {
         let (_, g) = run(humanizer(.loose), steps: 2_000)
-        XCTAssertTrue(g.allSatisfy { $0 > 0.25 && $0 < 1.9 })
+        XCTAssertTrue(g.allSatisfy { $0 >= Humanizer.MIN_GAIN && $0 <= 1 })
     }
 
     func testBayanLandsAfterDayan() {

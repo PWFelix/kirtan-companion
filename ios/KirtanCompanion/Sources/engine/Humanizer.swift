@@ -56,8 +56,10 @@ final class Humanizer {
 
     static let DOWNBEAT_LEVEL = 1.0
     static let BEAT_LEVEL = 0.82
-    static let OFFBEAT_LEVEL = 0.65
-    static let GAIN_JITTER_DB = 2.5
+    static let OFFBEAT_LEVEL = 0.75
+    static let GAIN_JITTER_DB = 1.5
+    /// The quietest any stroke may be (-4.4 dB): a feel shades a stroke, never loses it.
+    static let MIN_GAIN: Float = 0.6
 
     static let PAD_MS = 18.0
     static let MAX_LATE_MS = 40.0
@@ -116,7 +118,9 @@ final class Humanizer {
         return msToFrames(Humanizer.PAD_MS + ms)
     }
 
-    /// Gain for this stroke, 1 meaning unchanged.
+    /// Gain for this stroke, 1 meaning unchanged, bounded to [MIN_GAIN, 1].
+    /// Unbounded, Loose put ~10 dB between neighbours and off-beat Ta strokes
+    /// vanished at slow tempi; accents now come only from lowering the rest.
     func gain(step: Int) -> Float {
         let amount = feel.amount
         guard amount > 0 else { return 1 }
@@ -125,7 +129,7 @@ final class Humanizer {
         let shaped = 1 - amount * (1 - accent)
         let j = Humanizer.GAIN_JITTER_DB
         let db = clamp(rng.gaussian() * j * amount, -2 * j, 2 * j)
-        return Float(shaped * pow(10, db / 20))
+        return min(1, max(Humanizer.MIN_GAIN, Float(shaped * pow(10, db / 20))))
     }
 
     private func msToFrames(_ ms: Double) -> Int {
