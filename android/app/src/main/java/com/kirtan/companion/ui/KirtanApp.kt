@@ -530,6 +530,11 @@ private fun ShippedRemoveSheet(
 private fun SettingsScreen(transport: TransportViewModel, container: AppContainer) {
     val state by transport.state.collectAsState()
     val dimens = KirtanTheme.dimens
+    var aboutOpen by remember { mutableStateOf(false) }
+    if (aboutOpen) {
+        com.kirtan.companion.ui.about.AboutScreen(onBack = { aboutOpen = false })
+        return
+    }
 
     Column(
         modifier = Modifier
@@ -594,6 +599,12 @@ private fun SettingsScreen(transport: TransportViewModel, container: AppContaine
                 )
             }
         }
+
+        com.kirtan.companion.ui.components.SecondaryButton(
+            label = "About",
+            icon = com.kirtan.companion.ui.icons.KcIcons.Info,
+            onClick = { aboutOpen = true },
+        )
 
         Spacer(Modifier.height(dimens.space4))
         Text(
