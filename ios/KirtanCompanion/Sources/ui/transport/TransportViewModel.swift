@@ -54,6 +54,8 @@ final class TransportViewModel {
     var step = -1
     var bpm = DEFAULT_BPM
     var beatName: String?
+    /// The beat the engine is pointed at — what Learn draws.
+    var loadedBeat: Beat?
     var settings = EqPrefsSnapshot.default
     /// The output device would not open. Sound is impossible until it clears.
     var outputFailed = false
@@ -318,6 +320,7 @@ final class TransportViewModel {
         engine.setBeat(beat)
         playback.setBeatTitle(beat.name)
         beatName = beat.name
+        loadedBeat = beat
         if !settings.tempoLocked && beat.id != loadedBeatId { changeBpm(beat.bpm) }
         loadedBeatId = beat.id
     }
@@ -334,6 +337,7 @@ final class TransportViewModel {
         engine.setBpm(bpm)
         playback.setBeatTitle(beat.name)
         beatName = beat.name
+        loadedBeat = beat
         playback.setPlayWhenReady(true)
     }
 

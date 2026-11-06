@@ -136,7 +136,7 @@ final class PlaybackController {
     private func updateNowPlaying() {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
             MPMediaItemPropertyTitle: beatTitle,
-            MPMediaItemPropertyArtist: "Kirtan Companion",
+            MPMediaItemPropertyArtist: "Mrdanga Hero",
             MPNowPlayingInfoPropertyPlaybackRate: playWhenReady ? 1.0 : 0.0,
         ]
     }

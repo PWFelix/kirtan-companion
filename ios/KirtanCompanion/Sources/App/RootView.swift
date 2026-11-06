@@ -104,10 +104,7 @@ struct SplashView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            Text("Kirtan\nCompanion")
-                .font(.system(size: 40, weight: .semibold, design: .serif))
-                .foregroundStyle(Palette.syahi)
-                .multilineTextAlignment(.center)
+            Wordmark(size: 38)
 
             Text("Play along, one drummer fewer.")
                 .font(.callout)

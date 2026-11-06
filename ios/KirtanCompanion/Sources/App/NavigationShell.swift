@@ -111,7 +111,7 @@ struct NavigationShell: View {
         case .beats:
             BeatsView(container: container, onEdit: { editorMode = $0 })
         case .learn:
-            LearnView()
+            LearnView(container: container)
         case .settings:
             SettingsView(container: container)
         }
@@ -162,28 +162,6 @@ struct BottomBar: View {
             .foregroundStyle(destination == dest ? Palette.clay : Palette.faint)
             .frame(maxWidth: .infinity)
         }
-    }
-}
-
-/// The Learn tab. A placeholder, as on the web (`src/views/LearnView.jsx`) and Android:
-/// guided lessons are a later phase of PROJECT_PLAN.md, and the bols toggle is the part
-/// of "learning" that exists today.
-struct LearnView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "graduationcap")
-                .font(.system(size: 40))
-                .foregroundStyle(Palette.strap)
-            Text("Learn")
-                .font(.system(size: 26, weight: .semibold, design: .serif))
-                .foregroundStyle(Palette.syahi)
-            Text("Guided learning comes later. For now, turn on bols in Settings to see the spoken name of every stroke under the beat.")
-                .font(.subheadline)
-                .foregroundStyle(Palette.syahiSoft)
-                .multilineTextAlignment(.center)
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

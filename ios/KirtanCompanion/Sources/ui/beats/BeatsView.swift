@@ -199,8 +199,10 @@ struct BeatsView: View {
             }
             searchField
             if trimmedQuery.isEmpty {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 4) {
+                // A List rather than a ScrollView, for the native swipe actions on each
+                // beat row; styled flat so it reads exactly as the stack did.
+                List {
+                    Group {
                         builtInHeader
                         ForEach(library.shippedBeats.effective, id: \.id) { beatRow($0) }
                         section("Your beats", library.state.customBeats)
@@ -215,15 +217,15 @@ struct BeatsView: View {
                             ForEach(beats, id: \.id) { beatRow($0) }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 110)
+                    .libraryListRow()
                 }
+                .libraryList()
             } else {
                 let results = library.allBeats.filter {
                     $0.name.localizedCaseInsensitiveContains(trimmedQuery)
                 }
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
+                List {
+                    Group {
                         if results.isEmpty {
                             Text("No beats match “\(trimmedQuery)”.")
                                 .font(.footnote).foregroundStyle(Palette.syahiSoft)
@@ -231,9 +233,9 @@ struct BeatsView: View {
                         }
                         ForEach(results, id: \.id) { beatRow($0) }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 110)
+                    .libraryListRow()
                 }
+                .libraryList()
             }
         }
     }
@@ -349,6 +351,21 @@ struct BeatsView: View {
         .padding(.trailing, 4)
         .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 12))
         .padding(.vertical, 2)
+        // Swipe left for the two everyday actions, as on Android. Delete still goes
+        // through the confirm dialog — a swipe is too easy to make by accident — and
+        // is offered only on the user's own beats; built-ins get Share alone.
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if library.isCustomBeat(beat.id), let id = beat.id {
+                Button { pending = .deleteBeat(id: id, name: beat.name) } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .tint(Palette.danger)
+            }
+            Button { sheet = .share(.beat(beat)) } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+            .tint(Palette.strap)
+        }
     }
 
     private func beatMenu(_ beat: Beat) -> some View {
@@ -465,5 +482,24 @@ struct BeatsView: View {
         case nil:
             break
         }
+    }
+}
+
+private extension View {
+    /// Flattens a List row to look like the old stacked layout: no separator, no row
+    /// background, the stack's 16pt side margins.
+    func libraryListRow() -> some View {
+        self.listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+    }
+
+    /// The List itself: plain, transparent, with room under the last row for the
+    /// floating bottom bar.
+    func libraryList() -> some View {
+        self.listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, 0)
+            .contentMargins(.bottom, 110, for: .scrollContent)
     }
 }

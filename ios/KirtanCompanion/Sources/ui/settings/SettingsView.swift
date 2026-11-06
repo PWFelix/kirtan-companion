@@ -12,7 +12,25 @@ struct SettingsView: View {
 
     private var transport: TransportViewModel { container.transport }
 
+    /// Open on About in DEBUG with `-kirtanAbout`, so the harness can screenshot it.
+    @State private var aboutOpen: Bool = {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-kirtanAbout")
+        #else
+        false
+        #endif
+    }()
+
     var body: some View {
+        // A stack only so About can be pushed; Settings itself draws its own title.
+        NavigationStack {
+            settings
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(isPresented: $aboutOpen) { AboutView() }
+        }
+    }
+
+    private var settings: some View {
         VStack(spacing: 12) {
             Text("Settings")
                 .font(.system(size: 26, weight: .semibold, design: .serif))
@@ -28,6 +46,11 @@ struct SettingsView: View {
 
                 if container.cloudConfigured {
                     cloudSection
+                }
+
+                Section {
+                    Button("About") { aboutOpen = true }
+                        .foregroundStyle(Palette.syahi)
                 }
             }
             .scrollContentBackground(.hidden)
