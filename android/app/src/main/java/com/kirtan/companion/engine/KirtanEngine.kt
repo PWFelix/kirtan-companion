@@ -310,20 +310,65 @@ class KirtanEngine(
     fun getStep(): Int = clock.stepAt(playheadFrame())
 
     /**
-     * The frame the playhead should be drawn at.
+     * The frame the playhead should be drawn at: the one being HEARD now, moved
+     * later by the user's display delay for the current output device.
      *
-     * Backed off from [AudioRenderer.framesRendered] by the track's buffer
-     * depth, because those frames are queued in the device and have not been
-     * heard yet. Without this the visual playhead leads the sound by the buffer
-     * latency — ~43 ms, which is very visible on a fast double-time beat.
+     * The heard frame comes from the device's output timestamp ([OutputClock]),
+     * which includes the whole output path, Bluetooth too on most phones. A
+     * device that reports none falls back to the rendered count minus the
+     * track's buffer.
      */
-    private fun playheadFrame(): Long {
-        val f = renderer.framesRendered - OUTPUT_LATENCY_FRAMES
+    private fun playheadFrame(): Long = playheadFrameAt(System.nanoTime(), displayDelayFrames)
+
+    private fun playheadFrameAt(nowNanos: Long, delayFrames: Long): Long {
+        val heard = renderer.presentedFrame(nowNanos)
+            ?: (renderer.framesRendered - renderer.bufferFrames)
+        val f = heard - delayFrames
         return if (f < 0) 0 else f
     }
 
-    /** The queued-block latency, in frames, of the output path. */
-    private val OUTPUT_LATENCY_FRAMES: Long = (BLOCK_SIZE * 4).toLong()
+    @Volatile
+    private var displayDelayFrames: Long = 0
+
+    /**
+     * Move the playhead later (or, negative, earlier) by [ms], to line the
+     * display up with what is heard on an output whose delay the phone does not
+     * report fully, typically a Bluetooth speaker. Display only: the drum is
+     * untouched, because the sound is the reference the player follows.
+     */
+    fun setDisplayDelayMs(ms: Int) {
+        displayDelayFrames = OutputClock.msToFrames(ms, sampleRate)
+    }
+
+    /**
+     * How far behind the rendered audio the phone says the speaker is, in ms,
+     * or null when it reports no timestamp (not playing, or the device does not
+     * support it). Shown on the sync screen so the user can see what is already
+     * being allowed for.
+     */
+    fun reportedOutputLatencyMs(): Int? {
+        val heard = renderer.presentedFrame(System.nanoTime()) ?: return null
+        return ((renderer.framesRendered - heard) * 1000 / sampleRate).toInt()
+    }
+
+    /**
+     * Where [nowNanos] falls relative to the nearest step, in ms, measured
+     * against what the phone says is being heard and IGNORING the display delay.
+     * Positive means after the step.
+     *
+     * This is the sync screen's measurement. The user taps on each click they
+     * hear; if the phone's own latency figure were complete, the taps would land
+     * on the steps (offset ≈ 0). Whatever they consistently land off by is the
+     * delay the phone did not report, which is exactly the display delay to set.
+     */
+    fun offsetFromNearestStepMs(nowNanos: Long): Double {
+        val beat = sequencer.beat ?: return 0.0
+        val steps = beat.steps.coerceAtLeast(1)
+        val position = clock.phaseAt(playheadFrameAt(nowNanos, 0)) * steps
+        val off = position - kotlin.math.round(position)
+        val stepMs = 60_000.0 / clock.bpm * beat.beatsPerBar / steps
+        return off * stepMs
+    }
 
     // ── The audio thread's entry point ─────────────────────────────────────
 

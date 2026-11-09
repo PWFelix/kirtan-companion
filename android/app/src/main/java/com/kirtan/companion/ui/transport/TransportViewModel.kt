@@ -20,6 +20,7 @@ import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.LaneId
 import com.kirtan.companion.engine.EngineEvent
 import com.kirtan.companion.engine.KirtanEngine
+import com.kirtan.companion.playback.OutputRoute
 import com.kirtan.companion.storage.EndSoundPrefs
 import com.kirtan.companion.storage.EqPrefs
 import com.kirtan.companion.storage.EqPrefsSnapshot
@@ -51,7 +52,17 @@ data class TransportState(
     val settings: EqPrefsSnapshot = EqPrefsSnapshot.DEFAULT,
     /** The output device would not open. Sound is impossible until it clears. */
     val outputFailed: Boolean = false,
-)
+    /** Where the drum is playing: the phone speaker, headphones, a Bluetooth speaker. */
+    val route: OutputRoute = OutputRoute.SPEAKER,
+    /**
+     * Set when a Bluetooth device is playing that the user has never been asked
+     * to sync the display for. Drives the one-time banner on the playing screen.
+     */
+    val syncPrompt: OutputRoute? = null,
+) {
+    /** The display delay in force for the current output. */
+    val displayDelayMs: Int get() = settings.displayDelay(route.key)
+}
 
 /**
  * The engine and its Compose mirror, as one unit.
@@ -153,6 +164,70 @@ class TransportViewModel(
 
         container.ensureSoundsLoaded()
         loadPrefs()
+        observeRoute()
+    }
+
+    /**
+     * Follow the output device, applying its display delay as it changes. A
+     * Bluetooth speaker connecting mid-kirtan takes its own delay with it, and
+     * disconnecting falls back to the phone speaker's.
+     */
+    private fun observeRoute() {
+        viewModelScope.launch {
+            container.outputRoute.route.collect { route ->
+                _state.value = _state.value.copy(route = route)
+                applyDisplayDelay()
+                updateSyncPrompt()
+            }
+        }
+    }
+
+    private fun applyDisplayDelay() {
+        engine.setDisplayDelayMs(settings.displayDelay(_state.value.route.key))
+    }
+
+    /** Offer to sync once per Bluetooth device, and only while it is actually playing. */
+    private fun updateSyncPrompt() {
+        val s = _state.value
+        val prompt = s.route.takeIf {
+            it.bluetooth && s.playing && it.key !in settings.syncPrompted &&
+                it.key !in settings.displayDelays
+        }
+        if (prompt != s.syncPrompt) _state.value = s.copy(syncPrompt = prompt)
+    }
+
+    // ── Display sync ───────────────────────────────────────────────────────
+
+    /**
+     * Start the sync test: a plain click on every beat, with the humanizer off
+     * so each click lands exactly on its step. Runs through the preview path,
+     * like the editor, so Home's transport is left as it was.
+     */
+    suspend fun startSyncTest() {
+        engine.setFeel(Feel.OFF)
+        startPreview(SYNC_TEST_BEAT, SYNC_TEST_BPM)
+    }
+
+    /** End the sync test and give the drum its feel back. */
+    fun stopSyncTest() {
+        stopPreview()
+        engine.setFeel(settings.feel)
+    }
+
+    /** Set the display delay for the CURRENT output device and apply it now. */
+    fun setDisplayDelay(ms: Int) {
+        val clamped = ms.coerceIn(EqPrefsSnapshot.DISPLAY_DELAY_MIN_MS, EqPrefsSnapshot.DISPLAY_DELAY_MAX_MS)
+        val key = _state.value.route.key
+        engine.setDisplayDelayMs(clamped)
+        publish(settings.copy(displayDelays = settings.displayDelays + (key to clamped)))
+        updateSyncPrompt()
+    }
+
+    /** Close the "sync the display?" banner for this device, for good. */
+    fun dismissSyncPrompt() {
+        val key = _state.value.syncPrompt?.key ?: return
+        publish(settings.copy(syncPrompted = settings.syncPrompted + key))
+        _state.value = _state.value.copy(syncPrompt = null)
     }
 
     private fun observeEngine() {
@@ -168,7 +243,13 @@ class TransportViewModel(
                         applyPrefsToEngine()
                     }
 
-                    EngineEvent.Started -> _state.value = _state.value.copy(playing = true)
+                    EngineEvent.Started -> {
+                        _state.value = _state.value.copy(playing = true)
+                        // A Bluetooth switch is not always announced as a device
+                        // change, so look again whenever the drum starts.
+                        container.outputRoute.refresh()
+                        updateSyncPrompt()
+                    }
 
                     EngineEvent.Stopped -> _state.value = _state.value.copy(
                         playing = false,
@@ -189,6 +270,7 @@ class TransportViewModel(
         viewModelScope.launch {
             connection.playWhenReady.collect { playing ->
                 _state.value = _state.value.copy(playing = playing)
+                updateSyncPrompt()
             }
         }
     }
@@ -201,6 +283,8 @@ class TransportViewModel(
             settings = loaded
             tempoLocked = loaded.tempoLocked
             _state.value = _state.value.copy(settings = loaded)
+            applyDisplayDelay()
+            updateSyncPrompt()
             // Applied immediately in case samples decoded first, and again from
             // the Ready handler if they did not. Two-phase hydration, as in the
             // web hook, for the reason given above.
@@ -503,6 +587,30 @@ class TransportViewModel(
         const val TAP_RESET_MS = 2000L
 
         val BPM_RANGE = MIN_BPM..MAX_BPM
+
+        /**
+         * The sync test's tempo. Slow on purpose: a tap is matched to the NEAREST
+         * click, so the largest delay it can measure is half the gap between
+         * clicks. At 70 BPM that is ±430 ms, comfortably past any Bluetooth
+         * speaker's unreported delay.
+         */
+        const val SYNC_TEST_BPM = 70
+
+        /** One closed dayan stroke on every beat: the sharpest attack the kit has. */
+        val SYNC_TEST_BEAT = Beat(
+            id = "sync-test",
+            name = "Sync test",
+            note = "",
+            bpm = SYNC_TEST_BPM,
+            steps = 4,
+            beatsPerBar = 4.0,
+            cellsPerGroup = 1,
+            groups = null,
+            description = null,
+            lanePatterns = mapOf(
+                LaneId.DAYAN to List(4) { com.kirtan.companion.data.model.Stroke.CLOSED },
+            ),
+        )
 
         /**
          * [prefs] is injected rather than constructed here so a test can pass a

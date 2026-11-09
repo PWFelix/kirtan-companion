@@ -76,6 +76,15 @@ class AppContainer(private val appContext: Context) {
 
     val engine: KirtanEngine by lazy { KirtanEngine(appContext.assets, sampleRate) }
 
+    /**
+     * Which output the drum is playing through. Process-scoped like the engine:
+     * the display delay follows the device, and a speaker can connect while no
+     * screen is showing.
+     */
+    val outputRoute: com.kirtan.companion.playback.OutputRouteWatcher by lazy {
+        com.kirtan.companion.playback.OutputRouteWatcher(appContext)
+    }
+
     /** The on-device library. The default provider; the cloud swaps in over it. */
     val localBeats: BeatsProvider by lazy { LocalBeatsProvider(store) }
 

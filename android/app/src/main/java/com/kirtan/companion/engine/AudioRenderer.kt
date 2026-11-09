@@ -2,6 +2,7 @@ package com.kirtan.companion.engine
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
+import android.media.AudioTimestamp
 import android.media.AudioTrack
 import android.os.Process
 import android.util.Log
@@ -70,6 +71,13 @@ class AudioRenderer(
 
         /** Transient write failures to retry before giving up on a block. */
         private const val WRITE_RETRIES = 8
+
+        /**
+         * Refresh the output timestamp every this many blocks (~43 ms at 48 kHz).
+         * The platform only updates it every few tens of milliseconds anyway,
+         * and between readings the sample rate extrapolates exactly.
+         */
+        private const val STAMP_EVERY_BLOCKS = 8
     }
 
     /**
@@ -89,6 +97,30 @@ class AudioRenderer(
     @Volatile
     var isRunning: Boolean = false
         private set
+
+    /**
+     * The latest output timestamp: which frame the device was presenting, and
+     * when. Written by the audio thread, read by the UI to place the playhead.
+     * See [OutputClock].
+     */
+    @Volatile
+    private var stamp: OutputClock.Stamp? = null
+
+    /**
+     * Frames the track itself buffers. The fallback latency when the device
+     * gives no timestamp: with a blocking write the buffer runs nearly full, so
+     * this is roughly how far the rendered count leads what is heard.
+     */
+    @Volatile
+    var bufferFrames: Int = blockSize * BUFFER_BLOCKS
+        private set
+
+    /**
+     * The frame being heard at [nowNanos] (CLOCK_MONOTONIC, i.e.
+     * [System.nanoTime]), or null when the device has not reported a timestamp.
+     */
+    fun presentedFrame(nowNanos: Long): Long? =
+        OutputClock.presentedFrame(stamp, nowNanos, sampleRate, framesRendered)
 
     private var thread: Thread? = null
     private var track: AudioTrack? = null
@@ -112,6 +144,8 @@ class AudioRenderer(
         track = newTrack
         framesRendered = 0
         underruns = 0
+        stamp = null
+        bufferFrames = newTrack.bufferSizeInFrames
 
         try {
             newTrack.play()
@@ -202,8 +236,15 @@ class AudioRenderer(
 
         val floatBuffer = FloatArray(blockSize)
         val pcm = ShortArray(blockSize)
+        // Reused: getTimestamp fills it in place, so the loop allocates only the
+        // small immutable Stamp it publishes.
+        val timestamp = AudioTimestamp()
+        var blocks = 0
 
         while (isRunning) {
+            if (blocks++ % STAMP_EVERY_BLOCKS == 0 && track.getTimestamp(timestamp)) {
+                stamp = OutputClock.Stamp(timestamp.framePosition, timestamp.nanoTime)
+            }
             renderer.render(framesRendered, blockSize, floatBuffer)
 
             for (i in 0 until blockSize) {

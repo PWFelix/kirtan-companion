@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -100,7 +101,7 @@ internal fun BeatStrip(
     modifier: Modifier = Modifier,
     step: Int = -1,
     playing: Boolean = false,
-    getPhase: () -> Double = { 0.0 },
+    getPhase: (() -> Double)? = null,
     mutedEnds: Map<LaneId, Boolean> = emptyMap(),
     onToggleMute: ((LaneId) -> Unit)? = null,
     onCellTap: ((LaneId, Int) -> Unit)? = null,
@@ -126,6 +127,24 @@ internal fun BeatStrip(
     // swipe. Long beats squeeze their cells to fit instead.
     val cellMin = if (mini) 0.dp else CELL_MIN_FULL
     val cellHeight = if (mini) CELL_HEIGHT_MINI else CELL_HEIGHT_FULL
+
+    // The lit cell follows the PLAYHEAD when there is one, not the engine's
+    // step events. Those fire when a block is rendered, which is before it is
+    // heard by the whole output latency: ~90 ms on the phone speaker and a third
+    // of a second over Bluetooth. Read per frame, like the playhead itself, and
+    // only recomposes when the step actually changes.
+    val activeStep = if (getPhase != null && playing) {
+        val live by produceState(initialValue = step, getPhase, beat.steps) {
+            while (true) {
+                withFrameNanos {
+                    value = (getPhase() * beat.steps).toInt().coerceIn(0, beat.steps - 1)
+                }
+            }
+        }
+        live
+    } else {
+        step
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val available = maxWidth
@@ -157,7 +176,7 @@ internal fun BeatStrip(
                     LaneBlock(
                         lane = lane,
                         beat = beat,
-                        step = step,
+                        step = activeStep,
                         playing = playing,
                         cellWidth = cellWidth,
                         cellHeight = cellHeight,
@@ -176,7 +195,7 @@ internal fun BeatStrip(
                 Playhead(
                     modifier = Modifier.matchParentSize(),
                     playing = playing,
-                    getPhase = getPhase,
+                    getPhase = getPhase ?: { 0.0 },
                     trackWidthPx = trackWidthPx,
                     scrollState = scrollState,
                     steps = beat.steps,

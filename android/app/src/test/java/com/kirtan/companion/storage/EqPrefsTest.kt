@@ -344,6 +344,9 @@ class EqPrefsTest {
                 "feel",
                 // And the Learn highway's left-handed mirror.
                 "learnLeftHanded",
+                // Display sync: per-output-device delays, and which Bluetooth
+                // devices have already been offered the sync prompt.
+                "displayDelays", "syncPrompted",
             ),
             blob.keys,
         )

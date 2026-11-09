@@ -39,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -112,6 +114,8 @@ internal fun KirtanApp(
 
     var entered by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(Tab.HOME) }
+    // Hoisted out of Settings so the Bluetooth banner can open it from any tab.
+    var syncOpen by remember { mutableStateOf(false) }
 
     // ── Editor session ─────────────────────────────────────────────────────
     // The editor is opened with an optional seed beat (from Home's or Beats'
@@ -317,7 +321,27 @@ internal fun KirtanApp(
                     beat = selectedBeat,
                 )
 
-                Tab.SETTINGS -> SettingsScreen(transport = transport, container = container)
+                Tab.SETTINGS -> SettingsScreen(
+                    transport = transport,
+                    container = container,
+                    syncOpen = syncOpen,
+                    onSyncOpenChange = { syncOpen = it },
+                )
+            }
+        }
+
+        // Once per Bluetooth device, while it plays: the moment the lag shows.
+        transportState.syncPrompt?.let { route ->
+            if (tab == Tab.HOME || tab == Tab.LEARN) {
+                SyncPromptBanner(
+                    deviceLabel = route.label,
+                    onSync = {
+                        transport.dismissSyncPrompt()
+                        syncOpen = true
+                        tab = Tab.SETTINGS
+                    },
+                    onDismiss = { transport.dismissSyncPrompt() },
+                )
             }
         }
 
@@ -527,12 +551,21 @@ private fun ShippedRemoveSheet(
  * syllables and the numbered step labels — and both are persisted.
  */
 @Composable
-private fun SettingsScreen(transport: TransportViewModel, container: AppContainer) {
+private fun SettingsScreen(
+    transport: TransportViewModel,
+    container: AppContainer,
+    syncOpen: Boolean,
+    onSyncOpenChange: (Boolean) -> Unit,
+) {
     val state by transport.state.collectAsState()
     val dimens = KirtanTheme.dimens
     var aboutOpen by remember { mutableStateOf(false) }
     if (aboutOpen) {
         com.kirtan.companion.ui.about.AboutScreen(onBack = { aboutOpen = false })
+        return
+    }
+    if (syncOpen) {
+        com.kirtan.companion.ui.sync.SyncScreen(transport = transport, onBack = { onSyncOpenChange(false) })
         return
     }
 
@@ -575,6 +608,15 @@ private fun SettingsScreen(transport: TransportViewModel, container: AppContaine
             subtitle = "Print the counted pulse — 1 · 2 · 3 · 4 — above the beat.",
             checked = state.settings.showStepLabels,
             onCheckedChange = { transport.setShowStepLabels(it) },
+        )
+
+        SectionLabel("Sound")
+        SettingsLink(
+            title = "Sync sound and display",
+            subtitle = "For Bluetooth speakers: line the beat on screen up with what you hear. " +
+                "${state.route.label}: " +
+                (if (state.displayDelayMs == 0) "no delay set." else "display ${state.displayDelayMs} ms later."),
+            onClick = { onSyncOpenChange(true) },
         )
 
         SectionLabel("Interface size")
@@ -659,6 +701,95 @@ private fun ScaleChip(
             fontWeight = FontWeight.Bold,
             maxLines = 1,
         )
+    }
+}
+
+/**
+ * "Playing through JBL Flip 5 · Sync the display?" Shown above the nav the first
+ * time a Bluetooth device plays, because that is when the lag is visible and the
+ * fix is a screen away. Either button retires it for that device.
+ */
+@Composable
+private fun SyncPromptBanner(deviceLabel: String, onSync: () -> Unit, onDismiss: () -> Unit) {
+    val dimens = KirtanTheme.dimens
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = dimens.screenPaddingSide, vertical = dimens.space1)
+            .clip(RoundedCornerShape(dimens.radiusPad))
+            .background(PaletteToken.SYAHI.color)
+            .padding(start = dimens.space4, end = dimens.space2, top = dimens.space2, bottom = dimens.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "Playing through $deviceLabel",
+                color = PaletteToken.HEAD.color,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            Text(
+                text = "Is the screen ahead of the drum? Sync them.",
+                color = PaletteToken.HEAD.color.copy(alpha = 0.75f),
+                fontSize = 12.sp,
+            )
+        }
+        Text(
+            text = "Sync",
+            color = PaletteToken.HEAD.color,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .heightIn(min = 44.dp)
+                .clickable(onClick = onSync)
+                .padding(horizontal = dimens.space3, vertical = dimens.space3),
+        )
+        Text(
+            text = "✕",
+            color = PaletteToken.HEAD.color.copy(alpha = 0.7f),
+            fontSize = 14.sp,
+            modifier = Modifier
+                .heightIn(min = 44.dp)
+                .clickable(onClick = onDismiss)
+                .semantics { contentDescription = "Dismiss" }
+                .padding(horizontal = dimens.space3, vertical = dimens.space3),
+        )
+    }
+}
+
+/** A settings row that opens a screen rather than toggling. */
+@Composable
+private fun SettingsLink(title: String, subtitle: String, onClick: () -> Unit) {
+    val dimens = KirtanTheme.dimens
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(vertical = dimens.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = PaletteToken.SYAHI.color,
+                fontSize = 15.2.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = subtitle,
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+        }
+        Spacer(Modifier.width(dimens.space3))
+        Text(text = "›", color = PaletteToken.SYAHI_SOFT.color, fontSize = 24.sp)
     }
 }
 

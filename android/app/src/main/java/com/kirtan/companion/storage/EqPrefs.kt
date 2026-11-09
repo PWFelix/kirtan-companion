@@ -218,6 +218,19 @@ data class EqPrefsSnapshot(
      * wrong side. Off (right-handed) on a fresh install.
      */
     val learnLeftHanded: Boolean = false,
+    /**
+     * Display delay in ms for each output device, keyed by
+     * [com.kirtan.companion.playback.OutputRoute.key]. A device with no entry
+     * plays at 0: the phone's own latency report is trusted until the user says
+     * otherwise. Per device because a Bluetooth speaker and earbuds lag by
+     * different amounts.
+     */
+    val displayDelays: Map<String, Int> = emptyMap(),
+    /**
+     * Bluetooth devices the "sync the display?" prompt has already been shown
+     * for, so it asks once per device rather than on every connection.
+     */
+    val syncPrompted: Set<String> = emptySet(),
     val dayan: EndSoundPrefs,
     val bayan: EndSoundPrefs,
 ) {
@@ -233,6 +246,9 @@ data class EqPrefsSnapshot(
     fun volume(lane: LaneId): Float = endVolumes[lane] ?: 1f
 
     fun isMuted(lane: LaneId): Boolean = lane in mutedEnds
+
+    /** The display delay for an output device, 0 if never set. */
+    fun displayDelay(routeKey: String): Int = displayDelays[routeKey] ?: 0
 
     companion object {
         /** The web transport's initial master volume. */
@@ -254,6 +270,14 @@ data class EqPrefsSnapshot(
          * slider would invite intermediate values nobody has ever seen laid out.
          */
         val UI_SCALE_PRESETS: List<Float> = listOf(0.85f, 1.0f, 1.15f, 1.3f)
+
+        /**
+         * Bounds for a display delay, in ms. Bluetooth rarely exceeds ~350 ms
+         * beyond what the phone reports; the negative end is for a phone that
+         * OVER-reports, which a few do.
+         */
+        const val DISPLAY_DELAY_MIN_MS = -200
+        const val DISPLAY_DELAY_MAX_MS = 600
 
         /** The state a fresh install, and every failure path, arrives at. */
         val DEFAULT = EqPrefsSnapshot(
@@ -294,6 +318,8 @@ internal object EqPrefsCodec {
     private const val KEY_UI_SCALE = "uiScale"
     private const val KEY_FEEL = "feel"
     private const val KEY_LEARN_LEFT_HANDED = "learnLeftHanded"
+    private const val KEY_DISPLAY_DELAYS = "displayDelays"
+    private const val KEY_SYNC_PROMPTED = "syncPrompted"
     private const val KEY_BANDS = "bands"
     private const val KEY_TUNE = "tune"
     private const val KEY_OPEN = "open"
@@ -317,6 +343,10 @@ internal object EqPrefsCodec {
         put(KEY_UI_SCALE, snapshot.uiScale)
         put(KEY_FEEL, snapshot.feel.name)
         put(KEY_LEARN_LEFT_HANDED, snapshot.learnLeftHanded)
+        put(KEY_DISPLAY_DELAYS, buildJsonObject {
+            for ((key, ms) in snapshot.displayDelays) put(key, ms)
+        })
+        put(KEY_SYNC_PROMPTED, buildJsonArray { snapshot.syncPrompted.forEach { add(it) } })
         put(KEY_DAYAN, encodeEnd(snapshot.dayan))
         put(KEY_BAYAN, encodeEnd(snapshot.bayan))
     }.toString()
@@ -351,6 +381,8 @@ internal object EqPrefsCodec {
             uiScale = scaleOf(parsed[KEY_UI_SCALE]),
             feel = feelOf(parsed[KEY_FEEL]),
             learnLeftHanded = boolOf(parsed[KEY_LEARN_LEFT_HANDED], false),
+            displayDelays = displayDelaysOf(parsed[KEY_DISPLAY_DELAYS]),
+            syncPrompted = stringSetOf(parsed[KEY_SYNC_PROMPTED]),
             dayan = endOf(parsed[KEY_DAYAN]),
             bayan = endOf(parsed[KEY_BAYAN]),
         )
@@ -402,6 +434,26 @@ internal object EqPrefsCodec {
         val raw = (element as? JsonPrimitive)?.doubleOrNull ?: return default
         if (!raw.isFinite()) return default
         return raw.toFloat().coerceIn(0f, 1f)
+    }
+
+    /** Per-device delays, each finite and clamped into range; anything else is dropped. */
+    private fun displayDelaysOf(element: JsonElement?): Map<String, Int> {
+        val obj = element as? JsonObject ?: return emptyMap()
+        val out = LinkedHashMap<String, Int>()
+        for ((key, value) in obj) {
+            val raw = (value as? JsonPrimitive)?.doubleOrNull ?: continue
+            if (!raw.isFinite()) continue
+            out[key] = raw.roundToInt().coerceIn(
+                EqPrefsSnapshot.DISPLAY_DELAY_MIN_MS,
+                EqPrefsSnapshot.DISPLAY_DELAY_MAX_MS,
+            )
+        }
+        return out
+    }
+
+    private fun stringSetOf(element: JsonElement?): Set<String> {
+        val array = element as? JsonArray ?: return emptySet()
+        return array.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.toSet()
     }
 
     private fun endVolumesOf(element: JsonElement?): Map<LaneId, Float> {
