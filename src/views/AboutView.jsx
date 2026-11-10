@@ -1,4 +1,5 @@
 import * as sh from "../ui/styles.js";
+import { t } from "../i18n/index.js";
 import { BackIcon } from "../ui/icons.jsx";
 import Wordmark from "../Wordmark.jsx";
 
@@ -13,10 +14,10 @@ function AboutView({ onBack, nav }) {
   return (
     <div className="kc-screen" style={sh.screenFixed}>
       <header style={sh.subHeader}>
-        <button onClick={onBack} style={sh.backBtn} aria-label="Back to Settings">
+        <button onClick={onBack} style={sh.backBtn} aria-label={t("settings.backTo")}>
           <BackIcon />
         </button>
-        <h1 style={sh.subTitle}>About</h1>
+        <h1 style={sh.subTitle}>{t("about.title")}</h1>
         <span style={{ width: 44 }} />
       </header>
       <section style={st.body}>
@@ -25,12 +26,11 @@ function AboutView({ onBack, nav }) {
           <Wordmark style={{ "--wm-size": "34px", position: "relative" }} />
         </div>
         <p style={st.gloss}>
-          Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, courageous or
-          heroic in relation to the mṛdaṅga.
+          {t("about.gloss")}
         </p>
         <p style={st.verse}>paraṁ vijayate śrī-kṛṣṇa-saṅkīrtanam</p>
-        <p style={st.line}>a World Sankirtan Party production</p>
-        <p style={st.glories}>All glories to Śrīla Prabhupāda!</p>
+        <p style={st.line}>{t("about.production")}</p>
+        <p style={st.glories}>{t("about.glories")}</p>
       </section>
       {nav}
     </div>

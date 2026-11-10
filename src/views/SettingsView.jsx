@@ -1,5 +1,6 @@
 import { useState } from "react";
 import * as sh from "../ui/styles.js";
+import { t } from "../i18n/index.js";
 import { BackIcon, ChevronRightIcon } from "../ui/icons.jsx";
 import AboutView from "./AboutView.jsx";
 import SyncView from "./SyncView.jsx";
@@ -20,26 +21,26 @@ function SettingsView({ onBack, nav, transport }) {
   return (
     <div className="kc-screen" style={sh.screenFixed}>
       <header style={sh.subHeader}>
-        <button onClick={onBack} style={sh.backBtn} aria-label="Back">
+        <button onClick={onBack} style={sh.backBtn} aria-label={t("common.back")}>
           <BackIcon />
         </button>
-        <h1 style={sh.subTitle}>Settings</h1>
+        <h1 style={sh.subTitle}>{t("settings.title")}</h1>
         <span style={{ width: 44 }} />
       </header>
       <section style={{ ...sh.controls, flex: 1 }}>
-        <p style={st.subtitle}>More settings coming soon.</p>
+        <p style={st.subtitle}>{t("settings.comingSoon")}</p>
         <button onClick={() => setSyncOpen(true)} style={st.row}>
           <span style={st.rowText}>
-            <span>Sync sound and display</span>
+            <span>{t("sync.rowTitle")}</span>
             <span style={st.rowSub}>
-              For Bluetooth speakers: line the beat on screen up with what you hear.
-              {" "}{transport.displayDelayMs === 0 ? "No delay set." : `Display ${transport.displayDelayMs} ms later.`}
+              {t("sync.rowSub")}
+              {" "}{transport.displayDelayMs === 0 ? t("sync.rowNoDelay") : t("sync.rowDelay", { ms: transport.displayDelayMs })}
             </span>
           </span>
           <ChevronRightIcon />
         </button>
         <button onClick={() => setAboutOpen(true)} style={st.row}>
-          <span>About</span>
+          <span>{t("about.title")}</span>
           <ChevronRightIcon />
         </button>
       </section>

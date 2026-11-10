@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { BEATS } from "../data/beats.js";
+import { t } from "../i18n/index.js";
 import { beatsProvider, storageErrorMessage } from "../storage/index.js";
 
 /**
@@ -141,8 +142,8 @@ export function useBeatLibrary(provider = beatsProvider) {
     return c.beatIds.map((id) => allBeats.find((b) => b.id === id)).filter(Boolean);
   }
   function catName(catId) {
-    if (catId === "builtin") return "Built in";
-    if (catId === "custom") return "Your beats";
+    if (catId === "builtin") return t("library.builtin");
+    if (catId === "custom") return t("library.custom");
     return categories.find((c) => c.id === catId)?.name ?? "Beats";
   }
 

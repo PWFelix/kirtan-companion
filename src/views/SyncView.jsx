@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as sh from "../ui/styles.js";
+import { t } from "../i18n/index.js";
 import { BackIcon } from "../ui/icons.jsx";
 import {
   estimate, isComplete, clampDelay, WARM_UP, TAPS_NEEDED,
@@ -87,38 +88,39 @@ function SyncView({ transport, onBack, nav }) {
   return (
     <div className="kc-screen" style={sh.screen}>
       <header style={sh.subHeader}>
-        <button onClick={onBack} style={sh.backBtn} aria-label="Back">
+        <button onClick={onBack} style={sh.backBtn} aria-label={t("common.back")}>
           <BackIcon />
         </button>
-        <h1 style={sh.subTitle}>Sync</h1>
+        <h1 style={sh.subTitle}>{t("sync.title")}</h1>
         <span style={{ width: 44 }} />
       </header>
 
       <section style={st.body}>
         <p style={st.text}>
-          Bluetooth speakers play a little after the screen. If the strip or the
-          highway runs ahead of the drum, set the delay here.
+          {t("sync.intro")}
         </p>
 
         <div style={st.card}>
-          <span style={st.caps}>This browser</span>
+          <span style={st.caps}>{t("sync.thisBrowser")}</span>
           <span style={st.cardTitle}>
-            Display delay: {displayDelayMs === 0 ? "none" : `${displayDelayMs > 0 ? "+" : ""}${displayDelayMs} ms`}
+            {displayDelayMs === 0
+              ? t("sync.delayNone")
+              : t("sync.delayValue", { ms: `${displayDelayMs > 0 ? "+" : ""}${displayDelayMs}` })}
           </span>
           {reported != null && (
-            <span style={st.small}>Browser reports {reported} ms, already allowed for</span>
+            <span style={st.small}>{t("sync.reported", { ms: reported })}</span>
           )}
         </div>
 
-        <h2 style={st.caps}>1 · Tap along</h2>
+        <h2 style={st.caps}>{t("sync.tapHeading")}</h2>
         <p style={st.text}>
           {tapping
-            ? "Tap on every click. Listen, don't watch."
-            : "Start the click, then look away and tap the circle on every click you hear."}
+            ? t("sync.tapActive")
+            : t("sync.tapIdle")}
         </p>
         <button
           type="button"
-          aria-label="Tap pad: tap on every click"
+          aria-label={t("sync.padLabel")}
           onPointerDown={onPadDown}
           onPointerUp={() => setPressed(false)}
           onPointerLeave={() => setPressed(false)}
@@ -129,17 +131,17 @@ function SyncView({ transport, onBack, nav }) {
             background: pressed ? "color-mix(in oklch, var(--clay) 30%, transparent)" : st.pad.background,
           }}
         >
-          {tapping ? `${counted} / ${TAPS_NEEDED}` : "Tap"}
+          {tapping ? `${counted} / ${TAPS_NEEDED}` : t("sync.pad")}
         </button>
 
         {result?.delay != null && (
           <p style={{ ...st.text, color: "var(--syahi)" }}>
-            Done. The display now runs {describe(result.delay)}. Check it below and fine-tune if you need to.
+            {t("sync.done", { offset: describe(result.delay, true) })}
           </p>
         )}
         {result?.tooUneven && (
           <p style={{ ...st.text, color: "var(--clay)" }}>
-            Those taps were too uneven to measure. Try again, keeping a steady tap with the click.
+            {t("sync.uneven")}
           </p>
         )}
 
@@ -155,18 +157,17 @@ function SyncView({ transport, onBack, nav }) {
             setTapping(true);
           }}
         >
-          {tapping ? "Cancel" : result ? "Tap again" : "Start tapping"}
+          {tapping ? t("common.cancel") : result ? t("sync.tapAgain") : t("sync.startTapping")}
         </button>
 
-        <h2 style={st.caps}>2 · Line up</h2>
+        <h2 style={st.caps}>{t("sync.lineUpHeading")}</h2>
         <p style={st.text}>
-          The light flashes where the display thinks each click is. Slide until
-          flash and click happen together.
+          {t("sync.lineUpText")}
         </p>
         <div style={st.lineUp}>
-          <span ref={flashRef} aria-label="Flash on each click" style={st.flash} />
+          <span ref={flashRef} aria-label={t("sync.flashLabel")} style={st.flash} />
           <label style={st.sliderBox}>
-            <span style={st.cardTitle}>{capitalise(describe(displayDelayMs))}</span>
+            <span style={st.cardTitle}>{describe(displayDelayMs, false)}</span>
             <input
               type="range"
               min={DISPLAY_DELAY_MIN_MS}
@@ -181,10 +182,10 @@ function SyncView({ transport, onBack, nav }) {
         <div style={st.row}>
           <button type="button" disabled={!ready} style={st.secondary}
             onClick={() => (clicking ? stopClick() : startClick())}>
-            {clicking ? "Stop click" : "Play click"}
+            {clicking ? t("sync.stopClick") : t("sync.playClick")}
           </button>
           <button type="button" style={st.secondary} onClick={() => setDisplayDelay(0)}>
-            Reset to 0
+            {t("sync.reset")}
           </button>
         </div>
       </section>
@@ -193,13 +194,15 @@ function SyncView({ transport, onBack, nav }) {
   );
 }
 
-/** "on time", "120 ms later", "30 ms earlier". */
-function describe(ms) {
-  if (ms === 0) return "on time, with no extra delay";
-  return ms > 0 ? `${ms} ms later` : `${-ms} ms earlier`;
+/**
+ * "120 ms later", "30 ms earlier", "on time…". `inline` is the mid-sentence
+ * form (lower-case in English); separate keys, because capitalising a
+ * translated phrase in code is wrong for some languages.
+ */
+function describe(ms, inline) {
+  if (ms === 0) return t(inline ? "sync.onTimeInline" : "sync.onTime");
+  return ms > 0 ? t("sync.later", { ms }) : t("sync.earlier", { ms: -ms });
 }
-
-const capitalise = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const st = {
   body: { display: "flex", flexDirection: "column", gap: "var(--space-4)", paddingBottom: "var(--space-6)" },

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { readLocalLibrary, hasLocalContent } from "../storage/migrateToCloud.js";
+import { t } from "../i18n/index.js";
 
 /**
  * useCloudMigration — offer to move on-device beats into a fresh account.
@@ -61,14 +62,14 @@ export function useCloudMigration({ auth, library }) {
     try {
       const result = await library.importLibrary(local);
       if (result.error) {
-        setError("Some beats couldn't be moved. Check your connection and try again.");
+        setError(t("migrate.partial"));
       } else {
         // Keep the sheet up on a success screen — the guard already won't
         // re-offer (the cloud library is no longer empty).
         setDone(result);
       }
     } catch (err) {
-      setError(err.message || "That didn't work. Try again.");
+      setError(err.message || t("common.tryAgain"));
     } finally {
       setBusy(false);
     }

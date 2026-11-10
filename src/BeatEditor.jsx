@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import BeatStrip from "./BeatStrip.jsx";
 import { labelsFromGroups } from "./data/stepLabels.js";
 import { BOLS, COMBO_BOLS } from "./data/bols.js";
+import { t, tOr } from "./i18n/index.js";
 
 /**
  * BeatEditor — three zones, phone-first
@@ -163,7 +164,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const windowStart = page * zoomCells;
   const windowEnd = Math.min(windowStart + zoomCells, steps);
 
-  const previewBeat = { id: "preview", name: name || "Preview", note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan, kartal };
+  const previewBeat = { id: "preview", name: name || t("editor.preview"), note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan, kartal };
   const beatRef = useRef(previewBeat);
   useEffect(() => { beatRef.current = previewBeat; });
 
@@ -266,8 +267,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     if (saving) return;
     if (previewing) { engine.stop(); setPreviewing(false); }
     const hasAnyHit = dayan.some((c) => c !== null) || bayan.some((c) => c !== null) || kartal.some((c) => c !== null);
-    if (!hasAnyHit) { alert("Add at least one stroke before saving."); return; }
-    const finalName = name.trim() || "Custom Beat";
+    if (!hasAnyHit) { alert(t("editor.needStroke")); return; }
+    const finalName = name.trim() || t("editor.defaultName");
     // No id means "new" — the library mints one on save, and it is now the
     // only place in the app ids come from. Editing an existing custom beat
     // keeps its id and so overwrites in place.
@@ -303,11 +304,11 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   return (
     <div className="kc-screen" style={st.screen}>
       <header style={st.header}>
-        {onBack && <button onClick={onBack} style={st.backBtn} aria-label="Back">‹</button>}
+        {onBack && <button onClick={onBack} style={st.backBtn} aria-label={t("common.back")}>‹</button>}
         <div style={st.titleWrap}>
           <input ref={nameInputRef} type="text" value={name} onChange={(e) => setName(e.target.value)}
-            placeholder="Name your beat" aria-label="Beat name" style={st.titleInput} />
-          <button onClick={() => nameInputRef.current?.focus()} aria-label="Rename beat"
+            placeholder={t("editor.namePlaceholder")} aria-label={t("editor.name")} style={st.titleInput} />
+          <button onClick={() => nameInputRef.current?.focus()} aria-label={t("editor.rename")}
             style={st.titlePencil}><PencilIcon /></button>
         </div>
       </header>
@@ -337,11 +338,11 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         <div style={st.zoom}>
           <div style={st.zoomHead}>
             <button onClick={() => setCursor(Math.max(0, windowStart - zoomCells))}
-              disabled={page === 0} aria-label="Previous page"
+              disabled={page === 0} aria-label={t("editor.prevPage")}
               style={{ ...st.pageBtn, opacity: page === 0 ? 0.3 : 1 }}>‹</button>
-            <span style={st.zoomLabel}>{windowStart + 1}–{windowEnd} of {steps}</span>
+            <span style={st.zoomLabel}>{t("editor.pageRange", { from: windowStart + 1, to: windowEnd, total: steps })}</span>
             <button onClick={() => setCursor(Math.min(steps - 1, windowStart + zoomCells))}
-              disabled={page >= pageCount - 1} aria-label="Next page"
+              disabled={page >= pageCount - 1} aria-label={t("editor.nextPage")}
               style={{ ...st.pageBtn, opacity: page >= pageCount - 1 ? 0.3 : 1 }}>›</button>
           </div>
           <div style={st.zoomRows}>
@@ -367,7 +368,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
                       const lit = previewing && i === step;
                       return (
                         <button key={end + i} onClick={() => pick(i)}
-                          aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
+                          aria-label={v ? t("editor.cell", { lane: end, n: i + 1, bol: BOLS[end]?.[v] ?? v }) : t("editor.cellEmpty", { lane: end, n: i + 1 })}
                           style={{ ...st.zoomCell,
                             borderColor: isCursor ? "var(--clay)" : "var(--rule)",
                             borderWidth: isCursor ? 2 : 1,
@@ -388,7 +389,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         <div style={st.padsHead}>
           {instrument === "kartal" ? "Kartal" : "Mrdanga"}{" "}
           <span style={st.padsHint}>
-            · tap the {instrument === "kartal" ? "drum" : "kartal"} row to switch
+            · {t(instrument === "kartal" ? "editor.switchToDrum" : "editor.switchToKartal")}
           </span>
         </div>
         <div style={st.pads}>
@@ -399,9 +400,9 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
             const soleLane = Object.keys(w)[0];
             return (
               <button key={pad.key} onClick={() => tapPad(pad)}
-                aria-label={pad.rest ? "Rest" : pad.label}
+                aria-label={pad.rest ? t("editor.rest") : pad.label}
                 style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
-                <span style={st.padLabel}>{pad.label}</span>
+                <span style={st.padLabel}>{pad.rest ? t("editor.rest") : pad.label}</span>
                 {!pad.rest && (both
                   ? <StrokeMark dayan={w.dayan} bayan={w.bayan} size={9} />
                   : <span aria-hidden="true"
@@ -415,10 +416,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         {/* ── Controls ── */}
         <div style={st.controls}>
           <div style={st.controlRow}>
-            <button onClick={undo} disabled={!canUndo} style={{ ...st.utilBtn, opacity: canUndo ? 1 : 0.4 }}>↶ Undo</button>
-            <button onClick={clearGrid} style={st.utilBtn}>Clear</button>
+            <button onClick={undo} disabled={!canUndo} style={{ ...st.utilBtn, opacity: canUndo ? 1 : 0.4 }}>{t("editor.undo")}</button>
+            <button onClick={clearGrid} style={st.utilBtn}>{t("editor.clear")}</button>
             <button onClick={togglePreview} style={{ ...st.utilBtn, ...(previewing ? st.previewOn : null) }}>
-              {previewing ? "■ Stop" : "▶ Preview"}
+              {previewing ? t("editor.stopPreview") : t("editor.playPreview")}
             </button>
           </div>
 
@@ -426,24 +427,24 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
             {/* Feel/meter — one picker button. */}
             <button onClick={() => setFeelOpen(true)} style={st.feelBtn}
               aria-haspopup="dialog" aria-expanded={feelOpen}>
-              <span style={st.feelName}>{meter.label}</span>
+              <span style={st.feelName}>{tOr(`meter.${meter.id}`, meter.label)}</span>
               <span style={st.feelCaret}>▾</span>
             </button>
             {/* Length: add/remove one unit of the current meter. */}
             <div style={st.lengthRow}>
               <button onClick={removeGroup} disabled={groups.length <= meter.unit.length}
                 style={{ ...st.groupBtn, opacity: groups.length <= meter.unit.length ? 0.4 : 1 }}
-                aria-label="Remove a group">−</button>
-              <span style={st.lengthLabel}>{steps} cells</span>
-              <button onClick={addGroup} style={st.groupBtn} aria-label="Add a group">+</button>
+                aria-label={t("editor.removeGroup")}>−</button>
+              <span style={st.lengthLabel}>{t("beat.cells", { n: steps })}</span>
+              <button onClick={addGroup} style={st.groupBtn} aria-label={t("editor.addGroup")}>+</button>
             </div>
           </div>
 
           <div style={st.tempoRow}>
-            <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>BPM</span>
+            <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>{t("tempo.bpm")}</span>
             <input className="kc-range" type="range" min={40} max={200} value={bpm}
               onChange={(e) => setBpm(Number(e.target.value))}
-              style={{ "--fill": fillPct + "%", flex: 1 }} aria-label="Tempo" />
+              style={{ "--fill": fillPct + "%", flex: 1 }} aria-label={t("tempo.title")} />
           </div>
         </div>
 
@@ -452,28 +453,28 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
       <div style={st.footer}>
         <button onClick={handleSave} disabled={saving}
           style={{ ...st.saveBtn, ...(saving ? st.saveBtnBusy : null) }}>
-          {saving ? "Saving…" : "Save beat"}
+          {saving ? t("editor.saving") : t("editor.save")}
         </button>
       </div>
 
       {/* Feel/meter picker sheet */}
       {feelOpen && (
         <div style={st.sheetBackdrop} onClick={() => setFeelOpen(false)}>
-          <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Feel"
+          <div style={st.sheet} role="dialog" aria-modal="true" aria-label={t("editor.feel")}
             onClick={(e) => e.stopPropagation()}>
             <div style={st.sheetHead}>
-              <h2 style={st.sheetTitle}>Feel &amp; meter</h2>
-              <button onClick={() => setFeelOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
+              <h2 style={st.sheetTitle}>{t("editor.feelMeter")}</h2>
+              <button onClick={() => setFeelOpen(false)} aria-label={t("common.close")} style={st.sheetClose}>×</button>
             </div>
-            <p style={st.sheetHint}>Changing the feel clears the grid.</p>
+            <p style={st.sheetHint}>{t("editor.feelClears")}</p>
             <div style={st.feelList}>
               {METERS.map((m) => {
                 const sel = m.id === meter.id;
                 return (
                   <button key={m.id} onClick={() => selectMeter(m)}
                     style={{ ...st.feelOption, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
-                    <span style={st.feelOptName}>{m.label}</span>
-                    <span style={st.feelOptSig}>{m.sig}</span>
+                    <span style={st.feelOptName}>{tOr(`meter.${m.id}`, m.label)}</span>
+                    <span style={st.feelOptSig}>{tOr(`meterSig.${m.id}`, m.sig)}</span>
                   </button>
                 );
               })}

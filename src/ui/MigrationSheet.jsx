@@ -1,4 +1,5 @@
 import * as sh from "./styles.js";
+import { t } from "../i18n/index.js";
 
 /**
  * MigrationSheet — "bring your on-device beats into your account?"
@@ -12,28 +13,27 @@ import * as sh from "./styles.js";
  * the counts and the buttons.
  */
 function MigrationSheet({ counts, done, busy, error, onMigrate, onDismiss, onAcknowledge }) {
-  const line = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-  const parts = [];
-  if (counts.beats) parts.push(line(counts.beats, "beat", "beats"));
-  if (counts.categories) parts.push(line(counts.categories, "playlist", "playlists"));
-  const what = parts.join(" and ");
+  // "3 beats and 1 playlist": each count is its own plural key, joined by a
+  // translated "and", so word order stays the dictionary's business.
+  const list = (c) => [
+    c.beats ? t("count.beats", { n: c.beats }) : null,
+    c.categories ? t("count.playlists", { n: c.categories }) : null,
+  ].filter(Boolean).join(t("common.and"));
+  const what = list(counts);
+  const one = counts.beats + counts.categories === 1;
 
   if (done) {
-    const dParts = [];
-    if (done.beats) dParts.push(line(done.beats, "beat", "beats"));
-    if (done.categories) dParts.push(line(done.categories, "playlist", "playlists"));
     return (
       <div style={sh.sheetBackdrop} onClick={onAcknowledge}>
-        <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Beats moved"
+        <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("migrate.movedLabel")}
           onClick={(e) => e.stopPropagation()}>
           <div style={sh.sheetHead}>
-            <h2 style={sh.sheetName}>Moved to your account</h2>
+            <h2 style={sh.sheetName}>{t("migrate.movedTitle")}</h2>
           </div>
           <p style={st.body}>
-            {dParts.join(" and ")} {done.beats + done.categories === 1 ? "is" : "are"} now
-            saved to your account and will follow you to any device you sign in on.
+            {t(done.beats + done.categories === 1 ? "migrate.movedOne" : "migrate.movedMany", { what: list(done) })}
           </p>
-          <button onClick={onAcknowledge} style={st.primary}>Done</button>
+          <button onClick={onAcknowledge} style={st.primary}>{t("common.done")}</button>
         </div>
       </div>
     );
@@ -41,22 +41,20 @@ function MigrationSheet({ counts, done, busy, error, onMigrate, onDismiss, onAck
 
   return (
     <div style={sh.sheetBackdrop} onClick={busy ? undefined : onDismiss}>
-      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Bring your beats to your account"
+      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("migrate.askLabel")}
         onClick={(e) => e.stopPropagation()}>
         <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>Bring your beats along?</h2>
+          <h2 style={sh.sheetName}>{t("migrate.askTitle")}</h2>
         </div>
         <p style={st.body}>
-          You have {what} saved on this device. Move {counts.beats + counts.categories === 1 ? "it" : "them"} into
-          your account so {counts.beats + counts.categories === 1 ? "it stays" : "they stay"} in the cloud and appear
-          on every device you sign in on.
+          {t(one ? "migrate.askOne" : "migrate.askMany", { what })}
         </p>
         {error && <p role="alert" style={st.error}>{error}</p>}
         <div style={st.actions}>
-          <button onClick={onDismiss} disabled={busy} style={st.secondary}>Not now</button>
+          <button onClick={onDismiss} disabled={busy} style={st.secondary}>{t("common.notNow")}</button>
           <button onClick={onMigrate} disabled={busy}
             style={{ ...st.primary, width: "auto", flex: 2, marginTop: 0, opacity: busy ? 0.6 : 1 }}>
-            {busy ? "Moving…" : "Move to my account"}
+            {busy ? t("migrate.moving") : t("migrate.move")}
           </button>
         </div>
       </div>

@@ -7,6 +7,7 @@ import BeatStrip from "../BeatStrip.jsx";
 import Wordmark from "../Wordmark.jsx";
 import ScrollFadeRow from "../ui/ScrollFadeRow.jsx";
 import * as sh from "../ui/styles.js";
+import { t, noteLabel } from "../i18n/index.js";
 import {
   LockIcon, PencilIcon, MixerIcon, SpeakerIcon, EqIcon, TuneIcon, CheckIcon,
   PlayIcon, PauseIcon, RadioDot,
@@ -159,7 +160,7 @@ function HomeView({
 
   const fillPct = ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)) * 100;
   const playIcon = playing ? <PauseIcon /> : <PlayIcon />;
-  const editLabel = isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat";
+  const editLabel = isCustomBeat(beat.id) ? t("home.editBeat") : t("home.customizeBeat");
 
   // ── Sheets, shared by both orientations ──
 
@@ -167,11 +168,11 @@ function HomeView({
   const pickerBeats = categoryBeats(pickerTab);
   const beatPicker = pickerOpen && (
     <div style={sh.sheetBackdrop} onClick={() => setPickerOpen(false)}>
-      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Choose a beat"
+      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("home.chooseBeat")}
         onClick={(e) => e.stopPropagation()}>
         <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>Choose a beat</h2>
-          <button onClick={() => setPickerOpen(false)} aria-label="Close" style={sh.sheetClose}>×</button>
+          <h2 style={sh.sheetName}>{t("home.chooseBeat")}</h2>
+          <button onClick={() => setPickerOpen(false)} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
         </div>
         <ScrollFadeRow rowStyle={sh.catTabs}>
           {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
@@ -184,7 +185,7 @@ function HomeView({
         </ScrollFadeRow>
         <div style={sh.pickList}>
           {pickerBeats.length === 0 && (
-            <p style={sh.emptyHint}>This category is empty — add beats to it on the Beats page.</p>
+            <p style={sh.emptyHint}>{t("home.categoryEmpty")}</p>
           )}
           {pickerBeats.map(b => {
             const sel = b.id === beatId;
@@ -193,7 +194,7 @@ function HomeView({
                 style={{ ...sh.pickRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
                 <div style={sh.beatRowTop}>
                   <span style={sh.beatRowName}>{b.name}</span>
-                  <span style={{ ...sh.beatRowMeta, flex: 1 }}>{b.note}</span>
+                  <span style={{ ...sh.beatRowMeta, flex: 1 }}>{noteLabel(b.note)}</span>
                   <RadioDot selected={sel} />
                 </div>
                 <BeatStrip beat={b} mini />
@@ -209,11 +210,11 @@ function HomeView({
   // both drive changeBpm live.
   const bpmEntry = bpmEntryOpen && (
     <div style={sh.sheetBackdrop} onClick={closeBpmEntry}>
-      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Set tempo"
+      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("tempo.set")}
         onClick={(e) => e.stopPropagation()}>
         <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>Tempo</h2>
-          <button onClick={closeBpmEntry} aria-label="Confirm tempo" style={st.sheetConfirm}>
+          <h2 style={sh.sheetName}>{t("tempo.title")}</h2>
+          <button onClick={closeBpmEntry} aria-label={t("tempo.confirm")} style={st.sheetConfirm}>
             <CheckIcon />
           </button>
         </div>
@@ -225,9 +226,9 @@ function HomeView({
             onBlur={() => { bpmFocusRef.current = false; commitBpmDraft(); }}
             onChange={(e) => setBpmDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-            aria-label="Tempo in BPM" style={st.bpmInput} />
+            aria-label={t("tempo.inBpm")} style={st.bpmInput} />
         </div>
-        <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>BPM</span>
+        <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>{t("tempo.bpm")}</span>
         <div style={st.wheelWrap}>
           <div style={st.wheelBand} aria-hidden="true" />
           <BpmWheel value={bpm} min={MIN_BPM} max={MAX_BPM} onChange={changeBpm} />
@@ -240,18 +241,18 @@ function HomeView({
   // muting properly lives; the strip's small lane labels remain a shortcut.
   const mixerSheet = mixerOpen && (
     <div style={sh.sheetBackdrop} onClick={() => setMixerOpen(false)}>
-      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Mixer"
+      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("mixer.title")}
         onClick={(e) => e.stopPropagation()}>
         <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>Mixer</h2>
-          <button onClick={() => setMixerOpen(false)} aria-label="Close" style={sh.sheetClose}>×</button>
+          <h2 style={sh.sheetName}>{t("mixer.title")}</h2>
+          <button onClick={() => setMixerOpen(false)} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
         </div>
         <div style={st.mixRows}>
           <div style={st.mixRow}>
-            <span style={st.mixLabel}>Master</span>
+            <span style={st.mixLabel}>{t("mixer.master")}</span>
             <input className="kc-range" type="range" min={0} max={100} value={Math.round(volume * 100)}
               onChange={(e) => changeVolume(Number(e.target.value) / 100)}
-              style={{ "--fill": volume * 100 + "%", flex: 1 }} aria-label="Master volume" />
+              style={{ "--fill": volume * 100 + "%", flex: 1 }} aria-label={t("mixer.masterVolume")} />
             {/* Three spacers: the mute, EQ and tuning columns close every
                 lane row, so the master fader keeps its right edge aligned
                 with theirs. */}
@@ -279,9 +280,9 @@ function HomeView({
                   <input className="kc-range" type="range" min={0} max={100} value={Math.round(v * 100)}
                     onChange={(e) => changeEndVolume(l.id, Number(e.target.value) / 100)}
                     style={{ "--fill": v * 100 + "%", flex: 1, opacity: muted ? 0.35 : 1 }}
-                    aria-label={`${l.label} volume`} />
+                    aria-label={t("mixer.volume", { lane: l.label })} />
                   <button onClick={() => toggleMute(l.id)} aria-pressed={muted}
-                    aria-label={muted ? `Unmute ${l.label}` : `Mute ${l.label}`}
+                    aria-label={t(muted ? "mixer.unmute" : "mixer.mute", { lane: l.label })}
                     style={{ ...st.muteBtn, background: muted ? "var(--head-sunken)" : "transparent",
                       color: muted ? "var(--clay)" : "var(--syahi-soft)" }}>
                     <SpeakerIcon muted={muted} />
@@ -291,7 +292,7 @@ function HomeView({
                     // the transport supplies toggleEqPanel, and they degrade an
                     // absent handler to an inert button instead of a dead click.
                     <button onClick={() => toggleEqPanel?.(l.id)} disabled={!toggleEqPanel}
-                      aria-pressed={open} aria-expanded={open} aria-label={`${l.label} EQ`}
+                      aria-pressed={open} aria-expanded={open} aria-label={t("mixer.eq", { lane: l.label })}
                       style={{ ...st.muteBtn, background: open ? "var(--head-sunken)" : "transparent",
                         color: open ? l.color : "var(--syahi-soft)",
                         opacity: toggleEqPanel ? 1 : 0.35, cursor: toggleEqPanel ? "pointer" : "not-allowed" }}>
@@ -303,7 +304,7 @@ function HomeView({
                   {isEqEnd ? (
                     // Same render-safety posture as the EQ button beside it.
                     <button onClick={() => toggleTunePanel?.(l.id)} disabled={!toggleTunePanel}
-                      aria-pressed={tuning} aria-expanded={tuning} aria-label={`${l.label} tuning`}
+                      aria-pressed={tuning} aria-expanded={tuning} aria-label={t("mixer.tuning", { lane: l.label })}
                       style={{ ...st.muteBtn, background: tuning ? "var(--head-sunken)" : "transparent",
                         color: tuning ? l.color : "var(--syahi-soft)",
                         opacity: toggleTunePanel ? 1 : 0.35, cursor: toggleTunePanel ? "pointer" : "not-allowed" }}>
@@ -314,7 +315,7 @@ function HomeView({
                   )}
                 </div>
                 {isEqEnd && open && (
-                  <div style={st.eqPanel} role="group" aria-label={`${l.label} equalizer`}>
+                  <div style={st.eqPanel} role="group" aria-label={t("mixer.equalizer", { lane: l.label })}>
                     {EQ_BAND_LABELS.map((bandLabel, i) => {
                       const db = bands[i] ?? 0;
                       return (
@@ -325,7 +326,7 @@ function HomeView({
                             disabled={!changeEqBand}
                             style={{ "--fill": ((db - EQ_MIN_DB) / (EQ_MAX_DB - EQ_MIN_DB)) * 100 + "%", "--accent-action": l.color, flex: 1,
                               opacity: changeEqBand ? 1 : 0.5, cursor: changeEqBand ? "pointer" : "not-allowed" }}
-                            aria-label={`${l.label} ${bandLabel} gain`} />
+                            aria-label={t("mixer.bandGain", { lane: l.label, band: bandLabel })} />
                           <span style={st.eqDb}>{fmtDb(db)}</span>
                           <span style={{ width: 44 }} aria-hidden="true" />
                         </div>
@@ -339,15 +340,15 @@ function HomeView({
                   // pitch actually sounding — the measured base freq
                   // (data/tuning.js) shifted by the user's cents — so it
                   // doubles as the "what note am I on" display.
-                  <div style={st.eqPanel} role="group" aria-label={`${l.label} tuning`}>
+                  <div style={st.eqPanel} role="group" aria-label={t("mixer.tuning", { lane: l.label })}>
                     <div style={st.mixRow}>
-                      <span style={st.mixLabel}>Tune</span>
+                      <span style={st.mixLabel}>{t("mixer.tune")}</span>
                       <input className="kc-range" type="range" min={TUNE_MIN_CENTS} max={TUNE_MAX_CENTS} step={1} value={cents}
                         onChange={(e) => changeEqTune?.(l.id, Number(e.target.value))}
                         disabled={!changeEqTune}
                         style={{ "--fill": ((cents - TUNE_MIN_CENTS) / (TUNE_MAX_CENTS - TUNE_MIN_CENTS)) * 100 + "%", "--accent-action": l.color, flex: 1,
                           opacity: changeEqTune ? 1 : 0.5, cursor: changeEqTune ? "pointer" : "not-allowed" }}
-                        aria-label={`${l.label} tuning in cents`} />
+                        aria-label={t("mixer.tuneCents", { lane: l.label })} />
                       <span style={st.tuneNote}>{freqToNoteName((END_BASE_FREQ[l.id] ?? 440) * centsToRate(cents))}</span>
                       <span style={{ width: 44 }} aria-hidden="true" />
                     </div>
@@ -358,7 +359,7 @@ function HomeView({
           })}
         </div>
         <p style={{ ...sh.emptyHint, marginTop: "var(--space-4)" }}>
-          100% is balanced for phone speakers — the bass end is already boosted.
+          {t("mixer.balancedHint")}
         </p>
       </div>
     </div>
@@ -369,7 +370,7 @@ function HomeView({
       style={{ ...st.lockBtn,
         background: tempoLocked ? "var(--clay)" : "transparent",
         color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
-      aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
+      aria-label={tempoLocked ? t("tempo.unlock") : t("tempo.lock")}
       aria-pressed={tempoLocked}>
       <LockIcon locked={tempoLocked} />
     </button>
@@ -394,31 +395,31 @@ function HomeView({
           <button onClick={() => onEdit(beat)} style={st.landEditBtn} aria-label={editLabel}>
             <PencilIcon />
           </button>
-          <button onClick={() => onCycle(-1)} aria-label="Previous beat" style={st.chevBtnSm}>‹</button>
+          <button onClick={() => onCycle(-1)} aria-label={t("common.prevBeat")} style={st.chevBtnSm}>‹</button>
           <button onClick={openPicker} style={st.landNameBtn}
             aria-haspopup="dialog" aria-expanded={pickerOpen}>
             {beat.name} <span style={st.nameCaret}>▾</span>
           </button>
-          <button onClick={() => onCycle(1)} aria-label="Next beat" style={st.chevBtnSm}>›</button>
+          <button onClick={() => onCycle(1)} aria-label={t("common.nextBeat")} style={st.chevBtnSm}>›</button>
           <button onClick={() => setBpmEntryOpen(true)} style={{ ...st.bpmBtn, ...st.landBpmBtn }}
-            aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set`}>
+            aria-haspopup="dialog" aria-label={t("tempo.tapToSet", { bpm })}>
             <span style={st.landBpmNum}>{bpm}</span>
-            <span style={st.bpmUnit}>BPM</span>
+            <span style={st.bpmUnit}>{t("tempo.bpm")}</span>
             <span style={st.bpmCaret} aria-hidden="true">▾</span>
           </button>
           <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
             onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
             style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-            aria-label="Tempo" />
+            aria-label={t("tempo.title")} />
           {lockButton}
-          <button onClick={tapTempo} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
-          <button onClick={() => setMixerOpen(true)} style={st.landEditBtn} aria-label="Mixer"
+          <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
+          <button onClick={() => setMixerOpen(true)} style={st.landEditBtn} aria-label={t("mixer.title")}
             aria-haspopup="dialog" aria-expanded={mixerOpen}>
             <MixerIcon />
           </button>
           <button onClick={() => togglePlay(beat)} disabled={!ready}
             style={{ ...st.landPlayBtn, opacity: ready ? 1 : 0.5 }}
-            aria-label={playing ? "Pause" : "Play"}>
+            aria-label={playing ? t("common.pause") : t("common.play")}>
             {playIcon}
           </button>
         </div>
@@ -442,13 +443,13 @@ function HomeView({
       {/* Beat switcher: ‹ › step through beats; tapping the name opens
           the quick-pick sheet. Pencil edits the loaded beat. */}
       <div style={st.beatHead}>
-        <button onClick={() => onCycle(-1)} aria-label="Previous beat" style={st.chevBtn}>‹</button>
+        <button onClick={() => onCycle(-1)} aria-label={t("common.prevBeat")} style={st.chevBtn}>‹</button>
         <button onClick={openPicker} style={st.nameBtn}
           aria-haspopup="dialog" aria-expanded={pickerOpen}>
           <h1 style={st.beatName}>{beat.name} <span style={st.nameCaret}>▾</span></h1>
-          <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
+          <span style={st.beatMeta}>{noteLabel(beat.note)} · {t("beat.cells", { n: beat.steps })}</span>
         </button>
-        <button onClick={() => onCycle(1)} aria-label="Next beat" style={st.chevBtn}>›</button>
+        <button onClick={() => onCycle(1)} aria-label={t("common.nextBeat")} style={st.chevBtn}>›</button>
         <button onClick={() => onEdit(beat)} style={st.landEditBtn} aria-label={editLabel}>
           <PencilIcon />
         </button>
@@ -472,30 +473,30 @@ function HomeView({
         <div>
           <div style={st.bpmRow}>
             <button onClick={() => nudgeBpm(-1)} disabled={bpm <= MIN_BPM}
-              aria-label="Slower" style={{ ...st.bpmStep, opacity: bpm <= MIN_BPM ? 0.3 : 1 }}>−</button>
+              aria-label={t("common.slower")} style={{ ...st.bpmStep, opacity: bpm <= MIN_BPM ? 0.3 : 1 }}>−</button>
             <button onClick={() => setBpmEntryOpen(true)} style={st.bpmBtn}
-              aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set precisely`}>
+              aria-haspopup="dialog" aria-label={t("tempo.tapToSetPrecisely", { bpm })}>
               <span style={st.bpmNum}>{bpm}</span>
-              <span style={st.bpmUnit}>BPM</span>
+              <span style={st.bpmUnit}>{t("tempo.bpm")}</span>
               <span style={st.bpmCaret} aria-hidden="true">▾</span>
             </button>
             <button onClick={() => nudgeBpm(1)} disabled={bpm >= MAX_BPM}
-              aria-label="Faster" style={{ ...st.bpmStep, opacity: bpm >= MAX_BPM ? 0.3 : 1 }}>+</button>
+              aria-label={t("common.faster")} style={{ ...st.bpmStep, opacity: bpm >= MAX_BPM ? 0.3 : 1 }}>+</button>
           </div>
           <div style={st.tempoRow}>
             <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
               onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
               style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-              aria-label="Tempo" />
+              aria-label={t("tempo.title")} />
             {lockButton}
-            <button onClick={tapTempo} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
+            <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
           </div>
         </div>
 
         {/* Loudness lives in the mixer: master + per-drum faders. */}
         <button onClick={() => setMixerOpen(true)} style={st.mixerBtn}
           aria-haspopup="dialog" aria-expanded={mixerOpen}>
-          <MixerIcon /> Mixer
+          <MixerIcon /> {t("mixer.title")}
         </button>
       </section>
 
@@ -503,9 +504,9 @@ function HomeView({
           miss, impossible to fumble. */}
       <button onClick={() => togglePlay(beat)} disabled={!ready}
         style={{ ...st.playBtn, opacity: ready ? 1 : 0.5 }}
-        aria-label={playing ? "Pause" : "Play"}>
+        aria-label={playing ? t("common.pause") : t("common.play")}>
         {playIcon}
-        {playing ? "Pause" : "Play"}
+        {playing ? t("common.pause") : t("common.play")}
       </button>
 
       {nav}

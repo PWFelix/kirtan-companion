@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as sh from "../ui/styles.js";
+import { t } from "../i18n/index.js";
 import { BackIcon, ChevronRightIcon, PlayIcon, PauseIcon } from "../ui/icons.jsx";
 import { COLUMNS, TRAIL_STEPS, columnsFor, highwayFrame, lookaheadSteps } from "../data/highway.js";
 
@@ -34,20 +35,20 @@ function LearnView({ transport, beat, onCycle, nav }) {
   return (
     <div className="kc-screen" style={sh.screenFixed}>
       <header style={sh.subHeader}>
-        <button onClick={() => onCycle(-1)} style={sh.backBtn} aria-label="Previous beat">
+        <button onClick={() => onCycle(-1)} style={sh.backBtn} aria-label={t("common.prevBeat")}>
           <BackIcon />
         </button>
         <div style={st.titleWrap}>
           <h1 style={st.title}>{beat.name}</h1>
-          <span style={st.subtitle}>Watch the strokes land, and play along</span>
+          <span style={st.subtitle}>{t("learn.subtitle")}</span>
         </div>
-        <button onClick={() => onCycle(1)} style={sh.backBtn} aria-label="Next beat">
+        <button onClick={() => onCycle(1)} style={sh.backBtn} aria-label={t("common.nextBeat")}>
           <ChevronRightIcon />
         </button>
       </header>
 
       <button onClick={flipHands} style={st.hands} aria-pressed={leftHanded}>
-        {leftHanded ? "Left-handed · dayan on the left" : "Right-handed · dayan on the right"}
+        {leftHanded ? t("learn.leftHanded") : t("learn.rightHanded")}
       </button>
 
       <HighwayCanvas beat={beat} bpm={bpm} playing={playing} getPhase={getPhase}
@@ -55,13 +56,13 @@ function LearnView({ transport, beat, onCycle, nav }) {
 
       <div style={st.controls}>
         {/* Learning wants SLOWER more than anything: 5 BPM steps. */}
-        <button onClick={() => nudgeBpm(-5)} style={st.stepBtn} aria-label="Slower">−</button>
+        <button onClick={() => nudgeBpm(-5)} style={st.stepBtn} aria-label={t("common.slower")}>−</button>
         <span style={st.bpm}>{bpm} BPM</span>
-        <button onClick={() => nudgeBpm(5)} style={st.stepBtn} aria-label="Faster">+</button>
+        <button onClick={() => nudgeBpm(5)} style={st.stepBtn} aria-label={t("common.faster")}>+</button>
         <span style={{ flex: 1 }} />
         <button onClick={() => togglePlay(beat)} disabled={!ready} style={st.play}>
           {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
-          {playing ? "Pause" : "Play"}
+          {playing ? t("common.pause") : t("common.play")}
         </button>
       </div>
       {nav}
@@ -157,11 +158,11 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
         ctx.fillStyle = c.syahi; ctx.font = `600 15px ${c.font}`;
         ctx.fillText(col.bol, cx, h - labelH + 18);
         ctx.fillStyle = c.soft; ctx.font = `9px ${c.font}`;
-        ctx.fillText(`${col.lane === "dayan" ? "Dayan" : "Bayan"} · ${col.stroke === "O" ? "open" : "closed"}`, cx, h - 3);
+        ctx.fillText(`${col.lane === "dayan" ? "Dayan" : "Bayan"} · ${col.stroke === "O" ? t("stroke.open") : t("stroke.closed")}`, cx, h - 3);
       });
 
       if (!playing) {
-        const msg = "Press Play — strokes land on the line";
+        const msg = t("learn.pressPlay");
         ctx.font = `12px ${c.font}`;
         const tw = ctx.measureText(msg).width, y = hitY - pxPerStep / 2;
         ctx.globalAlpha = 0.92; ctx.fillStyle = c.head;

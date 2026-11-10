@@ -18,12 +18,13 @@
  * and name explicitly.
  */
 
+import { t } from "../i18n/index.js";
 import { supabase } from "./supabaseClient.js";
 import { StorageError } from "./BeatsProvider.js";
 
 function ensureClient() {
   if (!supabase) {
-    throw new StorageError("unavailable", "The community library isn't set up in this build.");
+    throw new StorageError("unavailable", t("community.notConfigured"));
   }
 }
 
@@ -46,11 +47,11 @@ async function run(build, whileDoing) {
       res = await build();
     } catch (err) {
       if (attempt < 1 && isClockSkew(err)) { await sleep(2000); continue; }
-      throw new StorageError("network", `Couldn't reach the community library, so ${whileDoing} failed. Check your connection.`, err);
+      throw new StorageError("network", t("community.offline", { action: t(whileDoing) }), err);
     }
     if (res.error) {
       if (attempt < 1 && isClockSkew(res.error)) { await sleep(2000); continue; }
-      throw new StorageError("unknown", `Couldn't ${whileDoing}. ${res.error.message ?? ""}`.trim(), res.error);
+      throw new StorageError("unknown", `${t("community.failed", { action: t(whileDoing) })} ${res.error.message ?? ""}`.trim(), res.error);
     }
     return res.data;
   }
@@ -74,7 +75,7 @@ export async function publish(target, { authorId, authorName }) {
   };
   const data = await run(
     () => supabase.from("published_beats").insert(row).select("id, author_name, kind, name, copies, created_at").single(),
-    "publish that",
+    "act.publish",
   );
   return data;
 }
@@ -94,7 +95,7 @@ export async function browse({ query = "", limit = 40 } = {}) {
     if (query.trim()) q = q.ilike("name", `%${query.trim()}%`);
     return q;
   };
-  return (await run(build, "load the community library")) ?? [];
+  return (await run(build, "act.loadCommunity")) ?? [];
 }
 
 /** Everything the signed-in user has published, so they can unpublish it. */
@@ -104,12 +105,12 @@ export async function myPublished(authorId) {
     .select("id, kind, name, copies, created_at")
     .eq("author_id", authorId)
     .order("created_at", { ascending: false });
-  return (await run(build, "load your shared beats")) ?? [];
+  return (await run(build, "act.loadShared")) ?? [];
 }
 
 /** Remove a published item. RLS lets only its author through. */
 export async function unpublish(id) {
-  await run(() => supabase.from("published_beats").delete().eq("id", id), "unpublish that");
+  await run(() => supabase.from("published_beats").delete().eq("id", id), "act.unpublish");
 }
 
 /** Bump the copy counter when someone adds a community item to their library. */

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { HomeIcon, BeatsIcon, PencilIcon, CapIcon, CogIcon } from "./icons.jsx";
+import { t } from "../i18n/index.js";
 
 /**
  * BottomNav — the persistent tab bar.
@@ -42,11 +43,11 @@ import { HomeIcon, BeatsIcon, PencilIcon, CapIcon, CogIcon } from "./icons.jsx";
 let lastActive = -1;
 function BottomNav({ view, onHome, onBeats, onEditor, onLearn, onSettings }) {
   const tabs = [
-    { v: "home", label: "Home", Icon: HomeIcon, onClick: onHome },
-    { v: "beats", label: "Beats", Icon: BeatsIcon, onClick: onBeats },
-    { v: "editor", label: "Editor", Icon: PencilIcon, onClick: onEditor },
-    { v: "learn", label: "Learn", Icon: CapIcon, onClick: onLearn },
-    { v: "settings", label: "Settings", Icon: CogIcon, onClick: onSettings },
+    { v: "home", label: t("nav.home"), Icon: HomeIcon, onClick: onHome },
+    { v: "beats", label: t("nav.beats"), Icon: BeatsIcon, onClick: onBeats },
+    { v: "editor", label: t("nav.editor"), Icon: PencilIcon, onClick: onEditor },
+    { v: "learn", label: t("nav.learn"), Icon: CapIcon, onClick: onLearn },
+    { v: "settings", label: t("nav.settings"), Icon: CogIcon, onClick: onSettings },
   ];
 
   // -1 on a view with no tab of its own: the pill simply isn't drawn.

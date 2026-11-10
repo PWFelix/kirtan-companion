@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useRef } from "react";
 import { LANES } from "./data/lanes.js";
+import { t } from "./i18n/index.js";
 import { BOLS } from "./data/bols.js";
 import { generateGuidedLabels, labelsFromGroups } from "./data/stepLabels.js";
 
@@ -117,11 +118,7 @@ function BeatStrip({
                   data-mutelane={onToggleMute ? lane.id : undefined}
                   disabled={!onToggleMute}
                   aria-pressed={!!mutedEnds[lane.id]}
-                  aria-label={`${lane.label} drum, ${
-                    mutedEnds[lane.id]
-                      ? "muted, tap to unmute"
-                      : "playing, tap to mute"
-                  }`}
+                  aria-label={t(mutedEnds[lane.id] ? "strip.laneMuted" : "strip.lanePlaying", { lane: lane.label })}
                   style={{ "--ks-lanecolor": lane.color }}
                 >
                   {lane.label}
@@ -133,7 +130,7 @@ function BeatStrip({
               data-lane={lane.id}
               style={{ "--ks-lanecolor": lane.color }}
               role="img"
-              aria-label={`${lane.label} pattern`}
+              aria-label={t("strip.pattern", { lane: lane.label })}
             >
               {/* Exactly beat.steps cells, whatever the array length —
                   extra data is ignored, missing data renders as rests.

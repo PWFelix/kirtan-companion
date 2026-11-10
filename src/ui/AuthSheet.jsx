@@ -1,5 +1,6 @@
 import { useState } from "react";
 import * as sh from "./styles.js";
+import { t } from "../i18n/index.js";
 
 /**
  * AuthSheet — the sign-in / sign-up bottom sheet.
@@ -37,7 +38,7 @@ function AuthSheet({ auth, onClose }) {
     if (error) { setError(error); return; }
     // A signed-in session closes the sheet from App. Sign-up on a project with
     // email confirmation ON returns no session — say so instead of hanging.
-    if (signingUp) setNotice("Account created. If a confirmation email arrives, open it, then sign in.");
+    if (signingUp) setNotice(t("auth.created"));
   }
 
   async function google() {
@@ -51,48 +52,47 @@ function AuthSheet({ auth, onClose }) {
 
   return (
     <div style={sh.sheetBackdrop} onClick={onClose}>
-      <form style={sh.sheet} role="dialog" aria-modal="true" aria-label="Sign in"
+      <form style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("auth.signIn")}
         onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>{signingUp ? "Create account" : "Sign in"}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" style={sh.sheetClose}>×</button>
+          <h2 style={sh.sheetName}>{signingUp ? t("auth.createAccount") : t("auth.signIn")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
         </div>
 
         <p style={sh.emptyHint}>
-          An account keeps your beats and playlists in the cloud, on every device
-          you sign in on, and lets you share to and copy from the community library.
+          {t("auth.pitch")}
         </p>
 
         <div style={st.fields}>
           {signingUp && (
             <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="Your name (shown on beats you share)" autoComplete="name"
-              aria-label="Your name" style={st.input} />
+              placeholder={t("auth.namePlaceholder")} autoComplete="name"
+              aria-label={t("auth.name")} style={st.input} />
           )}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email" autoComplete="email" required
-            aria-label="Email" style={st.input} />
+            placeholder={t("auth.email")} autoComplete="email" required
+            aria-label={t("auth.email")} style={st.input} />
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password" autoComplete={signingUp ? "new-password" : "current-password"}
-            required minLength={6} aria-label="Password" style={st.input} />
+            placeholder={t("auth.password")} autoComplete={signingUp ? "new-password" : "current-password"}
+            required minLength={6} aria-label={t("auth.password")} style={st.input} />
         </div>
 
         {error && <p role="alert" style={st.error}>{error}</p>}
         {notice && <p style={st.notice}>{notice}</p>}
 
         <button type="submit" disabled={busy} style={{ ...st.primary, opacity: busy ? 0.6 : 1 }}>
-          {busy ? "…" : signingUp ? "Create account" : "Sign in"}
+          {busy ? "…" : signingUp ? t("auth.createAccount") : t("auth.signIn")}
         </button>
 
-        <div style={st.divider}><span style={st.dividerText}>or</span></div>
+        <div style={st.divider}><span style={st.dividerText}>{t("common.or")}</span></div>
 
         <button type="button" onClick={google} disabled={busy} style={st.google}>
-          Continue with Google
+          {t("auth.google")}
         </button>
 
         <button type="button" onClick={() => { setMode(signingUp ? "in" : "up"); setError(""); setNotice(""); }}
           style={st.toggle}>
-          {signingUp ? "Already have an account? Sign in" : "New here? Create an account"}
+          {signingUp ? t("auth.haveAccount") : t("auth.newHere")}
         </button>
       </form>
     </div>

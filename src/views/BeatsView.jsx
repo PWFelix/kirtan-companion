@@ -10,6 +10,7 @@ import { BEATS } from "../data/beats.js";
 import BeatStrip from "../BeatStrip.jsx";
 import SwipeRow from "../ui/SwipeRow.jsx";
 import * as sh from "../ui/styles.js";
+import { t, noteLabel, groupLabel, beatDescription } from "../i18n/index.js";
 import {
   InfoIcon, StartIcon, ShareIcon, TrashIcon, GlobeIcon, CheckIcon, CheckDot, RadioDot,
   ChevronRightIcon, SearchIcon, BackIcon,
@@ -125,7 +126,7 @@ function BeatsView({
       setCommunityError("");
       browseCommunity({ query: communityQuery })
         .then((rows) => { if (!cancelled) setCommunity(rows); })
-        .catch((err) => { if (!cancelled) setCommunityError(err.message || "Couldn't load the community library."); })
+        .catch((err) => { if (!cancelled) setCommunityError(err.message || t("browse.loadFailed")); })
         .finally(() => { if (!cancelled) setCommunityLoading(false); });
     }, communityQuery ? 300 : 0);
     return () => { cancelled = true; clearTimeout(t); };
@@ -150,7 +151,7 @@ function BeatsView({
       await publishCommunity(shareTarget, { authorId: auth.user.id, authorName: auth.displayName });
       setPublishState("done");
     } catch (err) {
-      setPublishState(err.message || "Couldn't publish that. Try again.");
+      setPublishState(err.message || t("share.publishFailed"));
     }
   }
   // Opening the share sheet starts with a clean publish state — reset here
@@ -246,7 +247,7 @@ function BeatsView({
   function handlePastedCode() {
     const payload = decodeShare(codeFromInput(codeInput));
     if (!payload) {
-      setCodeError("That code isn't complete, or isn't a beat code.");
+      setCodeError(t("browse.badCode"));
       return;
     }
     setCodeError("");
@@ -288,7 +289,7 @@ function BeatsView({
     return (
       <div ref={setNodeRef} {...listeners}
         role="button" tabIndex={0} aria-pressed={sel}
-        aria-label={inUserCat ? `${b.name} — tap to select, hold to reorder` : b.name}
+        aria-label={inUserCat ? t("beats.rowReorder", { name: b.name }) : b.name}
         onClick={() => onSelect(b, context === "search" ? undefined : context)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSelect(b, context === "search" ? undefined : context); } }}
         style={{ ...st.beatRow, borderColor: sel ? "var(--clay)" : "var(--rule)",
@@ -297,32 +298,32 @@ function BeatsView({
         <div style={sh.beatRowTop}>
           <div style={st.beatRowSelect}>
             <span style={sh.beatRowName}>{b.name}</span>
-            <span style={sh.beatRowMeta}>{b.note} · {b.steps} cells</span>
+            <span style={sh.beatRowMeta}>{noteLabel(b.note)} · {t("beat.cells", { n: b.steps })}</span>
           </div>
           {inUserCat && (
             <button onPointerDown={stopPD} onClick={(e) => {
                 e.stopPropagation();
                 askConfirm(
-                  `Remove “${b.name}” from “${catName(context)}”? The beat itself is kept.`,
-                  "Remove",
+                  t("beats.confirmRemove", { name: b.name, list: catName(context) }),
+                  t("common.remove"),
                   () => toggleBeatInCategory(context, b.id)
                 );
               }}
-              aria-label={`Remove ${b.name} from ${catName(context)}`}
+              aria-label={t("beats.removeFrom", { name: b.name, list: catName(context) })}
               style={st.deleteBtn}>−</button>
           )}
           <button onPointerDown={stopPD} onClick={(e) => { e.stopPropagation(); setDetailBeat(b); }}
-            aria-label={`About ${b.name}`} style={st.infoBtn}><InfoIcon /></button>
+            aria-label={t("beats.about", { name: b.name })} style={st.infoBtn}><InfoIcon /></button>
           {deletable && (
             <button onPointerDown={stopPD} onClick={(e) => {
                 e.stopPropagation();
                 askConfirm(
-                  `Delete the beat “${b.name}”? This can't be undone, and it also leaves any playlists it's in.`,
-                  "Delete",
+                  t("beats.confirmDelete", { name: b.name }),
+                  t("common.delete"),
                   () => onDeleteBeat(b.id)
                 );
               }}
-              aria-label={`Delete ${b.name}`} style={st.deleteBtn}>×</button>
+              aria-label={t("beats.deleteNamed", { name: b.name })} style={st.deleteBtn}>×</button>
           )}
           <RadioDot selected={sel} />
         </div>
@@ -335,14 +336,14 @@ function BeatsView({
   const swipeable = (b, context, body) => {
     const key = `${context}:${b.id}`;
     const actions = [{
-      label: "Share", icon: <ShareIcon />, background: "var(--strap)", color: "var(--on-clay)",
+      label: t("share.action"), icon: <ShareIcon />, background: "var(--strap)", color: "var(--on-clay)",
       onClick: () => openShare({ kind: "beat", beat: b }),
     }];
     if (isCustomBeat(b.id)) actions.push({
-      label: "Delete", icon: <TrashIcon />, background: "var(--danger)", color: "var(--on-clay)",
+      label: t("common.delete"), icon: <TrashIcon />, background: "var(--danger)", color: "var(--on-clay)",
       onClick: () => askConfirm(
-        `Delete the beat “${b.name}”? This can't be undone, and it also leaves any playlists it's in.`,
-        "Delete",
+        t("beats.confirmDelete", { name: b.name }),
+        t("common.delete"),
         () => onDeleteBeat(b.id)
       ),
     });
@@ -364,12 +365,12 @@ function BeatsView({
     const count = categoryBeats(id).length;
     return (
       <button key={id} onClick={() => setPage({ name: "category", id })}
-        aria-label={`Open ${catName(id)}, ${count} ${count === 1 ? "beat" : "beats"}`}
+        aria-label={t("beats.openList", { name: catName(id), beats: t("count.beats", { n: count }) })}
         style={st.card}>
         <div style={st.cardTitleWrap}>
           <span style={st.cardTitle}>{catName(id)}</span>
           <span style={sh.beatRowMeta}>
-            {desc ? `${desc} · ` : ""}{count} {count === 1 ? "beat" : "beats"}
+            {desc ? `${desc} · ` : ""}{t("count.beats", { n: count })}
           </span>
         </div>
         <span style={st.chevron}><ChevronRightIcon /></span>
@@ -385,28 +386,28 @@ function BeatsView({
       <>
         {/* Browse — the community library leads the page. */}
         <button onClick={() => setPage({ name: "browse" })}
-          aria-label="Open Browse" style={st.card}>
+          aria-label={t("browse.open")} style={st.card}>
           <div style={st.cardTitleWrap}>
-            <span style={st.cardTitleRow}><GlobeIcon size={18} />Browse</span>
-            <span style={sh.beatRowMeta}>Beats and playlists shared by other devotees</span>
+            <span style={st.cardTitleRow}><GlobeIcon size={18} />{t("browse.title")}</span>
+            <span style={sh.beatRowMeta}>{t("browse.subtitle")}</span>
           </div>
           <span style={st.chevron}><ChevronRightIcon /></span>
         </button>
 
         {/* Search — matches unfurl beneath the box as you type. */}
         <div style={st.searchCard}>
-          <span style={st.cardTitle}>Search</span>
+          <span style={st.cardTitle}>{t("beats.search")}</span>
           <div style={st.searchField}>
             <span style={st.searchIcon}><SearchIcon /></span>
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Find a beat by name" aria-label="Search your beats"
+              placeholder={t("beats.searchPlaceholder")} aria-label={t("beats.searchYours")}
               style={st.searchInput} />
             {search && (
-              <button onClick={() => setSearch("")} aria-label="Clear search"
+              <button onClick={() => setSearch("")} aria-label={t("beats.clearSearch")}
                 style={st.searchClear}>×</button>
             )}
           </div>
-          {!q && <p style={sh.emptyHint}>Search every beat in your library by name.</p>}
+          {!q && <p style={sh.emptyHint}>{t("beats.searchHint")}</p>}
           {q && results.length === 0 && (
             <p style={sh.emptyHint}>No beats match “{search.trim()}”.</p>
           )}
@@ -417,25 +418,25 @@ function BeatsView({
           )}
         </div>
 
-        {categoryCard("builtin", "Ships with the app")}
+        {categoryCard("builtin", t("beats.builtinDesc"))}
 
         {/* Playlists — the user's own progressions live behind one card, so
             the landing stays short. It sits between the two fixed libraries.
             (Internally these are still "categories"; "playlist" is the name
             the user sees.) */}
         <button onClick={() => setPage({ name: "playlists" })}
-          aria-label={`Open Playlists, ${categories.length} ${categories.length === 1 ? "playlist" : "playlists"}`}
+          aria-label={t("beats.openList", { name: t("playlists.title"), beats: t("count.playlists", { n: categories.length }) })}
           style={st.card}>
           <div style={st.cardTitleWrap}>
-            <span style={st.cardTitle}>Playlists</span>
+            <span style={st.cardTitle}>{t("playlists.title")}</span>
             <span style={sh.beatRowMeta}>
-              Your kirtan progressions · {categories.length} {categories.length === 1 ? "playlist" : "playlists"}
+              {t("playlists.cardDesc")} · {t("count.playlists", { n: categories.length })}
             </span>
           </div>
           <span style={st.chevron}><ChevronRightIcon /></span>
         </button>
 
-        {categoryCard("custom", "Built or saved by you")}
+        {categoryCard("custom", t("beats.customDesc"))}
       </>
     );
   }
@@ -455,7 +456,7 @@ function BeatsView({
               No playlists yet. A playlist is a kirtan progression — an ordered
               set of beats that Home's ‹ › moves through. Make one to start.
             </p>
-          : categories.map(c => categoryCard(c.id, "Progression"))}
+          : categories.map(c => categoryCard(c.id, t("playlists.progression")))}
       </>
     );
   }
@@ -471,14 +472,14 @@ function BeatsView({
           <div style={st.beatRowSelect}>
             <span style={sh.beatRowName}>{row.name}</span>
             <span style={sh.beatRowMeta}>
-              {row.kind === "beat" ? "Beat" : `Playlist · ${count} beats`} · by {row.author_name}
-              {row.copies ? ` · ${row.copies} ${row.copies === 1 ? "copy" : "copies"}` : ""}
+              {row.kind === "beat" ? t("browse.kindBeat") : t("browse.kindPlaylist", { beats: t("count.beats", { n: count }) })} · {t("browse.by", { name: row.author_name })}
+              {row.copies ? ` · ${t("count.copies", { n: row.copies })}` : ""}
             </span>
           </div>
           <button onClick={() => copyCommunity(row)} disabled={added}
-            aria-label={`Add ${row.name} to your library`}
+            aria-label={t("browse.addNamed", { name: row.name })}
             style={{ ...st.addChip, ...(added ? st.addChipDone : null) }}>
-            {added ? "Added" : "+ Add"}
+            {added ? t("browse.added") : t("browse.add")}
           </button>
         </div>
         {row.kind === "beat" && row.payload?.beat && <BeatStrip beat={row.payload.beat} mini />}
@@ -496,12 +497,12 @@ function BeatsView({
           <div style={st.accountRow}>
             {signedIn ? (
               <>
-                <span style={sh.beatRowMeta}>Signed in as {auth.displayName}</span>
-                <button onClick={auth.signOut} style={st.linkBtn}>Sign out</button>
+                <span style={sh.beatRowMeta}>{t("browse.signedInAs", { name: auth.displayName })}</span>
+                <button onClick={auth.signOut} style={st.linkBtn}>{t("auth.signOut")}</button>
               </>
             ) : (
               <button onClick={onRequestAuth} style={st.sheetStartBtn}>
-                Sign in to browse &amp; share
+                {t("browse.signInPrompt")}
               </button>
             )}
           </div>
@@ -514,19 +515,19 @@ function BeatsView({
               <span style={st.searchIcon}><SearchIcon /></span>
               <input type="text" value={communityQuery}
                 onChange={(e) => setCommunityQuery(e.target.value)}
-                placeholder="Search the community" aria-label="Search the community library"
+                placeholder={t("browse.searchPlaceholder")} aria-label={t("browse.searchLabel")}
                 style={st.searchInput} />
               {communityQuery && (
-                <button onClick={() => setCommunityQuery("")} aria-label="Clear search" style={st.searchClear}>×</button>
+                <button onClick={() => setCommunityQuery("")} aria-label={t("beats.clearSearch")} style={st.searchClear}>×</button>
               )}
             </div>
-            {communityLoading && <p style={sh.emptyHint}>Loading…</p>}
+            {communityLoading && <p style={sh.emptyHint}>{t("common.loading")}</p>}
             {communityError && <p style={st.codeError} role="alert">{communityError}</p>}
             {!communityLoading && !communityError && community.length === 0 && (
               <p style={sh.emptyHint}>
                 {communityQuery
-                  ? `Nothing shared matches “${communityQuery.trim()}”.`
-                  : "Nothing shared yet — be the first. Open any beat, tap Share, and choose “Publish to community”."}
+                  ? t("browse.noMatch", { q: communityQuery.trim() })
+                  : t("browse.emptyCommunity")}
               </p>
             )}
             {!communityLoading && community.map(communityCard)}
@@ -538,19 +539,19 @@ function BeatsView({
           <input type="text" value={codeInput}
             onChange={(e) => { setCodeInput(e.target.value); setCodeError(""); }}
             onKeyDown={(e) => { if (e.key === "Enter") handlePastedCode(); }}
-            placeholder="Paste a share code or link"
-            aria-label="Share code" aria-invalid={!!codeError}
+            placeholder={t("browse.codePlaceholder")}
+            aria-label={t("browse.codeLabel")} aria-invalid={!!codeError}
             style={st.catNameInput} />
           <button onClick={handlePastedCode} disabled={!codeInput.trim()}
             style={{ ...st.sheetStartBtn, flex: "0 0 auto", padding: "0 22px", opacity: codeInput.trim() ? 1 : 0.5 }}>
-            Open
+            {t("common.open")}
           </button>
         </div>
         {codeError && <p style={st.codeError} role="alert">{codeError}</p>}
         <p style={sh.emptyHint}>
           {auth?.configured
-            ? "A beat someone sent you directly comes in here — paste their code or link. Opening a share link does the same thing."
-            : "This is where a beat someone sent you comes in — paste their code or link above. Opening a share link does the same thing."}
+            ? t("browse.codeHint")
+            : t("browse.codeHintOffline")}
         </p>
       </>
     );
@@ -563,10 +564,10 @@ function BeatsView({
       const groups = [...new Set(BEATS.map(b => b.group))];
       return (
         <>
-          <p style={sh.emptyHint}>The beats that come with the app. Open any one to customize your own copy.</p>
+          <p style={sh.emptyHint}>{t("beats.builtinHint")}</p>
           {groups.map(g => (
             <div key={g} style={{ display: "contents" }}>
-              <div style={st.sectionLabel}>{g}</div>
+              <div style={st.sectionLabel}>{groupLabel(g)}</div>
               {categoryBeats("builtin").filter(b => b.group === g).map(b => renderRow(b, "builtin"))}
             </div>
           ))}
@@ -579,10 +580,10 @@ function BeatsView({
         <>
           {/* Add = make a new beat; the edit action leads the page. */}
           <div style={st.pageActions}>
-            <button onClick={onNewBeat} style={st.addBeatsBtn}>+ New beat</button>
+            <button onClick={onNewBeat} style={st.addBeatsBtn}>{t("beats.new")}</button>
           </div>
           {customBeats.length === 0
-            ? <p style={sh.emptyHint}>Nothing here yet — beats you build or customize appear here.</p>
+            ? <p style={sh.emptyHint}>{t("beats.customEmpty")}</p>
             : customBeats.map(b => renderRow(b, "custom"))}
         </>
       );
@@ -596,30 +597,28 @@ function BeatsView({
       <>
         {/* Every edit control for the progression, at the top. */}
         <div style={st.pageActions}>
-          <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>+ Add beats</button>
+          <button onClick={() => setAddBeatsOpen(true)} style={st.addBeatsBtn}>{t("playlists.addBeats")}</button>
           <button onClick={() => openShare({
               kind: "category", name: browsedCat.name, beats,
             })}
             disabled={beats.length === 0}
-            aria-label={`Share the list ${browsedCat.name}`}
+            aria-label={t("share.listNamed", { name: browsedCat.name })}
             style={{ ...st.addBeatsBtn, ...st.iconLabel, flex: "0 0 auto", padding: "0 16px",
               opacity: beats.length ? 1 : 0.5 }}>
-            <ShareIcon />Share
+            <ShareIcon />{t("share.action")}
           </button>
           <button onClick={() => askConfirm(
-              `Delete the playlist “${browsedCat.name}”? The beats themselves are kept.`,
-              "Delete",
+              t("playlists.confirmDelete", { name: browsedCat.name }),
+              t("common.delete"),
               () => handleDeleteCategory(browsedCat.id)
             )}
             style={st.deleteCatBtn}>
-            Delete
+            {t("common.delete")}
           </button>
         </div>
         {beats.length === 0 && (
           <p style={sh.emptyHint}>
-            An empty progression. Add beats in the order you want the kirtan to
-            move through them — Home's ‹ › will follow that order. Press and hold
-            a beat to drag it into place.
+            {t("playlists.emptyHint")}
           </p>
         )}
         <DndContext sensors={dragSensors} collisionDetection={closestCenter}
@@ -640,9 +639,9 @@ function BeatsView({
 
   // Header title tracks the page; the fixed pages read their name from the
   // library so a renamed category updates here too.
-  const title = page.name === "landing" ? "Beats"
-    : page.name === "browse" ? "Browse"
-    : page.name === "playlists" ? "Playlists"
+  const title = page.name === "landing" ? t("nav.beats")
+    : page.name === "browse" ? t("browse.title")
+    : page.name === "playlists" ? t("playlists.title")
     : catName(page.id);
 
   return (
@@ -650,7 +649,7 @@ function BeatsView({
       <header style={sh.subHeader}>
         {page.name === "landing"
           ? <span style={{ width: 44 }} aria-hidden="true" />
-          : <button onClick={back} aria-label="Back" style={sh.backBtn}><BackIcon /></button>}
+          : <button onClick={back} aria-label={t("common.back")} style={sh.backBtn}><BackIcon /></button>}
         <h1 style={sh.subTitle}>{title}</h1>
         <span style={{ width: 44 }} aria-hidden="true" />
       </header>
@@ -662,7 +661,7 @@ function BeatsView({
       {error && (
         <div role="alert" style={st.errorStrip}>
           <span style={st.errorText}>{error}</span>
-          <button onClick={dismissError} aria-label="Dismiss message"
+          <button onClick={dismissError} aria-label={t("common.dismiss")}
             style={st.errorClose}>×</button>
         </div>
       )}
@@ -676,7 +675,7 @@ function BeatsView({
 
       <button onClick={onStart} disabled={!ready} style={{ ...st.startBtn, opacity: ready ? 1 : 0.5 }}>
         <StartIcon />
-        Start · {beat.name}
+        {t("beats.start")} · {beat.name}
       </button>
       {nav}
 
@@ -692,28 +691,28 @@ function BeatsView({
                   into one row makes "Customize" too narrow to read. */}
               <div style={st.sheetHeadBtns}>
                 <button onClick={() => openShare({ kind: "beat", beat: detailBeat })}
-                  aria-label={`Share ${detailBeat.name}`} style={st.sheetHeadBtn}>
+                  aria-label={t("share.named", { name: detailBeat.name })} style={st.sheetHeadBtn}>
                   <ShareIcon />
                 </button>
-                <button onClick={() => setDetailBeat(null)} aria-label="Close" style={sh.sheetClose}>×</button>
+                <button onClick={() => setDetailBeat(null)} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
               </div>
             </div>
             <span style={sh.beatRowMeta}>
-              {detailBeat.note} · {detailBeat.steps} cells · suggested {detailBeat.bpm} BPM
+              {noteLabel(detailBeat.note)} · {t("beat.cells", { n: detailBeat.steps })} · {t("beat.suggestedBpm", { bpm: detailBeat.bpm })}
             </span>
             <div style={{ margin: "var(--space-4) 0" }}>
               <BeatStrip beat={detailBeat} />
             </div>
             <p style={st.sheetDesc}>
-              {detailBeat.description || "One of your own beats, built in the editor."}
+              {beatDescription(detailBeat) || t("beats.ownDesc")}
             </p>
             <div style={st.sheetActions}>
               <button onClick={() => { setDetailBeat(null); onEdit(detailBeat); }} style={st.sheetEditBtn}>
-                {isCustomBeat(detailBeat.id) ? "Edit" : "Customize"}
+                {isCustomBeat(detailBeat.id) ? t("common.edit") : t("beats.customize")}
               </button>
               <button onClick={() => { setDetailBeat(null); onStartBeat(detailBeat); }} disabled={!ready}
                 style={{ ...st.sheetStartBtn, opacity: ready ? 1 : 0.5 }}>
-                Start
+                {t("beats.start")}
               </button>
             </div>
           </div>
@@ -723,23 +722,22 @@ function BeatsView({
       {/* New-category sheet — name it, create it, land in its page. */}
       {createCatOpen && (
         <div style={sh.sheetBackdrop} onClick={() => setCreateCatOpen(false)}>
-          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="New playlist"
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("playlists.new")}
             onClick={(e) => e.stopPropagation()}>
             <div style={sh.sheetHead}>
-              <h2 style={sh.sheetName}>New playlist</h2>
-              <button onClick={() => setCreateCatOpen(false)} aria-label="Close" style={sh.sheetClose}>×</button>
+              <h2 style={sh.sheetName}>{t("playlists.new")}</h2>
+              <button onClick={() => setCreateCatOpen(false)} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
             </div>
             <p style={sh.emptyHint}>
-              A playlist is a kirtan progression: an ordered set of beats that
-              Home's ‹ › will move through.
+              {t("playlists.newHint")}
             </p>
             <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
               <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleCreateCategory(); }}
-                placeholder="e.g. Sunday feast kirtan" autoFocus style={st.catNameInput} />
+                placeholder={t("playlists.namePlaceholder")} autoFocus style={st.catNameInput} />
               <button onClick={handleCreateCategory} disabled={!newCatName.trim()}
                 style={{ ...st.sheetStartBtn, flex: "0 0 auto", padding: "0 22px", opacity: newCatName.trim() ? 1 : 0.5 }}>
-                Create
+                {t("common.create")}
               </button>
             </div>
           </div>
@@ -750,11 +748,11 @@ function BeatsView({
           category; order of adding = order of the progression. */}
       {addBeatsOpen && browsedCat && (
         <div style={sh.sheetBackdrop} onClick={() => setAddBeatsOpen(false)}>
-          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={`Add beats to ${browsedCat.name}`}
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("playlists.addTo", { name: browsedCat.name })}
             onClick={(e) => e.stopPropagation()}>
             <div style={sh.sheetHead}>
-              <h2 style={sh.sheetName}>Add to {browsedCat.name}</h2>
-              <button onClick={() => setAddBeatsOpen(false)} aria-label="Done" style={sh.sheetClose}>×</button>
+              <h2 style={sh.sheetName}>{t("playlists.addTo", { name: browsedCat.name })}</h2>
+              <button onClick={() => setAddBeatsOpen(false)} aria-label={t("common.done")} style={sh.sheetClose}>×</button>
             </div>
             <div style={sh.pickList}>
               {allBeats.map(b => {
@@ -765,7 +763,7 @@ function BeatsView({
                     style={{ ...sh.pickRow, borderColor: inCat ? "var(--clay)" : "var(--rule)" }}>
                     <div style={sh.beatRowTop}>
                       <span style={sh.beatRowName}>{b.name}</span>
-                      <span style={{ ...sh.beatRowMeta, flex: 1 }}>{b.note}</span>
+                      <span style={{ ...sh.beatRowMeta, flex: 1 }}>{noteLabel(b.note)}</span>
                       <CheckDot checked={inCat} />
                     </div>
                   </button>
@@ -773,7 +771,7 @@ function BeatsView({
               })}
             </div>
             <button onClick={() => setAddBeatsOpen(false)}
-              style={{ ...st.sheetStartBtn, marginTop: "var(--space-4)" }}>Done</button>
+              style={{ ...st.sheetStartBtn, marginTop: "var(--space-4)" }}>{t("common.done")}</button>
           </div>
         </div>
       )}
@@ -782,11 +780,11 @@ function BeatsView({
           tap cancels; only the explicit red button proceeds. */}
       {confirmAction && (
         <div style={sh.sheetBackdrop} onClick={() => setConfirmAction(null)}>
-          <div style={sh.sheet} role="alertdialog" aria-modal="true" aria-label="Are you sure?"
+          <div style={sh.sheet} role="alertdialog" aria-modal="true" aria-label={t("common.areYouSure")}
             onClick={(e) => e.stopPropagation()}>
             <p style={st.confirmMsg}>{confirmAction.message}</p>
             <div style={st.sheetActions}>
-              <button onClick={() => setConfirmAction(null)} style={st.sheetEditBtn}>Cancel</button>
+              <button onClick={() => setConfirmAction(null)} style={st.sheetEditBtn}>{t("common.cancel")}</button>
               <button onClick={() => { confirmAction.onConfirm(); setConfirmAction(null); }}
                 style={st.confirmDangerBtn}>
                 {confirmAction.label}
@@ -802,21 +800,21 @@ function BeatsView({
           app, so "Copied" is the button label for a moment instead. */}
       {shareTarget && (
         <div style={sh.sheetBackdrop} onClick={closeShare}>
-          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Share"
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("share.title")}
             onClick={(e) => e.stopPropagation()}>
             <div style={sh.sheetHead}>
               <h2 style={sh.sheetName}>
-                Share {shareTarget.kind === "beat" ? shareTarget.beat.name : shareTarget.name}
+                {t("share.named", { name: shareTarget.kind === "beat" ? shareTarget.beat.name : shareTarget.name })}
               </h2>
-              <button onClick={closeShare} aria-label="Close" style={sh.sheetClose}>×</button>
+              <button onClick={closeShare} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
             </div>
             <p style={sh.emptyHint}>
               {shareTarget.kind === "beat"
-                ? "Anyone who opens this link gets a copy of the beat. Nothing is uploaded — the whole beat travels inside the link itself."
-                : `All ${shareTarget.beats.length} beats in this list travel inside the link. Nothing is uploaded.`}
+                ? t("share.beatHint")
+                : t("share.listHint", { beats: t("count.beats", { n: shareTarget.beats.length }) })}
             </p>
             <input ref={linkInputRef} type="text" readOnly value={shareLink}
-              onFocus={(e) => e.target.select()} aria-label="Share link"
+              onFocus={(e) => e.target.select()} aria-label={t("share.link")}
               style={{ ...st.catNameInput, marginTop: "var(--space-4)", width: "100%" }} />
 
             {/* Publish to the community library — only when the backend is set
@@ -827,15 +825,15 @@ function BeatsView({
                   style={{ ...st.sheetStartBtn, ...st.iconLabel, flex: "1 0 100%",
                     opacity: publishState === "publishing" ? 0.6 : 1 }}>
                   <GlobeIcon size={18} />
-                  {publishState === "publishing" ? "Publishing…"
-                    : publishState === "done" ? "Published to community"
-                    : signedIn ? "Publish to community" : "Sign in to publish"}
+                  {publishState === "publishing" ? t("share.publishing")
+                    : publishState === "done" ? t("share.published")
+                    : signedIn ? t("share.publish") : t("share.signInToPublish")}
                 </button>
                 {typeof publishState === "string" && publishState !== "publishing" && publishState !== "done" && (
                   <p style={st.codeError} role="alert">{publishState}</p>
                 )}
                 {publishState === "done" && (
-                  <p style={sh.emptyHint}>Anyone can now find this under Browse.</p>
+                  <p style={sh.emptyHint}>{t("share.publishedHint")}</p>
                 )}
               </div>
             )}
@@ -845,14 +843,14 @@ function BeatsView({
                   copy buttons get half a sheet each rather than a third. */}
               {CAN_NATIVE_SHARE && (
                 <button onClick={nativeShare} style={{ ...st.sheetStartBtn, ...st.iconLabel, flex: "1 0 100%" }}>
-                  <ShareIcon />Share
+                  <ShareIcon />{t("share.action")}
                 </button>
               )}
               <button onClick={() => copyText(shareLink, "link")} style={{ ...st.sheetEditBtn, ...st.iconLabel }}>
-                {copied === "link" ? <><CheckIcon />Copied</> : "Copy link"}
+                {copied === "link" ? <><CheckIcon />{t("share.copied")}</> : t("share.copyLink")}
               </button>
               <button onClick={() => copyText(shareCode, "code")} style={{ ...st.sheetEditBtn, ...st.iconLabel }}>
-                {copied === "code" ? <><CheckIcon />Copied</> : "Copy code"}
+                {copied === "code" ? <><CheckIcon />{t("share.copied")}</> : t("share.copyCode")}
               </button>
             </div>
           </div>
@@ -864,23 +862,22 @@ function BeatsView({
           An unusable code lands here too, as one friendly line. */}
       {importPreview && (
         <div style={sh.sheetBackdrop} onClick={dismissImport}>
-          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Add shared beat"
+          <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("import.title")}
             onClick={(e) => e.stopPropagation()}>
             <div style={sh.sheetHead}>
               <h2 style={sh.sheetName}>
-                {importPreview.kind === "invalid" ? "Can't open that link" : "Someone shared this"}
+                {importPreview.kind === "invalid" ? t("import.invalidTitle") : t("import.title2")}
               </h2>
-              <button onClick={dismissImport} aria-label="Close" style={sh.sheetClose}>×</button>
+              <button onClick={dismissImport} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
             </div>
 
             {importPreview.kind === "invalid" && (
               <>
                 <p style={st.sheetDesc}>
-                  That link isn't complete, or isn't a beat link. Ask whoever sent
-                  it to copy it again — long links sometimes get cut in half.
+                  {t("import.invalid")}
                 </p>
                 <div style={st.sheetActions}>
-                  <button onClick={dismissImport} style={st.sheetStartBtn}>Close</button>
+                  <button onClick={dismissImport} style={st.sheetStartBtn}>{t("common.close")}</button>
                 </div>
               </>
             )}
@@ -889,15 +886,15 @@ function BeatsView({
               <>
                 <span style={sh.beatRowName}>{importPreview.beat.name}</span>
                 <span style={sh.beatRowMeta}>
-                  {importPreview.beat.steps} cells · suggested {importPreview.beat.bpm} BPM
+                  {t("beat.cells", { n: importPreview.beat.steps })} · {t("beat.suggestedBpm", { bpm: importPreview.beat.bpm })}
                 </span>
                 <div style={{ margin: "var(--space-4) 0" }}>
                   <BeatStrip beat={importPreview.beat} />
                 </div>
-                <p style={sh.emptyHint}>It'll be saved with your own beats.</p>
+                <p style={sh.emptyHint}>{t("import.savedWithYours")}</p>
                 <div style={st.sheetActions}>
-                  <button onClick={dismissImport} style={st.sheetEditBtn}>Cancel</button>
-                  <button onClick={acceptImport} style={st.sheetStartBtn}>Add beat</button>
+                  <button onClick={dismissImport} style={st.sheetEditBtn}>{t("common.cancel")}</button>
+                  <button onClick={acceptImport} style={st.sheetStartBtn}>{t("import.addBeat")}</button>
                 </div>
               </>
             )}
@@ -905,24 +902,22 @@ function BeatsView({
             {importPreview.kind === "category" && (
               <>
                 <p style={st.sheetDesc}>
-                  Add {importPreview.beats.length}{" "}
-                  {importPreview.beats.length === 1 ? "beat" : "beats"} and the
-                  list “{importPreview.name}”?
+                  {t("import.addList", { beats: t("count.beats", { n: importPreview.beats.length }), name: importPreview.name })}
                 </p>
                 <div style={sh.pickList}>
                   {importPreview.beats.map((b, i) => (
                     <div key={i} style={sh.pickRow}>
                       <div style={sh.beatRowTop}>
                         <span style={sh.beatRowName}>{b.name}</span>
-                        <span style={{ ...sh.beatRowMeta, flex: 1 }}>{b.steps} cells</span>
+                        <span style={{ ...sh.beatRowMeta, flex: 1 }}>{t("beat.cells", { n: b.steps })}</span>
                       </div>
                       <BeatStrip beat={b} mini />
                     </div>
                   ))}
                 </div>
                 <div style={st.sheetActions}>
-                  <button onClick={dismissImport} style={st.sheetEditBtn}>Cancel</button>
-                  <button onClick={acceptImport} style={st.sheetStartBtn}>Add all</button>
+                  <button onClick={dismissImport} style={st.sheetEditBtn}>{t("common.cancel")}</button>
+                  <button onClick={acceptImport} style={st.sheetStartBtn}>{t("import.addAll")}</button>
                 </div>
               </>
             )}

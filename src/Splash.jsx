@@ -17,6 +17,7 @@
  * apps have no audio-unlock requirement.
  */
 import Wordmark from "./Wordmark.jsx";
+import { t } from "./i18n/index.js";
 
 function Splash({ onBegin, ready }) {
   return (
@@ -32,7 +33,7 @@ function Splash({ onBegin, ready }) {
           <Wordmark expandFromInitials style={{ "--wm-size": "clamp(30px, 8.5vw, 44px)" }} />
         </div>
         <button onClick={onBegin} className="kc-splash-rise2" style={sp.begin}>
-          {ready ? "Begin" : "Begin · loading sounds…"}
+          {ready ? t("splash.begin") : t("splash.loading")}
         </button>
       </div>
     </div>
