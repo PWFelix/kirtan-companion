@@ -822,7 +822,7 @@ private fun TempoSheet(
  * of it existing separately from the library screen.
  */
 @Composable
-private fun BeatPickerSheet(
+internal fun BeatPickerSheet(
     library: LibraryViewModel,
     activeCategoryId: String,
     selectedBeatId: String?,

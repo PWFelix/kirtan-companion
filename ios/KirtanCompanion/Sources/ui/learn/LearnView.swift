@@ -12,7 +12,12 @@ struct LearnView: View {
     let container: AppContainer
 
     private var transport: TransportViewModel { container.transport }
-    private var beats: [Beat] { container.library.allBeats }
+    /// The active list (what the quick-pick last chose from), so ‹ › step through it.
+    private var beats: [Beat] {
+        let list = container.library.categoryBeats(container.library.state.activeCategoryId)
+        return list.isEmpty ? container.library.allBeats : list
+    }
+    @State private var pickerOpen = false
     private var beat: Beat? { transport.loadedBeat ?? beats.first }
 
     var body: some View {
@@ -38,16 +43,27 @@ struct LearnView: View {
         .padding(.bottom, 100) // clear of the floating bottom bar
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.head.ignoresSafeArea())
+        .sheet(isPresented: $pickerOpen) {
+            BeatPickerSheet(container: container) { pickerOpen = false }
+                .presentationDetents([.medium, .large])
+        }
     }
 
     private func header(_ beat: Beat) -> some View {
         HStack {
             iconButton("chevron.left", String(localized: "Previous beat", bundle: .strings)) { cycle(-1) }
             VStack(spacing: 2) {
-                Text(beat.name)
-                    .font(.system(size: 22, weight: .semibold, design: .serif))
-                    .foregroundStyle(Palette.syahi)
-                    .lineLimit(1)
+                Button { pickerOpen = true } label: {
+                    HStack(spacing: 4) {
+                        Text(beat.name)
+                            .font(.system(size: 22, weight: .semibold, design: .serif))
+                            .foregroundStyle(Palette.syahi)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down").font(.caption).foregroundStyle(Palette.syahiSoft)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Choose a beat", bundle: .strings))
                 Text(String(localized: "Watch the strokes land, and play along", bundle: .strings))
                     .font(.caption)
                     .foregroundStyle(Palette.syahiSoft)

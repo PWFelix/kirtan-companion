@@ -801,6 +801,16 @@
         }
       }
     },
+    "Choose a beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige un ritmo"
+          }
+        }
+      }
+    },
     "Clear" : {
       "localizations" : {
         "es" : {
@@ -2815,6 +2825,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El ritmo completo viaja dentro del enlace. No se sube nada."
+          }
+        }
+      }
+    },
+    "This category is empty — add beats to it on the Beats page." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta categoría está vacía: añádele ritmos en la página Ritmos."
           }
         }
       }

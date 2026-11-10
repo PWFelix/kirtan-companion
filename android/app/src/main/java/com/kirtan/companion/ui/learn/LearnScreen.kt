@@ -1,6 +1,7 @@
 package com.kirtan.companion.ui.learn
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -74,6 +75,22 @@ internal fun LearnScreen(
 ) {
     val dimens = KirtanTheme.dimens
     val state by transport.state.collectAsState()
+    val libraryState by library.state.collectAsState()
+    // Tapping the name opens Home's quick-pick: built-ins, your beats, your lists.
+    var pickerOpen by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    if (pickerOpen) {
+        com.kirtan.companion.ui.home.BeatPickerSheet(
+            library = library,
+            activeCategoryId = libraryState.activeCategoryId,
+            selectedBeatId = beat?.id,
+            onDismiss = { pickerOpen = false },
+            onPick = { picked, fromCategory ->
+                library.selectBeat(picked, fromCategory)
+                transport.loadBeat(picked)
+                pickerOpen = false
+            },
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -98,11 +115,13 @@ internal fun LearnScreen(
                 onClick = { library.cycleBeat(-1) },
             )
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClickLabel = stringResource(R.string.home_choose_beat)) { pickerOpen = true },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = beat.name,
+                    text = beat.name + " ▾",
                     color = PaletteToken.SYAHI.color,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.SemiBold,

@@ -13,6 +13,7 @@ struct HomeView: View {
     private var beat: Beat { beatForTransport() }
 
     @State private var mixerOpen = false
+    @State private var pickerOpen = false
 
     private let rowHeight: CGFloat = 46
 
@@ -38,6 +39,10 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $mixerOpen) {
             MixerSheet(container: container, beat: beat)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $pickerOpen) {
+            BeatPickerSheet(container: container) { pickerOpen = false }
                 .presentationDetents([.medium, .large])
         }
     }
@@ -81,9 +86,17 @@ struct HomeView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 6) {
-                Text(transport.beatName ?? String(localized: "No beat", bundle: .strings))
-                    .font(.system(size: 30, weight: .semibold, design: .serif))
-                    .foregroundStyle(Palette.syahi)
+                // Tap the name to choose from built-ins, your beats or a list.
+                Button { pickerOpen = true } label: {
+                    HStack(spacing: 6) {
+                        Text(transport.beatName ?? String(localized: "No beat", bundle: .strings))
+                            .font(.system(size: 30, weight: .semibold, design: .serif))
+                            .foregroundStyle(Palette.syahi)
+                        Image(systemName: "chevron.down").font(.callout).foregroundStyle(Palette.syahiSoft)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Choose a beat", bundle: .strings))
                 Text("\(transport.bpm) bpm")
                     .font(.callout)
                     .foregroundStyle(Palette.syahiSoft)
