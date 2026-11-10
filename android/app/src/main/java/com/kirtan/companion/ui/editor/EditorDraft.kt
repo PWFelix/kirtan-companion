@@ -99,12 +99,22 @@ fun seedGroups(beat: Beat?): List<Int> {
 fun seedCpq(beat: Beat?): Int =
     if (beat == null) 2 else maxOf(1, kotlin.math.round(beat.steps / beat.beatsPerBar).toInt())
 
-/** Which lanes the pads write: both mridanga heads, or one isolated lane. */
-enum class EditLane { BOTH, DAYAN, BAYAN, KARTAL }
+/**
+ * Which instrument the pads write. Tapping a row picks it: a dayan or bayan cell
+ * means the mrdanga (the two heads are one drum), a kartal cell the karatalas.
+ */
+enum class EditInstrument {
+    MRDANGA, KARTAL;
+
+    companion object {
+        fun of(lane: LaneId): EditInstrument =
+            if (lane == LaneId.KARTAL) KARTAL else MRDANGA
+    }
+}
 
 /**
  * One pad. [write] names exactly the lanes it touches, which is what lets a
- * combo pad write both heads in one gesture and an isolated pad write one, with
+ * combo pad write both heads in one gesture and a kartal pad write only the cymbal, with
  * no branch at the call site. A null stroke in [write] means "this pad sets that
  * lane to a rest", which is distinct from the pad not touching the lane at all.
  */
@@ -118,12 +128,12 @@ data class PadSpec(
 /**
  * The pad palette per edit mode, transcribed from `PAD_SETS` in BeatEditor.jsx.
  *
- * The karatalas have NO "both" combo pads: a cymbal is not struck together with a
- * drum head under one bol, so they are authored by isolating the lane — which is
- * also the only way to draw them, since the both-hands pads write the drum only.
+ * The mrdanga set covers every dayan/bayan combination, so a column is always
+ * written whole and no single-head mode is needed. The karatalas have no combo
+ * pads: a cymbal is not struck together with a drum head under one bol.
  */
-fun padSetFor(lane: EditLane): List<PadSpec> = when (lane) {
-    EditLane.BOTH -> listOf(
+fun padSetFor(instrument: EditInstrument): List<PadSpec> = when (instrument) {
+    EditInstrument.MRDANGA -> listOf(
         PadSpec("ta", Bols.forStroke("dayan", "O") ?: "Ta", mapOf(LaneId.DAYAN to Stroke.OPEN, LaneId.BAYAN to null)),
         PadSpec("te", Bols.forStroke("dayan", "X") ?: "Te", mapOf(LaneId.DAYAN to Stroke.CLOSED, LaneId.BAYAN to null)),
         PadSpec("ge", Bols.forStroke("bayan", "O") ?: "Ge", mapOf(LaneId.DAYAN to null, LaneId.BAYAN to Stroke.OPEN)),
@@ -135,19 +145,7 @@ fun padSetFor(lane: EditLane): List<PadSpec> = when (lane) {
         PadSpec("rest", "Rest", mapOf(LaneId.DAYAN to null, LaneId.BAYAN to null), rest = true),
     )
 
-    EditLane.DAYAN -> listOf(
-        PadSpec("ta", Bols.forStroke("dayan", "O") ?: "Ta", mapOf(LaneId.DAYAN to Stroke.OPEN)),
-        PadSpec("te", Bols.forStroke("dayan", "X") ?: "Te", mapOf(LaneId.DAYAN to Stroke.CLOSED)),
-        PadSpec("rd", "Rest", mapOf(LaneId.DAYAN to null), rest = true),
-    )
-
-    EditLane.BAYAN -> listOf(
-        PadSpec("ge", Bols.forStroke("bayan", "O") ?: "Ge", mapOf(LaneId.BAYAN to Stroke.OPEN)),
-        PadSpec("khe", Bols.forStroke("bayan", "X") ?: "Khe", mapOf(LaneId.BAYAN to Stroke.CLOSED)),
-        PadSpec("rb", "Rest", mapOf(LaneId.BAYAN to null), rest = true),
-    )
-
-    EditLane.KARTAL -> listOf(
+    EditInstrument.KARTAL -> listOf(
         PadSpec("kch", Bols.forStroke("kartal", "O") ?: "Ching", mapOf(LaneId.KARTAL to Stroke.OPEN)),
         PadSpec("kdm", Bols.forStroke("kartal", "X") ?: "Chip", mapOf(LaneId.KARTAL to Stroke.CLOSED)),
         PadSpec("rk", "Rest", mapOf(LaneId.KARTAL to null), rest = true),
@@ -169,7 +167,7 @@ data class EditorDraft(
     val bpm: Int,
     val name: String,
     val cursor: Int,
-    val editLane: EditLane = EditLane.BOTH,
+    val instrument: EditInstrument = EditInstrument.MRDANGA,
     val undo: List<DraftSnapshot> = emptyList(),
 ) {
     val cpq: Int get() = meter.cpq
@@ -293,17 +291,9 @@ data class EditorDraft(
 
     fun setBpm(value: Int): EditorDraft = copy(bpm = value)
 
-    fun setEditLane(lane: EditLane): EditorDraft = copy(editLane = lane)
-
-    /** Tapping a lane label isolates it; tapping again returns to both hands. */
-    fun toggleEditLane(lane: LaneId): EditorDraft {
-        val target = when (lane) {
-            LaneId.DAYAN -> EditLane.DAYAN
-            LaneId.BAYAN -> EditLane.BAYAN
-            LaneId.KARTAL -> EditLane.KARTAL
-        }
-        return copy(editLane = if (editLane == target) EditLane.BOTH else target)
-    }
+    /** Tapping a cell in [lane]'s row: move the cursor there and pick its instrument. */
+    fun pickCell(lane: LaneId, index: Int): EditorDraft =
+        setCursor(index).copy(instrument = EditInstrument.of(lane))
 
     // ── Output ─────────────────────────────────────────────────────────────
 

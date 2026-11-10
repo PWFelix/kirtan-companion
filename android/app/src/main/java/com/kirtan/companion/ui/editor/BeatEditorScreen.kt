@@ -82,11 +82,11 @@ import kotlinx.coroutines.launch
  *     the zoom is on; drag it to scrub the cursor. Doubles as the live visualiser
  *     while previewing.
  *  2. ZOOM — one page of at most eight cells, magnified, lanes stacked. The cursor
- *     is a COLUMN; tapping a cell moves it. A lane label above each row doubles as
- *     an "edit only this lane" toggle, which is how the cymbal row is authored,
- *     since the both-hands pads write the drum only.
- *  3. PADS — one pad per enterable stroke. Tapping writes the cursor column (or
- *     one lane when isolated), SOUNDS the sample, and advances the cursor.
+ *     is a COLUMN; tapping a cell moves it AND picks the instrument the pads
+ *     write (a drum row: the mrdanga; the kartal row: the karatalas). The other
+ *     instrument's rows dim, and the pads carry a heading saying how to switch.
+ *  3. PADS — one pad per enterable stroke of that instrument. Tapping writes the
+ *     cursor column, SOUNDS the sample, and advances the cursor.
  *
  * The draft lives in [EditorDraft], pure and immutable, so the undo stack is a
  * list of previous values and every rule (meter math, cursor wrap, kartal
@@ -271,9 +271,8 @@ internal fun BeatEditorScreen(
                 draft = draft,
                 step = step,
                 previewing = previewing,
-                onCellTap = { draft = draft.setCursor(it) },
+                onCellTap = { lane, index -> draft = draft.pickCell(lane, index) },
                 onPage = { draft = draft.setPagePage(it) },
-                onToggleLane = { draft = draft.toggleEditLane(it) },
             )
 
             PadsZone(draft = draft, onPad = ::tapPad)
@@ -448,9 +447,8 @@ private fun ZoomZone(
     draft: EditorDraft,
     step: Int,
     previewing: Boolean,
-    onCellTap: (Int) -> Unit,
+    onCellTap: (LaneId, Int) -> Unit,
     onPage: (Int) -> Unit,
-    onToggleLane: (LaneId) -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
     val colors = KirtanTheme.colors
@@ -505,36 +503,26 @@ private fun ZoomZone(
         }
 
         for (lane in LaneId.ORDERED) {
-            val isolatedOut = draft.editLane != EditLane.BOTH &&
-                draft.editLane != when (lane) {
-                    LaneId.DAYAN -> EditLane.DAYAN
-                    LaneId.BAYAN -> EditLane.BAYAN
-                    LaneId.KARTAL -> EditLane.KARTAL
-                }
-            val active = draft.editLane == when (lane) {
-                LaneId.DAYAN -> EditLane.DAYAN
-                LaneId.BAYAN -> EditLane.BAYAN
-                LaneId.KARTAL -> EditLane.KARTAL
-            }
+            val active = draft.instrument == EditInstrument.of(lane)
             val laneColor = lane.colorToken.color
             val cells = draft.pattern(lane)
 
             Column(
-                modifier = Modifier.alpha(if (isolatedOut) 0.4f else 1f),
+                modifier = Modifier.alpha(if (active) 1f else 0.4f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = lane.label.uppercase() + if (active) " · editing only" else "",
+                    text = lane.label.uppercase(),
                     color = laneColor,
                     fontSize = 10.sp,
-                    fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Bold,
+                    fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(dimens.radiusIconButton))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = { onToggleLane(lane) },
+                            onClick = { onCellTap(lane, draft.cursor) },
                         )
                         .padding(vertical = 2.dp),
                 )
@@ -562,7 +550,7 @@ private fun ZoomZone(
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
-                                    onClick = { onCellTap(index) },
+                                    onClick = { onCellTap(lane, index) },
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -597,9 +585,26 @@ internal fun StrokeDot(value: Stroke?, color: Color, size: androidx.compose.ui.u
 @Composable
 private fun PadsZone(draft: EditorDraft, onPad: (PadSpec) -> Unit) {
     val dimens = KirtanTheme.dimens
-    val pads = padSetFor(draft.editLane)
+    val pads = padSetFor(draft.instrument)
+    val kartal = draft.instrument == EditInstrument.KARTAL
 
     Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
+        // Which instrument the pads write, and how to change it: tapping a row
+        // switches, which would otherwise be invisible.
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = if (kartal) "KARTAL" else "MRDANGA",
+                color = PaletteToken.SYAHI.color,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.sp,
+            )
+            Text(
+                text = "  · tap the ${if (kartal) "drum" else "kartal"} row to switch",
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
+            )
+        }
         pads.chunked(3).forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -608,7 +613,7 @@ private fun PadsZone(draft: EditorDraft, onPad: (PadSpec) -> Unit) {
                 for (pad in row) {
                     PadButton(
                         pad = pad,
-                        editLane = draft.editLane,
+                        instrument = draft.instrument,
                         onClick = { onPad(pad) },
                         // weight at the CALL site: it is a RowScope extension.
                         modifier = Modifier.weight(1f),
@@ -624,12 +629,12 @@ private fun PadsZone(draft: EditorDraft, onPad: (PadSpec) -> Unit) {
 @Composable
 private fun PadButton(
     pad: PadSpec,
-    editLane: EditLane,
+    instrument: EditInstrument,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val dimens = KirtanTheme.dimens
-    val both = editLane == EditLane.BOTH &&
+    val both = instrument == EditInstrument.MRDANGA &&
         pad.write.containsKey(LaneId.DAYAN) && pad.write.containsKey(LaneId.BAYAN)
 
     Column(

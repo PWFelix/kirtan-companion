@@ -150,7 +150,7 @@ class EditorDraftTest {
     @Test
     fun `resizing resets undo because old snapshots have the old length`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH)[0])
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA)[0])
         assertTrue(draft.canUndo)
         draft = draft.addGroup()
         assertFalse("undo must not survive a resize", draft.canUndo)
@@ -161,7 +161,7 @@ class EditorDraftTest {
     @Test
     fun `a pad writes the cursor column and advances it`() {
         var draft = EditorDraft.from(null)
-        val ta = padSetFor(EditLane.BOTH).first { it.key == "ta" }
+        val ta = padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" }
         draft = draft.tapPad(ta)
 
         assertEquals(Stroke.OPEN, draft.pattern(LaneId.DAYAN)[0])
@@ -172,7 +172,7 @@ class EditorDraftTest {
     @Test
     fun `a combo pad writes both heads in one gesture`() {
         var draft = EditorDraft.from(null)
-        val da = padSetFor(EditLane.BOTH).first { it.key == "da" }
+        val da = padSetFor(EditInstrument.MRDANGA).first { it.key == "da" }
         draft = draft.tapPad(da)
 
         assertEquals(Stroke.OPEN, draft.pattern(LaneId.DAYAN)[0])
@@ -182,37 +182,41 @@ class EditorDraftTest {
     @Test
     fun `the cursor wraps around the end of the beat`() {
         var draft = EditorDraft.from(null).setCursor(7)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "rest" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "rest" })
         assertEquals(0, draft.cursor)
     }
 
     @Test
     fun `a rest pad writes rests, not absences`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "ta" })
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "rest" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "rest" })
         assertNull(draft.pattern(LaneId.DAYAN)[1])
         assertNull(draft.pattern(LaneId.BAYAN)[1])
     }
 
     @Test
-    fun `isolated pads write exactly one lane`() {
-        assertEquals(setOf(LaneId.DAYAN), padSetFor(EditLane.DAYAN).first().write.keys)
-        assertEquals(setOf(LaneId.BAYAN), padSetFor(EditLane.BAYAN).first().write.keys)
-        assertEquals(setOf(LaneId.KARTAL), padSetFor(EditLane.KARTAL).first().write.keys)
-        // And the both-hands set has no kartal pads: cymbals are authored isolated.
+    fun `each instrument's pads write only its own lanes`() {
+        assertEquals(setOf(LaneId.KARTAL), padSetFor(EditInstrument.KARTAL).first().write.keys)
+        // The mrdanga set writes whole columns (both heads) and never the kartal.
         assertTrue(
-            padSetFor(EditLane.BOTH).none { it.write.containsKey(LaneId.KARTAL) }
+            padSetFor(EditInstrument.MRDANGA).none { it.write.containsKey(LaneId.KARTAL) }
         )
     }
 
     @Test
-    fun `toggling a lane isolates it and toggling again returns to both`() {
+    fun `tapping a row's cell moves the cursor and picks its instrument`() {
         var draft = EditorDraft.from(null)
-        draft = draft.toggleEditLane(LaneId.KARTAL)
-        assertEquals(EditLane.KARTAL, draft.editLane)
-        draft = draft.toggleEditLane(LaneId.KARTAL)
-        assertEquals(EditLane.BOTH, draft.editLane)
+        assertEquals(EditInstrument.MRDANGA, draft.instrument)
+        draft = draft.pickCell(LaneId.KARTAL, 3)
+        assertEquals(EditInstrument.KARTAL, draft.instrument)
+        assertEquals(3, draft.cursor)
+        draft = draft.tapPad(padSetFor(draft.instrument).first { it.key == "kch" })
+        assertEquals(Stroke.OPEN, draft.pattern(LaneId.KARTAL)[3])
+        // Either drum row returns to the mrdanga.
+        draft = draft.pickCell(LaneId.BAYAN, 0)
+        assertEquals(EditInstrument.MRDANGA, draft.instrument)
+        assertEquals(0, draft.cursor)
     }
 
     // ── Undo ──────────────────────────────────────────────────────────────
@@ -220,8 +224,8 @@ class EditorDraftTest {
     @Test
     fun `undo restores the patterns and the cursor`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "ta" })
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "ge" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ge" })
         assertEquals(2, draft.cursor)
 
         draft = draft.undoLast()
@@ -240,7 +244,7 @@ class EditorDraftTest {
     @Test
     fun `the undo stack is capped`() {
         var draft = EditorDraft.from(null)
-        val ta = padSetFor(EditLane.BOTH).first { it.key == "ta" }
+        val ta = padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" }
         repeat(EditorDraft.UNDO_LIMIT + 10) { draft = draft.tapPad(ta) }
         assertEquals(EditorDraft.UNDO_LIMIT, draft.undo.size)
     }
@@ -248,7 +252,7 @@ class EditorDraftTest {
     @Test
     fun `clear empties every lane and is undoable`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "da" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "da" })
         draft = draft.clearGrid()
 
         for (lane in LaneId.ORDERED) {
@@ -263,7 +267,7 @@ class EditorDraftTest {
     @Test
     fun `changing the feel clears the grid and resets cursor and undo`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
         draft = draft.selectMeter(METERS.first { it.id == "78" })
 
         assertEquals(listOf(2, 2, 3), draft.groups)
@@ -316,7 +320,7 @@ class EditorDraftTest {
     @Test
     fun `a beat with no cymbals stays a two-lane beat`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
         val beat = draft.toBeat(null)
 
         assertFalse(beat.lanePatterns.containsKey(LaneId.KARTAL))
@@ -327,15 +331,15 @@ class EditorDraftTest {
     @Test
     fun `drawing cymbals adds the kartal lane`() {
         var draft = EditorDraft.from(null)
-        draft = draft.toggleEditLane(LaneId.KARTAL)
-        draft = draft.tapPad(padSetFor(EditLane.KARTAL).first { it.key == "kch" })
+        draft = draft.pickCell(LaneId.KARTAL, draft.cursor)
+        draft = draft.tapPad(padSetFor(EditInstrument.KARTAL).first { it.key == "kch" })
         assertTrue(draft.toBeat(null).lanePatterns.containsKey(LaneId.KARTAL))
     }
 
     @Test
     fun `an unnamed draft saves as Custom Beat and a new beat has no id`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
         val beat = draft.toBeat(null)
         assertEquals("Custom Beat", beat.name)
         assertNull(beat.id)
@@ -345,7 +349,7 @@ class EditorDraftTest {
     @Test
     fun `an uneven draft persists a fractional bar length`() {
         var draft = EditorDraft.from(null).selectMeter(METERS.first { it.id == "78" })
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
         val beat = draft.toBeat(null)
 
         assertEquals(7, beat.steps)
@@ -358,7 +362,7 @@ class EditorDraftTest {
     @Test
     fun `a uniform draft persists the group size as cellsPerGroup`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditLane.BOTH).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
         val beat = draft.toBeat(null)
         assertEquals(2, beat.cellsPerGroup)
         assertEquals(4.0, beat.beatsPerBar, 0.0)
