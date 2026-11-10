@@ -12,7 +12,7 @@ struct OutputRoute: Equatable {
     let label: String
     let bluetooth: Bool
 
-    static let speaker = OutputRoute(key: "speaker", label: "Phone speaker", bluetooth: false)
+    static let speaker = OutputRoute(key: "speaker", label: String(localized: "Phone speaker"), bluetooth: false)
 
     /// Bluetooth ports, by name. A2DP is the usual music link; LE is newer
     /// hearing aids and LE Audio earbuds; HFP is a headset that only offered
@@ -27,7 +27,7 @@ struct OutputRoute: Equatable {
             return OutputRoute(key: "bt:\(name)", label: name, bluetooth: true)
         }
         if wiredPorts.contains(portType) {
-            return OutputRoute(key: "wired", label: "Headphones", bluetooth: false)
+            return OutputRoute(key: "wired", label: String(localized: "Headphones"), bluetooth: false)
         }
         if portType == .airPlay {
             let name = portName.isEmpty ? "AirPlay" : portName

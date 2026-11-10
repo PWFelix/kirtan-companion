@@ -14,10 +14,10 @@ struct NavigationShell: View {
 
         var title: String {
             switch self {
-            case .home: return "Play"
-            case .beats: return "Beats"
-            case .learn: return "Learn"
-            case .settings: return "Settings"
+            case .home: return String(localized: "Play")
+            case .beats: return String(localized: "Beats")
+            case .learn: return String(localized: "Learn")
+            case .settings: return String(localized: "Settings")
             }
         }
 

@@ -42,26 +42,26 @@ struct SettingsView: View {
 
     private var settings: some View {
         VStack(spacing: 12) {
-            Text("Settings")
+            Text(String(localized: "Settings"))
                 .font(.system(size: 26, weight: .semibold, design: .serif))
                 .foregroundStyle(Palette.syahi)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
 
             Form {
-                Section("Notation") {
-                    Toggle("Show bol syllables", isOn: bolBinding)
-                    Toggle("Show step labels", isOn: stepLabelBinding)
+                Section(String(localized: "Notation")) {
+                    Toggle(String(localized: "Show bol syllables"), isOn: bolBinding)
+                    Toggle(String(localized: "Show step labels"), isOn: stepLabelBinding)
                 }
 
-                Section("Sound") {
+                Section(String(localized: "Sound")) {
                     Button {
                         syncOpen = true
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Sync sound and display").foregroundStyle(Palette.syahi)
-                            Text("For Bluetooth speakers: line the beat on screen up with what you hear. \(transport.route.label): " +
-                                 (transport.displayDelayMs == 0 ? "no delay set." : "display \(transport.displayDelayMs) ms later."))
+                            Text(String(localized: "Sync sound and display")).foregroundStyle(Palette.syahi)
+                            Text(String(localized: "For Bluetooth speakers: line the beat on screen up with what you hear.") + " \(transport.route.label): " +
+                                 (transport.displayDelayMs == 0 ? String(localized: "no delay set.") : String(localized: "display \(transport.displayDelayMs) ms later.")))
                                 .font(.footnote)
                                 .foregroundStyle(Palette.syahiSoft)
                         }
@@ -73,7 +73,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button("About") { aboutOpen = true }
+                    Button(String(localized: "About")) { aboutOpen = true }
                         .foregroundStyle(Palette.syahi)
                 }
             }
@@ -88,18 +88,18 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var cloudSection: some View {
-        Section("Cloud") {
+        Section(String(localized: "Cloud")) {
             if let account = container.account {
-                LabeledContent("Signed in as", value: container.auth.displayName)
+                LabeledContent(String(localized: "Signed in as"), value: container.auth.displayName)
                 if let email = account.email, !email.isEmpty {
-                    LabeledContent("Email", value: email)
+                    LabeledContent(String(localized: "Email"), value: email)
                 }
-                Button("Sign out", role: .destructive) {
+                Button(String(localized: "Sign out"), role: .destructive) {
                     Task { await container.signOut() }
                 }
             } else {
                 SignInButton(container: container)
-                Text("An account keeps your beats and playlists in the cloud and lets you share to the community library.")
+                Text(String(localized: "An account keeps your beats and playlists in the cloud and lets you share to the community library."))
                     .font(.footnote)
                     .foregroundStyle(Palette.syahiSoft)
             }

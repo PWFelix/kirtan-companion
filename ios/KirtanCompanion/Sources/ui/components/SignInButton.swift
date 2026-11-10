@@ -10,7 +10,7 @@ import SwiftUI
 // for free when the round trip lands.
 struct SignInButton: View {
     let container: AppContainer
-    var title: String = "Sign in to sync & share"
+    var title: String = String(localized: "Sign in to sync & share")
     var systemImage: String = "person.crop.circle"
 
     @State private var signInURL: URL?
@@ -27,7 +27,7 @@ struct SignInButton: View {
             if isBusy {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Opening sign-in…")
+                    Text(String(localized: "Opening sign-in…"))
                 }
             } else {
                 Label(title, systemImage: systemImage)

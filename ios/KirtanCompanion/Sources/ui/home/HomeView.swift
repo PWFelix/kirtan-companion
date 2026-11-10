@@ -81,7 +81,7 @@ struct HomeView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 6) {
-                Text(transport.beatName ?? "No beat")
+                Text(transport.beatName ?? String(localized: "No beat"))
                     .font(.system(size: 30, weight: .semibold, design: .serif))
                     .foregroundStyle(Palette.syahi)
                 Text("\(transport.bpm) bpm")
@@ -106,11 +106,11 @@ struct HomeView: View {
         .disabled(!enabled)
 
         if !transport.ready {
-            Text("Loading sounds…")
+            Text(String(localized: "Loading sounds…"))
                 .font(.footnote)
                 .foregroundStyle(Palette.syahiSoft)
         } else if transport.outputFailed {
-            Text("Audio output unavailable")
+            Text(String(localized: "Audio output unavailable"))
                 .font(.footnote)
                 .foregroundStyle(Palette.danger)
         }

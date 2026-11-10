@@ -26,19 +26,19 @@ struct AboutView: View {
                 .frame(maxWidth: .infinity)
                 .clipped()
 
-                Text("Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, courageous or heroic in relation to the mṛdaṅga.")
+                Text(String(localized: "Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, courageous or heroic in relation to the mṛdaṅga."))
                     .font(.subheadline)
                     .foregroundStyle(Palette.syahiSoft)
                 Text("paraṁ vijayate śrī-kṛṣṇa-saṅkīrtanam")
                     .font(.title3.weight(.medium).italic())
                     .foregroundStyle(Palette.clay)
-                Text("a World Sankirtan Party production")
+                Text(String(localized: "a World Sankirtan Party production"))
                     .foregroundStyle(Palette.syahi)
-                Text("All glories to Śrīla Prabhupāda!")
+                Text(String(localized: "All glories to Śrīla Prabhupāda!"))
                     .font(.headline)
                     .foregroundStyle(Palette.syahi)
                 if let version {
-                    Text("Version \(version)")
+                    Text(String(localized: "Version \(version)"))
                         .font(.caption)
                         .foregroundStyle(Palette.faint)
                 }
@@ -48,7 +48,7 @@ struct AboutView: View {
             .padding(.bottom, 120)
         }
         .background(Palette.head.ignoresSafeArea())
-        .navigationTitle("About")
+        .navigationTitle(String(localized: "About"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

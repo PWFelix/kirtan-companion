@@ -46,7 +46,7 @@ final class AuthViewModel {
         let name = session?.displayName?.trimmingCharacters(in: .whitespaces)
         if let name, !name.isEmpty { return name }
         if let email = session?.email { return email }
-        return "You"
+        return String(localized: "You")
     }
 
     /// Publish a freshly-read session from the client.

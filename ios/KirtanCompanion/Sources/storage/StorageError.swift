@@ -61,7 +61,7 @@ func storageErrorMessage(_ error: Error?) -> String {
 
 extension StorageError {
     static let fallbackMessage =
-        "Something went wrong saving that. Your beat may not have been kept."
+        String(localized: "Something went wrong saving that. Your beat may not have been kept.")
 }
 
 // The logging seam. os.Logger is not assertable in a unit test, so everything in this

@@ -119,7 +119,7 @@ final class LibraryRepository {
         case BUILTIN_CATEGORY: return "Built in"
         case CUSTOM_CATEGORY: return "Your beats"
         default:
-            return state.categories.first(where: { $0.id == categoryId })?.name ?? "Beats"
+            return state.categories.first(where: { $0.id == categoryId })?.name ?? String(localized: "Beats")
         }
     }
 

@@ -43,15 +43,15 @@ func restFailure(status: Int, body: JValue?, whileDoing: String) -> StorageError
     let code = body?.stringField("code")
     let detail = body?.stringField("message") ?? ""
     if code == "23505" {
-        return StorageError(.conflict, "That already exists.")
+        return StorageError(.conflict, String(localized: "That already exists."))
     }
     if code == "PGRST116" {
-        return StorageError(.notFound, "\(whileDoing) no longer exists.")
+        return StorageError(.notFound, String(localized: "\(whileDoing) no longer exists."))
     }
     if code == "42501" || status == 401 || status == 403 {
-        return StorageError(.unavailable, "You're signed out, so that couldn't be saved. Sign in and try again.")
+        return StorageError(.unavailable, String(localized: "You're signed out, so that couldn't be saved. Sign in and try again."))
     }
-    return StorageError(.unknown, "Something went wrong with \(whileDoing). \(detail)".trimmingCharacters(in: .whitespaces))
+    return StorageError(.unknown, String(localized: "Something went wrong with \(whileDoing). \(detail)").trimmingCharacters(in: .whitespaces))
 }
 
 /// A GoTrue failure. Bad credentials are the common case and get their own sentence;
@@ -62,14 +62,14 @@ func authFailure(status: Int, body: JValue?, whileDoing: String) -> StorageError
         ?? body?.stringField("message")
         ?? ""
     if status == 401 || status == 403 {
-        return StorageError(.unavailable, "You're signed out, so that couldn't be saved. Sign in and try again.")
+        return StorageError(.unavailable, String(localized: "You're signed out, so that couldn't be saved. Sign in and try again."))
     }
     if status == 400 && description.lowercased().contains("invalid") {
-        return StorageError(.unknown, "That email and password didn't match. Try again.")
+        return StorageError(.unknown, String(localized: "That email and password didn't match. Try again."))
     }
     let message = description.isEmpty
-        ? "Couldn't \(whileDoing). The server refused the request."
-        : "Couldn't \(whileDoing). \(description)"
+        ? String(localized: "Couldn't \(whileDoing). The server refused the request.")
+        : String(localized: "Couldn't \(whileDoing). \(description)")
     return StorageError(.unknown, message.trimmingCharacters(in: .whitespaces))
 }
 

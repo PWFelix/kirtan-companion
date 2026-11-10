@@ -147,11 +147,11 @@ final class AppContainer {
     func acceptImport(_ payload: ShareCodec.SharePayload) async {
         let result = await library.importShared(payload)
         if result.beats.isEmpty {
-            auth.notice = library.state.error ?? "Nothing was imported."
+            auth.notice = library.state.error ?? String(localized: "Nothing was imported.")
         } else if result.categoryId != nil {
-            auth.notice = "Added \(result.beats.count) beats as a new list."
+            auth.notice = String(localized: "Added \(result.beats.count) beats as a new list.")
         } else {
-            auth.notice = "Added “\(result.beats[0].name)” to Your beats."
+            auth.notice = String(localized: "Added “\(result.beats[0].name)” to Your beats.")
         }
     }
 
@@ -161,8 +161,8 @@ final class AppContainer {
         let result = await library.importLibrary(local)
         auth.pendingMigration = nil
         auth.notice = result.failed
-            ? (library.state.error ?? "Your beats could not be moved. They are still on this device.")
-            : "Moved \(result.beats) \(result.beats == 1 ? "beat" : "beats") to your account."
+            ? (library.state.error ?? String(localized: "Your beats could not be moved. They are still on this device."))
+            : String(localized: "Moved \(result.beats) beats to your account.")
         return result
     }
 

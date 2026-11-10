@@ -56,18 +56,18 @@ struct BeatsView: View {
 
         var title: String {
             switch self {
-            case .deleteBeat(_, let name): return "Delete \(name)?"
-            case .deleteList(_, let name): return "Delete the list “\(name)”?"
-            case .removeForEveryone(let beat): return "Remove \(beat.name) for everyone?"
+            case .deleteBeat(_, let name): return String(localized: "Delete \(name)?")
+            case .deleteList(_, let name): return String(localized: "Delete the list “\(name)”?")
+            case .removeForEveryone(let beat): return String(localized: "Remove \(beat.name) for everyone?")
             }
         }
 
         var message: String {
             switch self {
-            case .deleteBeat: return "It is also taken out of every list that uses it."
-            case .deleteList: return "The beats in it stay in your library."
+            case .deleteBeat: return String(localized: "It is also taken out of every list that uses it.")
+            case .deleteList: return String(localized: "The beats in it stay in your library.")
             case .removeForEveryone:
-                return "It disappears from the Beats screen for everyone on their next launch. Progressions that use it keep working — its id does not change, only its visibility."
+                return String(localized: "It disappears from the Beats screen for everyone on their next launch. Progressions that use it keep working — its id does not change, only its visibility.")
             }
         }
     }
@@ -90,28 +90,30 @@ struct BeatsView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("Beats")
+                Text(String(localized: "Beats"))
                     .font(.system(size: 26, weight: .semibold, design: .serif))
                     .foregroundStyle(Palette.syahi)
                 Spacer()
                 if segment == .library {
                     Menu {
-                        Button { sheet = .importCode } label: { Label("Import a code or link", systemImage: "square.and.arrow.down") }
-                        Button { nameDraft = ""; namePrompt = .newList } label: { Label("New list", systemImage: "text.badge.plus") }
+                        Button { sheet = .importCode } label: { Label(String(localized: "Import a code or link"), systemImage: "square.and.arrow.down") }
+                        Button { nameDraft = ""; namePrompt = .newList } label: { Label(String(localized: "New list"), systemImage: "text.badge.plus") }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .font(.title3)
                             .foregroundStyle(Palette.clay)
                             .frame(width: 40, height: 40)
                     }
-                    .accessibilityLabel("Library actions")
+                    .accessibilityLabel(String(localized: "Library actions"))
                 }
             }
             .padding(.horizontal, 24)
 
             if container.cloudConfigured {
-                Picker("Library", selection: $segment) {
-                    ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
+                Picker(String(localized: "Library"), selection: $segment) {
+                    ForEach(Segment.allCases) { seg in
+                        Text(seg == .library ? String(localized: "My beats") : String(localized: "Community")).tag(seg)
+                    }
                 }
                 .pickerStyle(.segmented)
                 .tint(Palette.clay)
@@ -145,14 +147,14 @@ struct BeatsView: View {
             presenting: pending,
         ) { which in
             Button(confirmLabel(which), role: .destructive) { confirm(which) }
-            Button("Cancel", role: .cancel) { pending = nil }
+            Button(String(localized: "Cancel"), role: .cancel) { pending = nil }
         } message: { which in
             Text(which.message)
         }
         .alert(namePromptTitle, isPresented: Binding(get: { namePrompt != nil }, set: { if !$0 { namePrompt = nil } })) {
-            TextField("List name", text: $nameDraft)
-            Button("Cancel", role: .cancel) { namePrompt = nil }
-            Button(namePrompt == .newList ? "Create" : "Rename") { commitName() }
+            TextField(String(localized: "List name"), text: $nameDraft)
+            Button(String(localized: "Cancel"), role: .cancel) { namePrompt = nil }
+            Button(namePrompt == .newList ? String(localized: "Create") : String(localized: "Rename")) { commitName() }
         }
     }
 
@@ -164,7 +166,7 @@ struct BeatsView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(Palette.faint)
-            TextField("Search your beats", text: $query)
+            TextField(String(localized: "Search your beats"), text: $query)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
                 .foregroundStyle(Palette.syahi)
@@ -205,12 +207,12 @@ struct BeatsView: View {
                     Group {
                         builtInHeader
                         ForEach(library.shippedBeats.effective, id: \.id) { beatRow($0) }
-                        section("Your beats", library.state.customBeats)
+                        section(String(localized: "Your beats"), library.state.customBeats)
                         ForEach(library.state.categories, id: \.id) { category in
                             categoryHeader(category)
                             let beats = library.categoryBeats(category.id)
                             if beats.isEmpty {
-                                Text("Empty — add beats from any row's … menu.")
+                                Text(String(localized: "Empty — add beats from any row's … menu."))
                                     .font(.caption).foregroundStyle(Palette.faint)
                                     .padding(.vertical, 6)
                             }
@@ -227,7 +229,7 @@ struct BeatsView: View {
                 List {
                     Group {
                         if results.isEmpty {
-                            Text("No beats match “\(trimmedQuery)”.")
+                            Text(String(localized: "No beats match “\(trimmedQuery)”."))
                                 .font(.footnote).foregroundStyle(Palette.syahiSoft)
                                 .frame(maxWidth: .infinity).padding(.vertical, 24)
                         }
@@ -245,7 +247,7 @@ struct BeatsView: View {
     private var builtInHeader: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                sectionTitle("Built in")
+                sectionTitle(String(localized: "Built in"))
                 Spacer()
                 if let shipped = container.shippedBeats {
                     Button {
@@ -258,7 +260,7 @@ struct BeatsView: View {
                         }
                     }
                     .foregroundStyle(Palette.clay)
-                    .accessibilityLabel("Check for updated built-in beats")
+                    .accessibilityLabel(String(localized: "Check for updated built-in beats"))
                     .padding(.top, 12)
                 }
             }
@@ -292,21 +294,21 @@ struct BeatsView: View {
             Spacer()
             Menu {
                 Button { nameDraft = category.name; namePrompt = .rename(id: category.id, current: category.name) } label: {
-                    Label("Rename", systemImage: "pencil")
+                    Label(String(localized: "Rename"), systemImage: "pencil")
                 }
                 let beats = library.categoryBeats(category.id)
                 if !beats.isEmpty {
                     Button { sheet = .share(.category(name: category.name, beats: beats)) } label: {
-                        Label("Share list…", systemImage: "square.and.arrow.up")
+                        Label(String(localized: "Share list…"), systemImage: "square.and.arrow.up")
                     }
                     if canPublish {
                         Button { publish(.category(name: category.name, beats: beats), name: category.name) } label: {
-                            Label("Publish to community", systemImage: "globe")
+                            Label(String(localized: "Publish to community"), systemImage: "globe")
                         }
                     }
                 }
                 Button(role: .destructive) { pending = .deleteList(id: category.id, name: category.name) } label: {
-                    Label("Delete list", systemImage: "trash")
+                    Label(String(localized: "Delete list"), systemImage: "trash")
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -314,7 +316,7 @@ struct BeatsView: View {
                     .frame(width: 36, height: 30)
                     .padding(.top, 12)
             }
-            .accessibilityLabel("Actions for \(category.name)")
+            .accessibilityLabel(String(localized: "Actions for \(category.name)"))
         }
     }
 
@@ -329,7 +331,7 @@ struct BeatsView: View {
                             .font(.body.weight(.medium))
                             .foregroundStyle(Palette.syahi)
                         if !beat.note.isEmpty {
-                            Text(beat.note)
+                            Text(BeatText.note(beat.note))
                                 .font(.caption)
                                 .foregroundStyle(Palette.syahiSoft)
                         }
@@ -357,12 +359,12 @@ struct BeatsView: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if library.isCustomBeat(beat.id), let id = beat.id {
                 Button { pending = .deleteBeat(id: id, name: beat.name) } label: {
-                    Label("Delete", systemImage: "trash")
+                    Label(String(localized: "Delete"), systemImage: "trash")
                 }
                 .tint(Palette.danger)
             }
             Button { sheet = .share(.beat(beat)) } label: {
-                Label("Share", systemImage: "square.and.arrow.up")
+                Label(String(localized: "Share"), systemImage: "square.and.arrow.up")
             }
             .tint(Palette.strap)
         }
@@ -372,16 +374,16 @@ struct BeatsView: View {
         let custom = library.isCustomBeat(beat.id)
         return Menu {
             if custom {
-                Button { onEdit(.edit(beat)) } label: { Label("Edit", systemImage: "pencil") }
+                Button { onEdit(.edit(beat)) } label: { Label(String(localized: "Edit"), systemImage: "pencil") }
             } else {
-                Button { onEdit(.fork(beat)) } label: { Label("Edit a copy", systemImage: "doc.on.doc") }
+                Button { onEdit(.fork(beat)) } label: { Label(String(localized: "Edit a copy"), systemImage: "doc.on.doc") }
                 if auth.isMaintainer {
-                    Button { onEdit(.everyone(beat)) } label: { Label("Edit for everyone", systemImage: "person.3") }
+                    Button { onEdit(.everyone(beat)) } label: { Label(String(localized: "Edit for everyone"), systemImage: "person.3") }
                 }
             }
-            Button { sheet = .share(.beat(beat)) } label: { Label("Share…", systemImage: "square.and.arrow.up") }
+            Button { sheet = .share(.beat(beat)) } label: { Label(String(localized: "Share…"), systemImage: "square.and.arrow.up") }
             if custom && canPublish {
-                Button { publish(.beat(beat), name: beat.name) } label: { Label("Publish to community", systemImage: "globe") }
+                Button { publish(.beat(beat), name: beat.name) } label: { Label(String(localized: "Publish to community"), systemImage: "globe") }
             }
             if !library.state.categories.isEmpty, let id = beat.id {
                 Menu {
@@ -397,16 +399,16 @@ struct BeatsView: View {
                         }
                     }
                 } label: {
-                    Label("Lists", systemImage: "text.badge.plus")
+                    Label(String(localized: "Lists"), systemImage: "text.badge.plus")
                 }
             }
             if custom, let id = beat.id {
                 Button(role: .destructive) { pending = .deleteBeat(id: id, name: beat.name) } label: {
-                    Label("Delete", systemImage: "trash")
+                    Label(String(localized: "Delete"), systemImage: "trash")
                 }
             } else if auth.isMaintainer {
                 Button(role: .destructive) { pending = .removeForEveryone(beat) } label: {
-                    Label("Remove for everyone", systemImage: "trash")
+                    Label(String(localized: "Remove for everyone"), systemImage: "trash")
                 }
             }
         } label: {
@@ -416,7 +418,7 @@ struct BeatsView: View {
                 .frame(width: 40, height: 40)
                 .contentShape(Rectangle())
         }
-        .accessibilityLabel("Actions for \(beat.name)")
+        .accessibilityLabel(String(localized: "Actions for \(beat.name)"))
     }
 
     // ── Actions ─────────────────────────────────────────────────────────────
@@ -429,7 +431,7 @@ struct BeatsView: View {
         Task {
             do {
                 _ = try await community.publish(payload, authorId: session.userId, authorName: session.displayName)
-                auth.notice = "Published “\(name)” to the community library."
+                auth.notice = String(localized: "Published “\(name)” to the community library.")
             } catch {
                 auth.notice = storageErrorMessage(error)
             }
@@ -438,8 +440,8 @@ struct BeatsView: View {
 
     private func confirmLabel(_ which: Pending) -> String {
         switch which {
-        case .deleteBeat, .deleteList: return "Delete"
-        case .removeForEveryone: return "Remove for everyone"
+        case .deleteBeat, .deleteList: return String(localized: "Delete")
+        case .removeForEveryone: return String(localized: "Remove for everyone")
         }
     }
 
@@ -454,7 +456,7 @@ struct BeatsView: View {
             Task {
                 do {
                     try await container.shippedBeats?.removeShippedBeat(beat)
-                    auth.notice = "Removed “\(beat.name)” from the built-in beats."
+                    auth.notice = String(localized: "Removed “\(beat.name)” from the built-in beats.")
                 } catch {
                     auth.notice = storageErrorMessage(error)
                 }
@@ -464,8 +466,8 @@ struct BeatsView: View {
 
     private var namePromptTitle: String {
         switch namePrompt {
-        case .rename(_, let current): return "Rename “\(current)”"
-        default: return "New list"
+        case .rename(_, let current): return String(localized: "Rename “\(current)”")
+        default: return String(localized: "New list")
         }
     }
 

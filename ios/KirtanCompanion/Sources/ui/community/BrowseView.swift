@@ -46,10 +46,10 @@ struct BrowseView: View {
             accountGate
             if container.cloudConfigured {
                 searchField
-                Picker("Search in", selection: $scope) {
-                    Text("Everything").tag(CommunityClient.BrowseScope.everything)
-                    Text("Names").tag(CommunityClient.BrowseScope.names)
-                    Text("Authors").tag(CommunityClient.BrowseScope.authors)
+                Picker(String(localized: "Search in"), selection: $scope) {
+                    Text(String(localized: "Everything")).tag(CommunityClient.BrowseScope.everything)
+                    Text(String(localized: "Names")).tag(CommunityClient.BrowseScope.names)
+                    Text(String(localized: "Authors")).tag(CommunityClient.BrowseScope.authors)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 12)
@@ -66,25 +66,25 @@ struct BrowseView: View {
             await load()
         }
         .confirmationDialog(
-            "Remove “\(pendingUnpublish?.name ?? "")” from the community library?",
+            String(localized: "Remove “\(pendingUnpublish?.name ?? "")” from the community library?"),
             isPresented: Binding(get: { pendingUnpublish != nil }, set: { if !$0 { pendingUnpublish = nil } }),
             titleVisibility: .visible,
             presenting: pendingUnpublish,
         ) { item in
-            Button("Unpublish", role: .destructive) { Task { await unpublish(item) } }
-            Button("Cancel", role: .cancel) { pendingUnpublish = nil }
+            Button(String(localized: "Unpublish"), role: .destructive) { Task { await unpublish(item) } }
+            Button(String(localized: "Cancel"), role: .cancel) { pendingUnpublish = nil }
         } message: { _ in
-            Text("Copies people already made stay in their libraries.")
+            Text(String(localized: "Copies people already made stay in their libraries."))
         }
-        .alert("Make it a built-in beat", isPresented: Binding(get: { promoting != nil }, set: { if !$0 { promoting = nil } })) {
-            TextField("Section heading", text: $promoteHeading)
-            Button("Cancel", role: .cancel) { promoting = nil }
-            Button("Promote") {
+        .alert(String(localized: "Make it a built-in beat"), isPresented: Binding(get: { promoting != nil }, set: { if !$0 { promoting = nil } })) {
+            TextField(String(localized: "Section heading"), text: $promoteHeading)
+            Button(String(localized: "Cancel"), role: .cancel) { promoting = nil }
+            Button(String(localized: "Promote")) {
                 if let item = promoting { Task { await promote(item) } }
                 promoting = nil
             }
         } message: {
-            Text("Every install gets this beat on its next launch. Which section of Built in should it appear under?")
+            Text(String(localized: "Every install gets this beat on its next launch. Which section of Built in should it appear under?"))
         }
     }
 
@@ -93,16 +93,16 @@ struct BrowseView: View {
     @ViewBuilder
     private var accountGate: some View {
         if !container.cloudConfigured {
-            Text("The community library isn't available in this build.")
+            Text(String(localized: "The community library isn't available in this build."))
                 .font(.footnote)
                 .foregroundStyle(Palette.syahiSoft)
         } else if session != nil {
             HStack {
-                Text("Signed in as \(auth.displayName)")
+                Text(String(localized: "Signed in as \(auth.displayName)"))
                     .font(.footnote)
                     .foregroundStyle(Palette.syahiSoft)
                 Spacer()
-                Button("Sign out") {
+                Button(String(localized: "Sign out")) {
                     Task { await container.signOut() }
                 }
                 .font(.footnote)
@@ -115,11 +115,11 @@ struct BrowseView: View {
             // Browsing and copying work signed out; only rating and publishing need an
             // account, so the gate is an invitation rather than a wall.
             HStack(spacing: 10) {
-                Text("Sign in to rate beats and publish your own.")
+                Text(String(localized: "Sign in to rate beats and publish your own."))
                     .font(.footnote)
                     .foregroundStyle(Palette.syahiSoft)
                 Spacer(minLength: 4)
-                SignInButton(container: container, title: "Sign in")
+                SignInButton(container: container, title: String(localized: "Sign in"))
                     .fixedSize()
             }
             .padding(.horizontal, 14)
@@ -134,7 +134,7 @@ struct BrowseView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(Palette.faint)
-            TextField(scope == .authors ? "Search by author" : "Search the community", text: $query)
+            TextField(scope == .authors ? String(localized: "Search by author") : String(localized: "Search the community"), text: $query)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
                 .foregroundStyle(Palette.syahi)
@@ -188,8 +188,8 @@ struct BrowseView: View {
     private var emptyHint: String {
         let q = query.trimmingCharacters(in: .whitespaces)
         return q.isEmpty
-            ? "Nothing shared yet — open any of your beats' … menu and choose “Publish to community”."
-            : "Nothing shared matches “\(q)”."
+            ? String(localized: "Nothing shared yet — open any of your beats' … menu and choose “Publish to community”.")
+            : String(localized: "Nothing shared matches “\(q)”.")
     }
 
     private func card(_ item: PublishedItem) -> some View {
@@ -214,7 +214,7 @@ struct BrowseView: View {
                     Button {
                         Task { await add(item) }
                     } label: {
-                        Text(adding.contains(item.id) ? "Adding…" : "+ Add")
+                        Text(adding.contains(item.id) ? String(localized: "Adding…") : String(localized: "+ Add"))
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(Palette.clay)
                     }
@@ -225,12 +225,12 @@ struct BrowseView: View {
                     Menu {
                         if auth.isMaintainer && item.kind == .beat {
                             Button { promoteHeading = "Community"; promoting = item } label: {
-                                Label("Make it a built-in beat", systemImage: "star.circle")
+                                Label(String(localized: "Make it a built-in beat"), systemImage: "star.circle")
                             }
                         }
                         if owned {
                             Button(role: .destructive) { pendingUnpublish = item } label: {
-                                Label("Unpublish", systemImage: "trash")
+                                Label(String(localized: "Unpublish"), systemImage: "trash")
                             }
                         }
                     } label: {
@@ -238,7 +238,7 @@ struct BrowseView: View {
                             .foregroundStyle(Palette.syahiSoft)
                             .frame(width: 32, height: 24)
                     }
-                    .accessibilityLabel("More for \(item.name)")
+                    .accessibilityLabel(String(localized: "More for \(item.name)"))
                 }
             }
             if let preview = previewBeat(item) {
@@ -268,7 +268,7 @@ struct BrowseView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(session == nil)
-                .accessibilityLabel("Rate \(n) of 5")
+                .accessibilityLabel(String(localized: "Rate \(n) of 5"))
             }
             if let average = item.averageStars {
                 Text(String(format: "%.1f · %d", average, item.ratingCount))
@@ -276,18 +276,20 @@ struct BrowseView: View {
                     .foregroundStyle(Palette.syahiSoft)
                     .padding(.leading, 4)
             } else {
-                Text("No ratings yet").font(.caption).foregroundStyle(Palette.faint).padding(.leading, 4)
+                Text(String(localized: "No ratings yet")).font(.caption).foregroundStyle(Palette.faint).padding(.leading, 4)
             }
         }
     }
 
     private func meta(_ item: PublishedItem) -> String {
+        let count = item.payload.element("beats")?.asArray()?.count ?? 0
         let kind = item.kind == .playlist
-            ? "Playlist · \(item.payload.element("beats")?.asArray()?.count ?? 0) beats"
-            : "Beat"
-        var text = "\(kind) · by \(item.authorName ?? "A devotee")"
+            ? String(localized: "Playlist · \(count) beats")
+            : String(localized: "Beat")
+        let author = item.authorName ?? String(localized: "A devotee")
+        var text = "\(kind) · " + String(localized: "by \(author)")
         if item.copies > 0 {
-            text += " · \(item.copies) \(item.copies == 1 ? "copy" : "copies")"
+            text += " · " + String(localized: "\(item.copies) copies")
         }
         return text
     }
@@ -300,23 +302,23 @@ struct BrowseView: View {
     private func add(_ item: PublishedItem) async {
         guard let community = container.community else { return }
         if inLibrary.contains(item.id) || adding.contains(item.id) {
-            auth.notice = "“\(item.name)” is already in your library."
+            auth.notice = String(localized: "“\(item.name)” is already in your library.")
             return
         }
         guard let payload = community.toImportPayload(item) else {
-            auth.notice = "That item couldn't be read — it may have been published by a newer version of the app."
+            auth.notice = String(localized: "That item couldn't be read — it may have been published by a newer version of the app.")
             return
         }
         adding.insert(item.id)
         let result = await container.library.importShared(payload, sourceItemId: item.id)
         adding.remove(item.id)
         if result.beats.isEmpty {
-            auth.notice = container.library.state.error ?? "Nothing was added."
+            auth.notice = container.library.state.error ?? String(localized: "Nothing was added.")
             return
         }
         auth.notice = result.categoryId != nil
-            ? "Added \(result.beats.count) beats as the list “\(item.name)”."
-            : "Added “\(item.name)” to Your beats."
+            ? String(localized: "Added \(result.beats.count) beats as the list “\(item.name)”.")
+            : String(localized: "Added “\(item.name)” to Your beats.")
         Task { await community.incrementCopies(item.id) }
     }
 
@@ -324,7 +326,7 @@ struct BrowseView: View {
     /// the parent row and only the server knows the new total.
     private func rate(_ item: PublishedItem, _ stars: Int) async {
         guard let community = container.community, let me = session else {
-            auth.notice = "Sign in to rate community beats."
+            auth.notice = String(localized: "Sign in to rate community beats.")
             return
         }
         let clearing = myRatings[item.id] == stars
@@ -343,7 +345,7 @@ struct BrowseView: View {
         do {
             try await community.unpublish(item.id)
             items.removeAll { $0.id == item.id }
-            auth.notice = "Removed “\(item.name)” from the community library."
+            auth.notice = String(localized: "Removed “\(item.name)” from the community library.")
         } catch {
             auth.notice = storageErrorMessage(error)
         }
@@ -353,13 +355,13 @@ struct BrowseView: View {
     /// `is_maintainer()` policy has the last word; the menu only decides what's on screen.
     private func promote(_ item: PublishedItem) async {
         guard let shipped = container.shippedBeats, let beat = previewBeat(item) else {
-            auth.notice = "Only a single beat can become a built-in — not a list."
+            auth.notice = String(localized: "Only a single beat can become a built-in — not a list.")
             return
         }
         let heading = promoteHeading.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             try await shipped.promote(item: item, beat: beat, heading: heading.isEmpty ? "Community" : heading)
-            auth.notice = "“\(beat.name)” is now one of the built-in beats."
+            auth.notice = String(localized: "“\(beat.name)” is now one of the built-in beats.")
         } catch {
             auth.notice = storageErrorMessage(error)
         }

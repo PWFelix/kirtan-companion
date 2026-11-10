@@ -44,7 +44,7 @@ final class CommunityClient {
             table: Self.table, columns: Self.columns,
             filters: browseFilters(query: query, scope: scope),
             order: "created_at.desc", limit: limit, requireSession: false,
-            whileDoing: "load the community library",
+            whileDoing: String(localized: "load the community library"),
         )
         return (rows?.asArray() ?? []).compactMap { itemOf($0) }
     }
@@ -68,7 +68,7 @@ final class CommunityClient {
                 JPair(key: "beats", value: JValue.arr(beats.map { LibraryJson.encodeBody(beatWithoutId($0)) })),
             ])
         case .invalid:
-            throw StorageError(.unknown, "An invalid share payload cannot be published.")
+            throw StorageError(.unknown, String(localized: "An invalid share payload cannot be published."))
         }
         let row = JValue.object([
             JPair(key: "author_id", value: .str(authorId)),
@@ -77,9 +77,9 @@ final class CommunityClient {
             JPair(key: "name", value: .str(name)),
             JPair(key: "payload", value: body),
         ])
-        let created = try await client.insert(table: Self.table, body: row, one: true, whileDoing: "publish that")
+        let created = try await client.insert(table: Self.table, body: row, one: true, whileDoing: String(localized: "publish that"))
         guard let item = itemOf(created) else {
-            throw StorageError(.unknown, "The server didn't return the beat you just published.")
+            throw StorageError(.unknown, String(localized: "The server didn't return the beat you just published."))
         }
         return item
     }
@@ -89,14 +89,14 @@ final class CommunityClient {
         let rows = try await client.select(
             table: Self.table, columns: Self.columns,
             filters: [("author_id", "eq.\(authorId)")], order: "created_at.desc",
-            whileDoing: "load your shared beats",
+            whileDoing: String(localized: "load your shared beats"),
         )
         return (rows?.asArray() ?? []).compactMap { itemOf($0) }
     }
 
     // Remove a published item. RLS lets only its author through.
     func unpublish(_ id: String) async throws {
-        _ = try await client.delete(table: Self.table, filters: [("id", "eq.\(id)")], whileDoing: "unpublish that")
+        _ = try await client.delete(table: Self.table, filters: [("id", "eq.\(id)")], whileDoing: String(localized: "unpublish that"))
     }
 
     // Bump the copy counter when someone adds a community item. BEST-EFFORT, and the one
@@ -104,7 +104,7 @@ final class CommunityClient {
     // this runs, and a count that didn't move is not worth telling them their import failed.
     func incrementCopies(_ id: String) async {
         do {
-            try await client.rpc(function: "increment_published_copies", args: JValue.object([JPair(key: "pub_id", value: .str(id))]), whileDoing: "count that copy")
+            try await client.rpc(function: "increment_published_copies", args: JValue.object([JPair(key: "pub_id", value: .str(id))]), whileDoing: String(localized: "count that copy"))
         } catch {
             log.warn("[community] copy count not bumped for \(id)", error)
         }
@@ -119,7 +119,7 @@ final class CommunityClient {
             _ = try await client.delete(
                 table: Self.ratings,
                 filters: [("item_id", "eq.\(itemId)"), ("user_id", "eq.\(userId)")],
-                whileDoing: "remove that rating",
+                whileDoing: String(localized: "remove that rating"),
             )
             return
         }
@@ -132,7 +132,7 @@ final class CommunityClient {
                 JPair(key: "stars", value: .int(stars)),
             ]),
             onConflict: "item_id,user_id",
-            whileDoing: "save that rating",
+            whileDoing: String(localized: "save that rating"),
         )
     }
 
@@ -143,7 +143,7 @@ final class CommunityClient {
         let rows = try await client.select(
             table: Self.ratings, columns: "item_id,stars",
             filters: [("user_id", "eq.\(userId)"), ("item_id", "in.(\(itemIds.joined(separator: ",")))")],
-            whileDoing: "load your ratings",
+            whileDoing: String(localized: "load your ratings"),
         )
         var out: [String: Int] = [:]
         for row in rows?.asArray() ?? [] {

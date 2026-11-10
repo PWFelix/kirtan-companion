@@ -24,11 +24,11 @@ enum Feel: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .off: return "Off"
-        case .tight: return "Tight"
-        case .human: return "Human"
-        case .loose: return "Loose"
-        case .drag: return "Drag"
+        case .off: return String(localized: "Off")
+        case .tight: return String(localized: "Tight")
+        case .human: return String(localized: "Human")
+        case .loose: return String(localized: "Loose")
+        case .drag: return String(localized: "Drag")
         }
     }
 

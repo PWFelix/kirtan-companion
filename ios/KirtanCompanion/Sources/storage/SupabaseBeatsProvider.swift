@@ -36,11 +36,11 @@ final class SupabaseBeatsProvider: BeatsProvider {
     func loadAll() async throws -> Library {
         async let beats = client.select(
             table: "beats", columns: "id,name,data", filters: ownerFilter,
-            order: "created_at.asc", whileDoing: "your beats",
+            order: "created_at.asc", whileDoing: String(localized: "your beats"),
         )
         async let playlists = client.select(
             table: "playlists", columns: "id,name,beat_ids", filters: ownerFilter,
-            order: "created_at.asc", whileDoing: "your playlists",
+            order: "created_at.asc", whileDoing: String(localized: "your playlists"),
         )
         async let profile = activeCategoryId()
 
@@ -63,7 +63,7 @@ final class SupabaseBeatsProvider: BeatsProvider {
         do {
             let row = try await client.select(
                 table: "profiles", columns: "active_category_id",
-                filters: [("id", "eq.\(userId)")], one: true, whileDoing: "your settings",
+                filters: [("id", "eq.\(userId)")], one: true, whileDoing: String(localized: "your settings"),
             )
             let value = row?.stringField("active_category_id")
             return (value?.isEmpty == false ? value : nil) ?? BUILTIN_CATEGORY
@@ -75,9 +75,9 @@ final class SupabaseBeatsProvider: BeatsProvider {
     }
 
     func createBeat(_ draft: Beat) async throws -> Beat {
-        let row = try await client.insert(table: "beats", body: SupabaseRows.beatRow(userId: userId, draft: draft), one: true, whileDoing: "that beat")
+        let row = try await client.insert(table: "beats", body: SupabaseRows.beatRow(userId: userId, draft: draft), one: true, whileDoing: String(localized: "that beat"))
         guard let beat = SupabaseRows.toBeat(row) else {
-            throw StorageError(.unknown, "The server didn't return the beat you just created.")
+            throw StorageError(.unknown, String(localized: "The server didn't return the beat you just created."))
         }
         return beat
     }
@@ -87,7 +87,7 @@ final class SupabaseBeatsProvider: BeatsProvider {
     func createBeats(_ drafts: [Beat]) async throws -> [Beat] {
         guard !drafts.isEmpty else { return [] }
         let array = JValue.arr(drafts.map { SupabaseRows.beatRow(userId: userId, draft: $0) })
-        let rows = try await client.insert(table: "beats", body: array, whileDoing: "those beats")
+        let rows = try await client.insert(table: "beats", body: array, whileDoing: String(localized: "those beats"))
         return rowsOf(rows).compactMap { SupabaseRows.toBeat($0) }
     }
 
@@ -98,15 +98,15 @@ final class SupabaseBeatsProvider: BeatsProvider {
             JPair(key: "name", value: .str(patch.name)),
             JPair(key: "data", value: LibraryJson.encodeBody(patch)),
         ])
-        let row = try await client.update(table: "beats", body: body, filters: [("id", "eq.\(id)")] + ownerFilter, one: true, whileDoing: "that beat")
+        let row = try await client.update(table: "beats", body: body, filters: [("id", "eq.\(id)")] + ownerFilter, one: true, whileDoing: String(localized: "that beat"))
         guard let beat = SupabaseRows.toBeat(row) else {
-            throw StorageError(.unknown, "The server didn't return the beat you just saved.")
+            throw StorageError(.unknown, String(localized: "The server didn't return the beat you just saved."))
         }
         return beat
     }
 
     func deleteBeat(id: String) async throws {
-        _ = try await client.delete(table: "beats", filters: [("id", "eq.\(id)")] + ownerFilter, whileDoing: "that change")
+        _ = try await client.delete(table: "beats", filters: [("id", "eq.\(id)")] + ownerFilter, whileDoing: String(localized: "that change"))
     }
 
     func createCategory(_ draft: CategoryDraft) async throws -> Category {
@@ -115,9 +115,9 @@ final class SupabaseBeatsProvider: BeatsProvider {
             JPair(key: "name", value: .str(draft.name)),
             JPair(key: "beat_ids", value: SupabaseRows.beatIdsArray(draft.beatIds)),
         ])
-        let row = try await client.insert(table: "playlists", body: body, one: true, whileDoing: "that playlist")
+        let row = try await client.insert(table: "playlists", body: body, one: true, whileDoing: String(localized: "that playlist"))
         guard let category = SupabaseRows.toCategory(row) else {
-            throw StorageError(.unknown, "The server didn't return the playlist you just created.")
+            throw StorageError(.unknown, String(localized: "The server didn't return the playlist you just created."))
         }
         return category
     }
@@ -128,15 +128,15 @@ final class SupabaseBeatsProvider: BeatsProvider {
         if let name = patch.name { pairs.append(JPair(key: "name", value: .str(name))) }
         if let beatIds = patch.beatIds { pairs.append(JPair(key: "beat_ids", value: SupabaseRows.beatIdsArray(beatIds))) }
         let body = JValue.object(pairs)
-        let row = try await client.update(table: "playlists", body: body, filters: [("id", "eq.\(id)")] + ownerFilter, one: true, whileDoing: "that playlist")
+        let row = try await client.update(table: "playlists", body: body, filters: [("id", "eq.\(id)")] + ownerFilter, one: true, whileDoing: String(localized: "that playlist"))
         guard let category = SupabaseRows.toCategory(row) else {
-            throw StorageError(.unknown, "The server didn't return the playlist you just saved.")
+            throw StorageError(.unknown, String(localized: "The server didn't return the playlist you just saved."))
         }
         return category
     }
 
     func deleteCategory(id: String) async throws {
-        _ = try await client.delete(table: "playlists", filters: [("id", "eq.\(id)")] + ownerFilter, whileDoing: "that change")
+        _ = try await client.delete(table: "playlists", filters: [("id", "eq.\(id)")] + ownerFilter, whileDoing: String(localized: "that change"))
     }
 
     // Upsert, so the row is created on first use even if the new-user trigger never ran.
@@ -144,7 +144,7 @@ final class SupabaseBeatsProvider: BeatsProvider {
         _ = try await client.upsert(
             table: "profiles",
             body: JValue.object([JPair(key: "id", value: .str(userId)), JPair(key: "active_category_id", value: .str(id))]),
-            onConflict: "id", whileDoing: "that change",
+            onConflict: "id", whileDoing: String(localized: "that change"),
         )
     }
 }
