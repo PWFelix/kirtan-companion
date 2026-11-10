@@ -420,17 +420,17 @@ private fun LandingPage(
 
         item {
             SectionCard(
-                title = stringResource(R.string.import_title),
-                meta = stringResource(R.string.import_meta),
-                onClick = onOpenImport,
+                title = stringResource(R.string.community_title),
+                meta = stringResource(R.string.community_meta),
+                onClick = onOpenCommunity,
             )
         }
 
         item {
             SectionCard(
-                title = stringResource(R.string.community_title),
-                meta = stringResource(R.string.community_meta),
-                onClick = onOpenCommunity,
+                title = stringResource(R.string.import_title),
+                meta = stringResource(R.string.import_meta),
+                onClick = onOpenImport,
             )
         }
 
