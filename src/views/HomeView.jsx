@@ -5,12 +5,12 @@ import { TUNE_MIN_CENTS, TUNE_MAX_CENTS, END_BASE_FREQ, centsToRate, freqToNoteN
 import { MIN_BPM, MAX_BPM } from "../hooks/useTransport.js";
 import BeatStrip from "../BeatStrip.jsx";
 import Wordmark from "../Wordmark.jsx";
-import ScrollFadeRow from "../ui/ScrollFadeRow.jsx";
+import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
 import * as sh from "../ui/styles.js";
 import { t, noteLabel } from "../i18n/index.js";
 import {
   LockIcon, PencilIcon, MixerIcon, SpeakerIcon, EqIcon, TuneIcon, CheckIcon,
-  PlayIcon, PauseIcon, RadioDot,
+  PlayIcon, PauseIcon,
 } from "../ui/icons.jsx";
 
 // Scroll-wheel BPM picker: an iOS-style snapping column, tuned so the
@@ -115,10 +115,9 @@ function HomeView({
     tuneOpen = { dayan: false, bayan: false }, toggleTunePanel,
     togglePlay,
   } = transport;
-  const { categories, activeCat, categoryBeats, catName, isCustomBeat } = library;
+  const { isCustomBeat } = library;
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerTab, setPickerTab] = useState("builtin");
   const [mixerOpen, setMixerOpen] = useState(false);
   const [bpmEntryOpen, setBpmEntryOpen] = useState(false);
   const [bpmDraft, setBpmDraft] = useState("");     // raw text in the entry field
@@ -151,10 +150,8 @@ function HomeView({
     setBpmEntryOpen(false);
   }
 
-  // Quick-pick opens on the ACTIVE category but carries its own tab row, so
-  // the user can hop to another progression without visiting the Beats page.
+  // Quick-pick (ui/BeatPickerSheet) opens on the active category.
   function openPicker() {
-    setPickerTab(activeCat);
     setPickerOpen(true);
   }
 
@@ -164,46 +161,9 @@ function HomeView({
 
   // ── Sheets, shared by both orientations ──
 
-  // Picking a beat makes its tab the active cycling context and dismisses.
-  const pickerBeats = categoryBeats(pickerTab);
   const beatPicker = pickerOpen && (
-    <div style={sh.sheetBackdrop} onClick={() => setPickerOpen(false)}>
-      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("home.chooseBeat")}
-        onClick={(e) => e.stopPropagation()}>
-        <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>{t("home.chooseBeat")}</h2>
-          <button onClick={() => setPickerOpen(false)} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
-        </div>
-        <ScrollFadeRow rowStyle={sh.catTabs}>
-          {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
-            <button key={id} onClick={() => setPickerTab(id)}
-              style={{ ...sh.catTab, ...(pickerTab === id ? sh.catTabActive : null) }}
-              aria-pressed={pickerTab === id}>
-              {catName(id)}
-            </button>
-          ))}
-        </ScrollFadeRow>
-        <div style={sh.pickList}>
-          {pickerBeats.length === 0 && (
-            <p style={sh.emptyHint}>{t("home.categoryEmpty")}</p>
-          )}
-          {pickerBeats.map(b => {
-            const sel = b.id === beatId;
-            return (
-              <button key={b.id} onClick={() => { onSelect(b, pickerTab); setPickerOpen(false); }}
-                style={{ ...sh.pickRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
-                <div style={sh.beatRowTop}>
-                  <span style={sh.beatRowName}>{b.name}</span>
-                  <span style={{ ...sh.beatRowMeta, flex: 1 }}>{noteLabel(b.note)}</span>
-                  <RadioDot selected={sel} />
-                </div>
-                <BeatStrip beat={b} mini />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    <BeatPickerSheet library={library} beatId={beatId} onSelect={onSelect}
+      onClose={() => setPickerOpen(false)} />
   );
 
   // Precise BPM entry: type the number (desktop) or scroll the wheel (touch);

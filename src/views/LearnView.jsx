@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as sh from "../ui/styles.js";
+import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
 import { t } from "../i18n/index.js";
 import { BackIcon, ChevronRightIcon, PlayIcon, PauseIcon } from "../ui/icons.jsx";
 import { COLUMNS, TRAIL_STEPS, columnsFor, highwayFrame, lookaheadSteps } from "../data/highway.js";
@@ -22,7 +23,8 @@ import { cpqFor } from "../data/meter.js";
  * learner can pick a beat on Home, slow it down here, and go back. The header
  * chevrons step through beats the way Home's do (App.cycleBeat).
  */
-function LearnView({ transport, beat, onCycle, nav }) {
+function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const { playing, ready, bpm, nudgeBpm, togglePlay, getPhase } = transport;
   const [leftHanded, setLeftHanded] = useState(loadLeft);
   const columns = useMemo(() => columnsFor(leftHanded), [leftHanded]);
@@ -39,13 +41,22 @@ function LearnView({ transport, beat, onCycle, nav }) {
           <BackIcon />
         </button>
         <div style={st.titleWrap}>
-          <h1 style={st.title}>{beat.name}</h1>
+          {/* Tap the name for the quick-pick: built-ins, your beats, your lists. */}
+          <button onClick={() => setPickerOpen(true)} style={st.titleBtn}
+            aria-haspopup="dialog" aria-label={t("home.chooseBeat")}>
+            <h1 style={st.title}>{beat.name} <span style={st.caret}>▾</span></h1>
+          </button>
           <span style={st.subtitle}>{t("learn.subtitle")}</span>
         </div>
         <button onClick={() => onCycle(1)} style={sh.backBtn} aria-label={t("common.nextBeat")}>
           <ChevronRightIcon />
         </button>
       </header>
+
+      {pickerOpen && (
+        <BeatPickerSheet library={library} beatId={beatId} onSelect={onSelect}
+          onClose={() => setPickerOpen(false)} />
+      )}
 
       <button onClick={flipHands} style={st.hands} aria-pressed={leftHanded}>
         {leftHanded ? t("learn.leftHanded") : t("learn.rightHanded")}
@@ -196,6 +207,8 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
 }
 
 const st = {
+  titleBtn: { background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit", maxWidth: "100%" },
+  caret: { fontSize: "0.6em", color: "var(--ink-secondary)" },
   titleWrap: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center" },
   title: { ...sh.subTitle, fontSize: 22, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" },
   subtitle: { fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)" },

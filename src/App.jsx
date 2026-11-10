@@ -252,7 +252,8 @@ function App() {
   }
 
   if (view === "learn") {
-    return <LearnView transport={transport} beat={beat} onCycle={cycleBeat} nav={bottomNav} />;
+    return <LearnView transport={transport} beat={beat} onCycle={cycleBeat}
+      library={library} beatId={beatId} onSelect={selectBeat} nav={bottomNav} />;
   }
 
   if (view === "settings") {
