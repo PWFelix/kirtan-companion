@@ -21,12 +21,22 @@ struct SettingsView: View {
         #endif
     }()
 
+    /// Open on Sync in DEBUG with `-kirtanSync`, for screenshots.
+    @State private var syncOpen: Bool = {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-kirtanSync")
+        #else
+        false
+        #endif
+    }()
+
     var body: some View {
-        // A stack only so About can be pushed; Settings itself draws its own title.
+        // A stack only so About and Sync can be pushed; Settings draws its own title.
         NavigationStack {
             settings
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(isPresented: $aboutOpen) { AboutView() }
+                .navigationDestination(isPresented: $syncOpen) { SyncView(transport: transport) }
         }
     }
 
@@ -42,6 +52,20 @@ struct SettingsView: View {
                 Section("Notation") {
                     Toggle("Show bol syllables", isOn: bolBinding)
                     Toggle("Show step labels", isOn: stepLabelBinding)
+                }
+
+                Section("Sound") {
+                    Button {
+                        syncOpen = true
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sync sound and display").foregroundStyle(Palette.syahi)
+                            Text("For Bluetooth speakers: line the beat on screen up with what you hear. \(transport.route.label): " +
+                                 (transport.displayDelayMs == 0 ? "no delay set." : "display \(transport.displayDelayMs) ms later."))
+                                .font(.footnote)
+                                .foregroundStyle(Palette.syahiSoft)
+                        }
+                    }
                 }
 
                 if container.cloudConfigured {

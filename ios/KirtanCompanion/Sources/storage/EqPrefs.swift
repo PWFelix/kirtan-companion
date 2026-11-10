@@ -67,6 +67,13 @@ struct EqPrefsSnapshot: Equatable {
     var feel: Feel = .off
     /// The Learn highway mirrored for a left-handed player (dayan columns on the left).
     var learnLeftHanded: Bool = false
+    /// Display delay in ms per output device, keyed by `OutputRoute.key`. A device
+    /// with no entry plays at 0: the phone's own latency figure is trusted until
+    /// the user says otherwise (Settings → Sync sound and display).
+    var displayDelays: [String: Int] = [:]
+    /// Bluetooth devices already offered the "sync the display?" prompt, so it
+    /// asks once per device rather than on every connection.
+    var syncPrompted: Set<String> = []
     var dayan: EndSoundPrefs
     var bayan: EndSoundPrefs
 
@@ -83,6 +90,14 @@ struct EqPrefsSnapshot: Equatable {
     func volume(_ lane: LaneId) -> Double { endVolumes[lane] ?? 1 }
 
     func isMuted(_ lane: LaneId) -> Bool { mutedEnds.contains(lane) }
+
+    /// The display delay for an output device, 0 if never set.
+    func displayDelay(_ routeKey: String) -> Int { displayDelays[routeKey] ?? 0 }
+
+    /// Bounds for a display delay, in ms. Negative is for a phone that
+    /// OVER-reports its latency.
+    static let displayDelayMinMs = -200
+    static let displayDelayMaxMs = 600
 
     static let defaultMasterVolume = 0.9
 
@@ -164,6 +179,8 @@ enum EqPrefsCodec {
     private static let keyUiScale = "uiScale"
     private static let keyFeel = "feel"
     private static let keyLearnLeftHanded = "learnLeftHanded"
+    private static let keyDisplayDelays = "displayDelays"
+    private static let keySyncPrompted = "syncPrompted"
     private static let keyDayan = "dayan"
     private static let keyBayan = "bayan"
 
@@ -187,6 +204,10 @@ enum EqPrefsCodec {
             (keyUiScale, .number(snapshot.uiScale)),
             (keyFeel, .string(snapshot.feel.rawValue)),
             (keyLearnLeftHanded, .bool(snapshot.learnLeftHanded)),
+            (keyDisplayDelays, .object(snapshot.displayDelays.keys.sorted().map {
+                JPair(key: $0, value: .int(snapshot.displayDelays[$0]!))
+            })),
+            (keySyncPrompted, .arr(snapshot.syncPrompted.sorted().map { .string($0) })),
             (keyDayan, encodeEnd(snapshot.dayan)),
             (keyBayan, encodeEnd(snapshot.bayan)),
         ).write()
@@ -218,6 +239,8 @@ enum EqPrefsCodec {
             uiScale: scaleOf(obj.element(keyUiScale)),
             feel: obj.element(keyFeel)?.asString().flatMap(Feel.init(rawValue:)) ?? .off,
             learnLeftHanded: boolOf(obj.element(keyLearnLeftHanded), false),
+            displayDelays: displayDelaysOf(obj.element(keyDisplayDelays)),
+            syncPrompted: Set((obj.element(keySyncPrompted)?.asArray() ?? []).compactMap { $0.asString() }),
             dayan: endOf(obj.element(keyDayan)),
             bayan: endOf(obj.element(keyBayan)),
         )
@@ -280,6 +303,17 @@ enum EqPrefsCodec {
             }
         }
         return muted
+    }
+
+    /// Each delay finite and clamped into range; anything else is dropped.
+    private static func displayDelaysOf(_ element: JValue?) -> [String: Int] {
+        guard case .object(let pairs)? = element else { return [:] }
+        var out: [String: Int] = [:]
+        for pair in pairs {
+            guard let raw = pair.value.asNumber(), raw.isFinite else { continue }
+            out[pair.key] = min(max(Int(raw.rounded()), EqPrefsSnapshot.displayDelayMinMs), EqPrefsSnapshot.displayDelayMaxMs)
+        }
+        return out
     }
 
     private static func boolOf(_ element: JValue?, _ fallback: Bool) -> Bool {

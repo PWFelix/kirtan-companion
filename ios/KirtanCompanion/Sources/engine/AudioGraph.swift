@@ -40,6 +40,12 @@ final class AudioGraph {
 
     private let framesLock = NSLock()
     private var framesRendered: Int64 = 0
+    /// The latest callback's (frame, host time), guarded by framesLock.
+    private var stamp: OutputClock.Stamp?
+    /// How long after its callback a frame is heard: the session's output
+    /// latency plus one IO buffer. Set from the main thread by the playback
+    /// layer, which owns AVAudioSession.
+    private var latencyNanos: UInt64 = 0
 
     init(sampleRate: Int, blockSize: Int) {
         self.sampleRate = sampleRate
@@ -58,8 +64,14 @@ final class AudioGraph {
         // flexible `mBuffers` array as a single `AudioBuffer`, so `.mBuffers.mData`
         // is the first buffer's sample pointer — the format is float32 mono, so we
         // fill it through a Float pointer.
-        source = AVAudioSourceNode(format: format) { [weak self] isSilence, _, frameCount, outputData in
+        source = AVAudioSourceNode(format: format) { [weak self] isSilence, timestamp, frameCount, outputData in
             guard let self else { return noErr }
+            if timestamp.pointee.mFlags.contains(.hostTimeValid) {
+                let nanos = OutputClock.hostToNanos(timestamp.pointee.mHostTime)
+                self.framesLock.lock()
+                self.stamp = OutputClock.Stamp(frame: self.framesRendered, nanos: nanos)
+                self.framesLock.unlock()
+            }
             let buffer = outputData.pointee.mBuffers
             guard let data = buffer.mData else {
                 isSilence.pointee = true
@@ -81,6 +93,26 @@ final class AudioGraph {
     var framesRenderedNow: Int64 {
         framesLock.lock(); defer { framesLock.unlock() }
         return framesRendered
+    }
+
+    /// The frame heard at [nowNanos], or nil when there is no fresh timestamp
+    /// (stopped, or the engine just restarted).
+    func presentedFrame(nowNanos: UInt64) -> Int64? {
+        framesLock.lock(); defer { framesLock.unlock() }
+        return OutputClock.presentedFrame(
+            stamp: stamp, nowNanos: nowNanos, latencyNanos: latencyNanos,
+            sampleRate: sampleRate, rendered: framesRendered
+        )
+    }
+
+    func setOutputLatency(seconds: Double) {
+        framesLock.lock(); defer { framesLock.unlock() }
+        latencyNanos = UInt64(max(0, seconds) * 1e9)
+    }
+
+    var outputLatencyMs: Int {
+        framesLock.lock(); defer { framesLock.unlock() }
+        return Int(latencyNanos / 1_000_000)
     }
 
     /// Attach the renderer after the owning object has fully initialised itself,

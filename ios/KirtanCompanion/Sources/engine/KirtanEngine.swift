@@ -215,12 +215,42 @@ final class KirtanEngine: BlockRenderer {
     /// The step index in force at the playhead.
     func getStep() -> Int { clock.stepAt(playheadFrame()) }
 
-    /// Backed off from framesRendered by the output buffer depth, because those
-    /// frames are queued in the device and have not been heard yet. Without this
-    /// the visual playhead leads the sound by the buffer latency.
-    private func playheadFrame() -> Int64 {
-        let f = graph.framesRenderedNow - Int64(KirtanEngine.BLOCK_SIZE * 4)
-        return max(0, f)
+    /// The frame being HEARD, moved later by the user's display delay. See
+    /// OutputClock for why this is a timestamp and not a fixed buffer guess;
+    /// the guess survives only as the fallback before the first stamp.
+    private func playheadFrame(at nowNanos: UInt64 = OutputClock.nowNanos(), delayMs: Int? = nil) -> Int64 {
+        let heard = graph.presentedFrame(nowNanos: nowNanos)
+            ?? (graph.framesRenderedNow - Int64(KirtanEngine.BLOCK_SIZE * 4))
+        let delay = OutputClock.msToFrames(delayMs ?? displayDelayMs, sampleRate: sampleRate)
+        return max(0, heard - delay)
+    }
+
+    // ── Display sync ───────────────────────────────────────────────────────
+
+    /// Extra delay the user has set for the current output, on top of what the
+    /// phone reports. Positive moves the display later. Read on the main thread
+    /// only, so it needs no lock.
+    private(set) var displayDelayMs = 0
+
+    func setDisplayDelayMs(_ ms: Int) { displayDelayMs = ms }
+
+    /// The session's own latency figure, already allowed for. Set by the
+    /// playback layer, which owns AVAudioSession; the engine stays free of it.
+    func setOutputLatency(seconds: Double) { graph.setOutputLatency(seconds: seconds) }
+
+    var reportedOutputLatencyMs: Int { graph.outputLatencyMs }
+
+    /// For the sync test: how far the click the listener just tapped on is from
+    /// the nearest step, in ms, by what the phone SAYS is being heard (no user
+    /// delay). Positive means the phone thinks the click already happened —
+    /// the delay it failed to report.
+    func offsetFromNearestStepMs(nowNanos: UInt64) -> Double {
+        guard let beat = currentBeat else { return 0 }
+        let steps = max(1, beat.steps)
+        let position = clock.phaseAt(playheadFrame(at: nowNanos, delayMs: 0)) * Double(steps)
+        let off = position - position.rounded()
+        let stepMs = 60_000 / clock.bpm * beat.beatsPerBar / Double(steps)
+        return off * stepMs
     }
 
     // ── The audio thread's entry point ─────────────────────────────────────

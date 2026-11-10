@@ -59,6 +59,14 @@ final class TransportViewModel {
     var settings = EqPrefsSnapshot.default
     /// The output device would not open. Sound is impossible until it clears.
     var outputFailed = false
+    /// Where the drum is playing: phone speaker, headphones, a Bluetooth speaker.
+    var route = OutputRoute.speaker
+    /// Set when a Bluetooth device is playing that the user has never been asked
+    /// to sync the display for. Drives the one-time banner.
+    var syncPrompt: OutputRoute?
+
+    /// The display delay in force for the current output.
+    var displayDelayMs: Int { settings.displayDelay(route.key) }
 
     // ── Authoritative, not rendered ────────────────────────────────────────
     @ObservationIgnored private var loadedBeatId: String?
@@ -77,8 +85,21 @@ final class TransportViewModel {
         // flips `ready`, which gates the Play button. So subscribe first, then load.
         observeEngine()
         playback.onPlayWhenReadyChange = { [weak self] playing in
-            Task { @MainActor in self?.playing = playing }
+            Task { @MainActor in
+                self?.playing = playing
+                self?.updateSyncPrompt()
+            }
         }
+        // A speaker connecting mid-kirtan takes its own delay with it.
+        playback.onRouteChange = { [weak self] route in
+            Task { @MainActor in
+                guard let self else { return }
+                self.route = route
+                self.engine.setDisplayDelayMs(self.displayDelayMs)
+                self.updateSyncPrompt()
+            }
+        }
+        route = playback.route
 
         // Belt-and-braces: if the engine already loaded before this view model
         // existed (it is process-scoped), seed from `isReady` instead of waiting
@@ -115,6 +136,7 @@ final class TransportViewModel {
 
         case .started:
             playing = true
+            updateSyncPrompt()
 
         case .stopped:
             playing = false
@@ -150,6 +172,56 @@ final class TransportViewModel {
             for (i, db) in end.bands.enumerated() { engine.setEqBand(lane, i, db) }
             engine.setEndPitch(lane, end.tuneCents)
         }
+        engine.setFeel(settings.feel)
+        engine.setDisplayDelayMs(displayDelayMs)
+        updateSyncPrompt()
+    }
+
+    // ── Display sync ───────────────────────────────────────────────────────
+
+    /// Offer to sync once per Bluetooth device, and only while it is playing.
+    private func updateSyncPrompt() {
+        let candidate: OutputRoute? = route.bluetooth && playing
+            && !settings.syncPrompted.contains(route.key)
+            && settings.displayDelays[route.key] == nil ? route : nil
+        if candidate != syncPrompt { syncPrompt = candidate }
+    }
+
+    /// Set the display delay for the CURRENT output and apply it now.
+    func setDisplayDelay(_ ms: Int) {
+        let clamped = min(max(ms, EqPrefsSnapshot.displayDelayMinMs), EqPrefsSnapshot.displayDelayMaxMs)
+        engine.setDisplayDelayMs(clamped)
+        var s = settings; s.displayDelays[route.key] = clamped
+        publish(s)
+        updateSyncPrompt()
+    }
+
+    /// Close the "sync the display?" banner for this device, for good.
+    func dismissSyncPrompt() {
+        guard let key = syncPrompt?.key else { return }
+        var s = settings; s.syncPrompted.insert(key)
+        publish(s)
+        syncPrompt = nil
+    }
+
+    /// What the phone itself reports as its output latency, already allowed for.
+    var reportedOutputLatencyMs: Int { engine.reportedOutputLatencyMs }
+
+    /// A sync-test tap: its offset from the nearest click. See KirtanEngine.
+    func syncTapOffsetMs(atNanos nanos: UInt64) -> Double {
+        engine.offsetFromNearestStepMs(nowNanos: nanos)
+    }
+
+    /// Start the sync test: a plain click on every beat, humanizer off so each
+    /// click lands exactly on its step. Through the preview path, like the editor.
+    func startSyncTest() {
+        engine.setFeel(.off)
+        startPreview(Self.syncTestBeat, previewBpm: Self.syncTestBpm)
+    }
+
+    /// End the sync test and give the drum its feel back.
+    func stopSyncTest() {
+        stopPreview()
         engine.setFeel(settings.feel)
     }
 
@@ -394,4 +466,15 @@ extension TransportViewModel {
     /// A gap longer than this starts a new tap-tempo count.
     static let tapResetMs: Int64 = 2_000
     static let bpmRange = MIN_BPM...MAX_BPM
+
+    /// The sync test's tempo. Slow on purpose: a tap is matched to the NEAREST
+    /// click, so the largest measurable delay is half the gap — ±430 ms here.
+    static let syncTestBpm = 70
+
+    /// One closed dayan stroke on every beat: the sharpest attack in the kit.
+    static let syncTestBeat = Beat(
+        id: "sync-test", name: "Sync test", note: "", bpm: syncTestBpm, steps: 4,
+        beatsPerBar: 4, cellsPerGroup: 1, groups: nil, description: nil,
+        lanePatterns: [.dayan: Array(repeating: .closed, count: 4)]
+    )
 }

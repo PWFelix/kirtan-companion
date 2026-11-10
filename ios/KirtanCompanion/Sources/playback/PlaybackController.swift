@@ -27,6 +27,10 @@ final class PlaybackController {
     private(set) var playWhenReady = false
     var onPlayWhenReadyChange: ((Bool) -> Void)?
 
+    /// The output in use. Display sync keys its delay on this.
+    private(set) var route = OutputRoute.speaker
+    var onRouteChange: ((OutputRoute) -> Void)?
+
     /// True when an interruption (a call) stopped us, so the end of the call
     /// resumes a kirtan the user had deliberately started.
     private var resumeAfterInterruption = false
@@ -98,6 +102,19 @@ final class PlaybackController {
             #if DEBUG
             print("[playback] could not activate session: \(error)")
             #endif
+        }
+        refreshRoute()
+    }
+
+    /// Re-read the output and its latency. The latency only means anything once
+    /// the session is active and routed, so this runs on activation and on every
+    /// route change rather than once at launch.
+    private func refreshRoute() {
+        engine.setOutputLatency(seconds: session.outputLatency + session.ioBufferDuration)
+        let next = OutputRoute.current(session)
+        if next != route {
+            route = next
+            onRouteChange?(next)
         }
     }
 
@@ -180,10 +197,11 @@ final class PlaybackController {
     }
 
     /// Headphones unplugged, Bluetooth dropped, and so on. The web app simply
-    /// keeps playing on whatever output remains, so does this: nothing to do but
-    /// let the session re-route. (Left here so a future "pause on unplug" is a
-    /// one-line change, and so the re-route is on the record.)
+    /// keeps playing on whatever output remains, and so does this. The one thing
+    /// that does change is the latency, and with it the display delay: a speaker
+    /// connecting mid-kirtan brings its own.
     private func handleRouteChange(_ note: Notification) {
+        refreshRoute()
         #if DEBUG
         if let change = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
            let reason = AVAudioSession.RouteChangeReason(rawValue: change) {

@@ -18,7 +18,8 @@ struct BeatStripView: View {
     var step: Int = -1
     var playing: Bool = false
     /// Bar phase in [0,1). Called on the animation clock — must be cheap.
-    var getPhase: () -> Double = { 0 }
+    /// Nil for a static strip; then `step` alone decides the lit cell.
+    var getPhase: (() -> Double)? = nil
     var mutedEnds: Set<LaneId> = []
     var showBols: Bool = false
     /// A tiny display-only rendering (list rows, quick-pick): primary lanes, no text.
@@ -29,7 +30,7 @@ struct BeatStripView: View {
     var body: some View {
         TimelineView(.animation(paused: !playing)) { _ in
             Canvas { context, size in
-                draw(&context, size: size, phase: getPhase())
+                draw(&context, size: size, phase: getPhase?() ?? 0)
             }
         }
     }
@@ -40,6 +41,10 @@ struct BeatStripView: View {
         let steps = max(1, beat.steps)
         let rowHeight = size.height / CGFloat(rows.count)
         let cellWidth = size.width / CGFloat(steps)
+        // The lit cell follows the PLAYHEAD when there is one, not the engine's
+        // step events: those fire when a block is rendered, a whole output
+        // latency before it is heard (a third of a second over Bluetooth).
+        let litStep = getPhase == nil ? step : min(Int(phase * Double(steps)), steps - 1)
 
         // A muted lane is drawn faintly but not erased — the player still sees where
         // the mridanga end is, just knows it is quiet.
@@ -50,7 +55,7 @@ struct BeatStripView: View {
 
             for s in 0..<steps where s < pattern.count {
                 guard let stroke = pattern[s] else { continue } // rest: draw nothing
-                let active = playing && s == step
+                let active = playing && s == litStep
                 let mark = markSize(cellWidth: cellWidth, rowHeight: rowHeight, active: active)
                 let rect = CGRect(
                     x: CGFloat(s) * cellWidth + (cellWidth - mark) / 2,

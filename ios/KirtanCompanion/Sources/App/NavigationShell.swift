@@ -35,6 +35,8 @@ struct NavigationShell: View {
     /// The editor opens full-screen over the shell and returns here on save/cancel. Nil
     /// when closed; otherwise what it is editing (new, yours, a fork, or for everyone).
     @State private var editorMode: BeatEditorView.EditorMode?
+    /// The sync screen, opened from the Bluetooth banner over whatever tab is up.
+    @State private var syncOpen = false
 
     private var auth: AuthViewModel { container.auth }
 
@@ -77,6 +79,20 @@ struct NavigationShell: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
+            if let route = container.transport.syncPrompt,
+               destination == .home || destination == .learn, editorMode == nil {
+                SyncPromptBanner(
+                    deviceLabel: route.label,
+                    onSync: {
+                        container.transport.dismissSyncPrompt()
+                        syncOpen = true
+                    },
+                    onDismiss: { container.transport.dismissSyncPrompt() }
+                )
+                .padding(.bottom, 96)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             if let notice = auth.notice {
                 NoticeBanner(text: notice) { auth.notice = nil }
                     .padding(.bottom, 96)
@@ -85,6 +101,7 @@ struct NavigationShell: View {
         }
         .animation(.easeInOut(duration: 0.22), value: editorMode != nil)
         .animation(.easeInOut(duration: 0.2), value: auth.notice)
+        .sheet(isPresented: $syncOpen) { SyncView(transport: container.transport) }
         // Inbound links and the first-sign-in offer can arrive on any tab.
         .sheet(isPresented: Binding(get: { auth.pendingImport != nil }, set: { if !$0 { auth.pendingImport = nil } })) {
             if let payload = auth.pendingImport {
