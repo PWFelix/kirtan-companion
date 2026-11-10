@@ -1,6 +1,6 @@
 import { useState } from "react";
 import * as sh from "../ui/styles.js";
-import { t } from "../i18n/index.js";
+import { t, DICTS, LANGUAGE_NAMES, languageChoice, setLanguageChoice, pickLocale } from "../i18n/index.js";
 import { BackIcon, ChevronRightIcon } from "../ui/icons.jsx";
 import AboutView from "./AboutView.jsx";
 import SyncView from "./SyncView.jsx";
@@ -39,6 +39,19 @@ function SettingsView({ onBack, nav, transport }) {
           </span>
           <ChevronRightIcon />
         </button>
+        <label style={st.row}>
+          <span>{t("settings.language")}</span>
+          <select
+            value={languageChoice()}
+            onChange={(e) => setLanguageChoice(e.target.value)}
+            style={st.select}
+          >
+            <option value="system">{t("settings.languageSystem", { name: LANGUAGE_NAMES[pickLocale(navigator.languages?.length ? navigator.languages : [navigator.language])] })}</option>
+            {Object.keys(DICTS).map((code) => (
+              <option key={code} value={code} lang={code}>{LANGUAGE_NAMES[code]}</option>
+            ))}
+          </select>
+        </label>
         <button onClick={() => setAboutOpen(true)} style={st.row}>
           <span>{t("about.title")}</span>
           <ChevronRightIcon />
@@ -53,6 +66,10 @@ const st = {
   rowText: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, padding: "10px 0", textAlign: "left" },
   rowSub: { fontSize: "var(--text-body-sm)", fontWeight: 400, color: "var(--ink-secondary)", lineHeight: 1.4 },
   subtitle: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
+  select: {
+    font: "inherit", fontWeight: 500, color: "var(--syahi)", background: "transparent",
+    border: "none", padding: "8px 0", cursor: "pointer", textAlign: "right",
+  },
   row: {
     display: "flex", alignItems: "center", justifyContent: "space-between",
     minHeight: 52, padding: "0 16px", borderRadius: 16, border: "var(--rule-hairline)",

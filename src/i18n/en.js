@@ -239,6 +239,8 @@ export default {
 
   "settings.backTo": "Back to Settings",
   "settings.comingSoon": "More settings coming soon.",
+  "settings.language": "Language",
+  "settings.languageSystem": "System ({name})",
   "settings.title": "Settings",
 
   "share.action": "Share",

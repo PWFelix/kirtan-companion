@@ -11,7 +11,9 @@
  * "es-MX" and "es-419" both get Spanish. Nothing switches language while the
  * app is open, so this needs no React context: a plain module is enough.
  * `?lang=es` in the URL forces a language, for testing and for sharing a
- * link to a Spanish speaker on an English machine.
+ * link to a Spanish speaker on an English machine. A choice made in Settings
+ * (localStorage `kirtan-language`) beats the browser; changing it reloads the
+ * page, so the "picked once" rule still holds.
  *
  * Values are strings with {placeholders}, or functions of the variables for
  * the few lines that need grammar (plurals): t("beats.count", { n: 3 }).
@@ -37,9 +39,35 @@ export function pickLocale(preferred, available = Object.keys(DICTS)) {
   return DEFAULT_LOCALE;
 }
 
+/** Settings key. Absent (or "system") means: follow the browser. */
+export const LANGUAGE_KEY = "kirtan-language";
+
+/** Each language named in itself — a picker must be readable by whoever needs it. */
+export const LANGUAGE_NAMES = { en: "English", es: "Español" };
+
+/** The language chosen in Settings, or "system". */
+export function languageChoice() {
+  try {
+    const v = window.localStorage.getItem(LANGUAGE_KEY);
+    return v && v in DICTS ? v : "system";
+  } catch {
+    return "system";
+  }
+}
+
+/** Store a choice ("system" | "en" | "es") and reload to apply it. */
+export function setLanguageChoice(choice) {
+  try {
+    if (choice === "system") window.localStorage.removeItem(LANGUAGE_KEY);
+    else window.localStorage.setItem(LANGUAGE_KEY, choice);
+  } catch { /* private mode: nothing to keep, the reload just re-detects */ }
+  window.location.reload();
+}
+
 function detect() {
   if (typeof window === "undefined") return DEFAULT_LOCALE;
-  const forced = new URLSearchParams(window.location.search).get("lang");
+  const chosen = languageChoice();
+  const forced = new URLSearchParams(window.location.search).get("lang") || (chosen !== "system" ? chosen : null);
   const nav = window.navigator;
   const preferred = nav.languages?.length ? nav.languages : [nav.language];
   return pickLocale(forced ? [forced, ...preferred] : preferred);

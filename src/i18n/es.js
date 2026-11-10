@@ -238,6 +238,8 @@ export default {
 
   "settings.backTo": "Volver a Ajustes",
   "settings.comingSoon": "Pronto habrá más ajustes.",
+  "settings.language": "Idioma",
+  "settings.languageSystem": "Sistema ({name})",
   "settings.title": "Ajustes",
 
   "share.action": "Compartir",
