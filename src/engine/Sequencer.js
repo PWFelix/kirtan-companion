@@ -106,6 +106,28 @@ export class Sequencer extends EventEmitter {
     return Tone.Transport.progress;
   }
 
+  /**
+   * Bar phase at context time `time` (seconds), 0 while stopped or before the
+   * bar started. The engine's playhead asks for the time being HEARD, which
+   * lags Tone's own now() by the lookahead and the output latency.
+   */
+  getPhaseAt(time) {
+    if (Tone.Transport.state !== "started" || !this._beat) return 0;
+    const loopTicks = Tone.Transport.PPQ * this._beatsPerBar();
+    const ticks = Math.max(0, Tone.Transport.getTicksAtTime(time));
+    return (ticks % loopTicks) / loopTicks;
+  }
+
+  /** Duration of one step in ms at the current tempo. */
+  stepMs() {
+    if (!this._beat) return 0;
+    return (60_000 / Tone.Transport.bpm.value) * this._beatsPerBar() / this._beat.steps;
+  }
+
+  get beat() {
+    return this._beat;
+  }
+
   // ── Internals ──────────────────────────────────────────────────────
 
   _beatsPerBar() {

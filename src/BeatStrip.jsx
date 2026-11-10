@@ -177,20 +177,17 @@ function BeatStrip({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [beat, cpg, mutedEnds, showBols, mini, onCellTap]);
 
-  // ── Active-cell lighting: flip data-active imperatively per step ──
+  // ── Active-cell lighting: flip data-active imperatively ──
+  // With a playhead (the full strip while playing), the lit cell follows the
+  // PLAYHEAD from the rAF loop below, not the engine's "step" events. Those
+  // fire when Tone SCHEDULES a step, a lookahead plus the output latency
+  // before it is heard: ~120 ms on a laptop, a third of a second over
+  // Bluetooth. The events still drive the mini strip and the stopped state.
+  const followsPlayhead = playing && !!getPhase && !mini;
   useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    track.querySelectorAll(".ks-lane").forEach((laneEl) => {
-      const muted = laneEl.classList.contains("ks-lanemuted");
-      laneEl.querySelectorAll(".ks-cell").forEach((cell) => {
-        cell.dataset.active =
-          playing && Number(cell.dataset.i) === step && !muted
-            ? "true"
-            : "false";
-      });
-    });
-  }, [step, playing, structure]);
+    if (followsPlayhead) return;
+    lightCells(trackRef.current, playing ? step : -1);
+  }, [step, playing, structure, followsPlayhead]);
 
   // ── Playhead visibility + reset on stop ──
   // Toggle the line imperatively (so play/pause doesn't rebuild the track),
@@ -218,12 +215,18 @@ function BeatStrip({
     if (!playing || !getPhase || mini) return;
     let raf;
     let lastPage = -1;
+    let lastLit = -2;
     const tick = () => {
       const line = lineRef.current;
       const scroller = scrollerRef.current;
       if (line && scroller) {
         const phase = getPhase() || 0;
         line.style.left = phase * 100 + "%";
+        const lit = Math.min(beat.steps - 1, Math.floor(phase * beat.steps));
+        if (lit !== lastLit) {
+          lastLit = lit;
+          lightCells(trackRef.current, lit);
+        }
         const total = scroller.scrollWidth;
         const vis = scroller.clientWidth;
         if (total > vis + 1) {
@@ -243,7 +246,8 @@ function BeatStrip({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, getPhase, mini, beat.steps]);
+    // `structure` too: a rebuilt track has fresh cells to light.
+  }, [playing, getPhase, mini, beat.steps, structure]);
 
   // ── Loop-position bar: only visible when the strip actually scrolls ──
   useEffect(() => {
@@ -318,3 +322,14 @@ function BeatStrip({
 }
 
 export default BeatStrip;
+
+/** Light step `lit` (−1 for none) in every unmuted lane of `track`. */
+function lightCells(track, lit) {
+  if (!track) return;
+  track.querySelectorAll(".ks-lane").forEach((laneEl) => {
+    const muted = laneEl.classList.contains("ks-lanemuted");
+    laneEl.querySelectorAll(".ks-cell").forEach((cell) => {
+      cell.dataset.active = Number(cell.dataset.i) === lit && !muted ? "true" : "false";
+    });
+  });
+}

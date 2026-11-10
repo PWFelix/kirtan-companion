@@ -5,6 +5,19 @@ import { MIN_BPM, MAX_BPM } from "../data/meter.js";
 import { EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 import { TUNE_MIN_CENTS, TUNE_MAX_CENTS } from "../data/tuning.js";
 import { loadEqPrefs, saveEqPrefs } from "../storage/eqPrefs.js";
+import { clampDelay, SYNC_TEST_BEAT, SYNC_TEST_BPM } from "../data/syncCalibration.js";
+
+// The display delay (Settings → Sync sound and display), one per browser: the
+// web can't tell output devices apart without a microphone prompt.
+const DISPLAY_DELAY_KEY = "kirtan-display-delay-ms";
+
+function loadDisplayDelay() {
+  try {
+    return clampDelay(localStorage.getItem(DISPLAY_DELAY_KEY) ?? 0);
+  } catch {
+    return 0;
+  }
+}
 
 // The bounds now live in data/meter.js so pure data modules (the share codec)
 // can clamp a BPM without importing React, Tone.js and the engine along with
@@ -57,6 +70,7 @@ export function useTransport() {
   const [endVolumes, setEndVolumes] = useState({});  // per-lane faders, default 1
   const [mutedEnds, setMutedEnds] = useState({});
   const [tempoLocked, setTempoLocked] = useState(false);
+  const [displayDelayMs, setDisplayDelayMs] = useState(loadDisplayDelay);
   // Per-end EQ: five band gains in dB, the tuning offset in cents, plus
   // each panel's open/closed state.
   // Hydrated once at mount from stored prefs via eqPrefs.js (which falls
@@ -157,6 +171,32 @@ export function useTransport() {
   // Stable identity so BeatStrip's rAF effect doesn't re-subscribe on
   // every render (the engine ref never changes).
   const getPhase = useCallback(() => engine.getPhase(), [engine]);
+
+  // ── Display sync ──
+  useEffect(() => { engine.setDisplayDelayMs(displayDelayMs); }, [engine, displayDelayMs]);
+
+  const setDisplayDelay = useCallback((ms) => {
+    const v = clampDelay(ms);
+    setDisplayDelayMs(v);
+    try { localStorage.setItem(DISPLAY_DELAY_KEY, String(v)); } catch { /* private mode: session only */ }
+  }, []);
+
+  // The sync test: a plain click on every beat, through the engine directly
+  // (like the editor's preview), so Home's beat and tempo are untouched —
+  // play() re-applies both next time.
+  async function startSyncTest() {
+    if (!ready) return;
+    await engine.unlock();
+    if (playing) engine.stop();
+    engine.setBpm(SYNC_TEST_BPM);
+    engine.setBeat(SYNC_TEST_BEAT);
+    engine.start();
+  }
+
+  function stopSyncTest() {
+    engine.stop();
+    engine.setBpm(bpmRef.current);
+  }
 
   const clampBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
 
@@ -322,5 +362,6 @@ export function useTransport() {
     eqBands, eqOpen, changeEqBand, toggleEqPanel, eqTune, changeEqTune,
     tuneOpen, toggleTunePanel,
     loadBeat, togglePlay, play, stop, unlock,
+    displayDelayMs, setDisplayDelay, startSyncTest, stopSyncTest,
   };
 }

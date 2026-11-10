@@ -33,6 +33,7 @@ import { EventEmitter } from "./EventEmitter.js";
 import { SoundPlayer } from "./SoundPlayer.js";
 import { Sequencer } from "./Sequencer.js";
 import { enableMediaPlayback } from "./audioUnlock.js";
+import { heardContextTime, reportedLatencyMs } from "./outputClock.js";
 
 export class KirtanEngine extends EventEmitter {
   constructor() {
@@ -40,6 +41,7 @@ export class KirtanEngine extends EventEmitter {
 
     this._soundPlayer = new SoundPlayer();
     this._sequencer = new Sequencer(this._soundPlayer);
+    this._displayDelayMs = 0;
 
     this._isReady = false;
 
@@ -148,9 +150,40 @@ export class KirtanEngine extends EventEmitter {
     this.emit("stopped");
   }
 
-  /** Current bar phase in [0, 1). 0 while stopped. */
+  /**
+   * Bar phase in [0, 1) at the moment being HEARD, moved later by the user's
+   * display delay. 0 while stopped. See outputClock.js for why this is not
+   * simply Tone.Transport.progress.
+   */
   getPhase() {
-    return this._sequencer.getPhase();
+    const heard = heardContextTime(Tone.getContext().rawContext, performance.now());
+    return this._sequencer.getPhaseAt(heard - this._displayDelayMs / 1000);
+  }
+
+  // ── Display sync ───────────────────────────────────────────────────
+
+  /** Extra display delay (ms) on top of what the browser reports. */
+  setDisplayDelayMs(ms) {
+    this._displayDelayMs = Number.isFinite(ms) ? ms : 0;
+  }
+
+  /** The browser's own output latency, already allowed for; null if unknown. */
+  getReportedLatencyMs() {
+    return reportedLatencyMs(Tone.getContext().rawContext);
+  }
+
+  /**
+   * For the sync test: how far a tap at `perfMs` (an event timeStamp) is from
+   * the nearest step, in ms, by what the browser SAYS is being heard (no user
+   * delay). Positive: the browser thinks the click already sounded — the
+   * delay it failed to report.
+   */
+  offsetFromNearestStepMs(perfMs) {
+    const beat = this._sequencer.beat;
+    if (!beat) return 0;
+    const heard = heardContextTime(Tone.getContext().rawContext, perfMs);
+    const position = this._sequencer.getPhaseAt(heard) * beat.steps;
+    return (position - Math.round(position)) * this._sequencer.stepMs();
   }
 
   get isReady() {

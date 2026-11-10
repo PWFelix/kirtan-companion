@@ -256,7 +256,7 @@ function App() {
   }
 
   if (view === "settings") {
-    return <SettingsView onBack={() => setView("home")} nav={bottomNav} />;
+    return <SettingsView onBack={() => setView("home")} nav={bottomNav} transport={transport} />;
   }
 
   return (
