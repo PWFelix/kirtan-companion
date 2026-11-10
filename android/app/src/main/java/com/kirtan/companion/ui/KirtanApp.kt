@@ -114,8 +114,11 @@ internal fun KirtanApp(
     val transportState by transport.state.collectAsState()
     val selectedBeat by library.selectedBeat.collectAsState()
 
-    var entered by remember { mutableStateOf(false) }
-    var tab by remember { mutableStateOf(Tab.HOME) }
+    // Saveable so a language change (which recreates the activity) lands back on
+    // Settings rather than the splash. The audio lives in the ViewModel/service
+    // and survives that, so skipping the splash on restore is safe.
+    var entered by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(Tab.HOME) }
     // Hoisted out of Settings so the Bluetooth banner can open it from any tab.
     var syncOpen by remember { mutableStateOf(false) }
 
@@ -634,6 +637,24 @@ private fun SettingsScreen(
                     label = "${(preset * 100).roundToInt()}%",
                     selected = state.settings.uiScale == preset,
                     onClick = { transport.setUiScale(preset) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        SectionLabel(stringResource(R.string.settings_language))
+        val activity = LocalContext.current as android.app.Activity
+        val chosen = remember { com.kirtan.companion.AppLanguage.get(activity) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(dimens.space2),
+        ) {
+            (listOf<String?>(null) + com.kirtan.companion.AppLanguage.SUPPORTED).forEach { tag ->
+                ScaleChip(
+                    label = tag?.let { com.kirtan.companion.AppLanguage.nativeName(it) }
+                        ?: stringResource(R.string.settings_language_system),
+                    selected = chosen == tag,
+                    onClick = { if (tag != chosen) com.kirtan.companion.AppLanguage.set(activity, tag) },
                     modifier = Modifier.weight(1f),
                 )
             }

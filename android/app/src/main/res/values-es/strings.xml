@@ -262,6 +262,8 @@
     <string name="search_placeholder">Busca un ritmo por nombre</string>
     <string name="search_title">Buscar</string>
     <string name="settings_audio_output">Salida de audio · %1$d Hz</string>
+    <string name="settings_language">Idioma</string>
+    <string name="settings_language_system">Sistema</string>
     <string name="settings_notation">Notación</string>
     <string name="settings_show_bols">Mostrar bols</string>
     <string name="settings_show_bols_sub">Escribe el nombre hablado de cada golpe (Ta, Te, Ge, Khe) debajo del ritmo.</string>

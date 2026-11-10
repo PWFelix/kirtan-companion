@@ -268,6 +268,8 @@
     <string name="search_placeholder">Find a beat by name</string>
     <string name="search_title">Search</string>
     <string name="settings_audio_output">Audio output · %1$d Hz</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">System</string>
     <string name="settings_notation">Notation</string>
     <string name="settings_show_bols">Show bols</string>
     <string name="settings_show_bols_sub">Print the spoken name of each stroke — Ta, Te, Ge, Khe — under the beat.</string>

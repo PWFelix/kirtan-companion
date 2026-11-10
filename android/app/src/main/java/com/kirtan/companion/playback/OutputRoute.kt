@@ -26,13 +26,27 @@ import com.kirtan.companion.Strings
 data class OutputRoute(
     /** Stable per device: its kind plus its product name, e.g. `bt:JBL Flip 5`. */
     val key: String,
-    /** What to call it on screen: "JBL Flip 5", "Phone speaker". */
-    val label: String,
+    /** The device's own product name, or "" for outputs we name ourselves. */
+    val name: String,
     val bluetooth: Boolean,
 ) {
+    /**
+     * What to call it on screen: "JBL Flip 5", "Phone speaker". Resolved on each
+     * read, not stored: the route outlives a language change (it sits in the
+     * ViewModel across the activity recreate), and a stored "Altavoz del
+     * teléfono" would linger after switching back to English.
+     */
+    val label: String
+        get() = when {
+            name.isNotEmpty() -> name
+            key == "speaker" -> Strings.get(R.string.route_speaker)
+            key == "wired" -> Strings.get(R.string.route_wired)
+            bluetooth -> Strings.get(R.string.route_bluetooth)
+            else -> Strings.get(R.string.route_external)
+        }
+
     companion object {
-        // A getter, not a constant: the label is resolved in the current language.
-        val SPEAKER get() = OutputRoute("speaker", Strings.get(R.string.route_speaker), bluetooth = false)
+        val SPEAKER = OutputRoute("speaker", "", bluetooth = false)
     }
 }
 
@@ -101,14 +115,14 @@ class OutputRouteWatcher(context: Context) {
         return when {
             isBluetooth(device.type) -> OutputRoute(
                 key = "bt:${name.ifEmpty { "unknown" }}",
-                label = name.ifEmpty { Strings.get(R.string.route_bluetooth) },
+                name = name,
                 bluetooth = true,
             )
-            isWired(device.type) -> OutputRoute("wired", Strings.get(R.string.route_wired), bluetooth = false)
+            isWired(device.type) -> OutputRoute("wired", "", bluetooth = false)
             device.type == PlatformDevice.TYPE_BUILTIN_SPEAKER -> OutputRoute.SPEAKER
             else -> OutputRoute(
                 key = "other:${device.type}:$name",
-                label = name.ifEmpty { Strings.get(R.string.route_external) },
+                name = name,
                 bluetooth = false,
             )
         }

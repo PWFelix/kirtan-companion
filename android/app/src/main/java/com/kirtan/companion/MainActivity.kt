@@ -51,8 +51,17 @@ class MainActivity : ComponentActivity() {
      */
     private var immersiveWanted = false
 
+    // Pre-Android-13 language override; see AppLanguage.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Text from below the UI (storage errors, notices) follows the language
+        // this activity renders in — including one picked in Settings. Bound via
+        // the application context so no activity is retained.
+        Strings.bind(applicationContext.createConfigurationContext(resources.configuration).resources)
 
         // EDGE-TO-EDGE. The default leaves the system status and navigation bars
         // as opaque bands the app cannot draw into, which on a short phone reads
