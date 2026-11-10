@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The languages the app speaks. Android 13+ lists these under
+  Settings › Apps › Mrdanga Hero › Language, so someone can run the app in
+  Spanish on an English phone (or the reverse). Add a locale here when its
+  values-xx/strings.xml lands.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="es" />
+</locale-config>

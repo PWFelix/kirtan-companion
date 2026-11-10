@@ -54,6 +54,9 @@ import com.kirtan.companion.ui.strip.BeatStrip
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import kotlinx.coroutines.delay
+import androidx.compose.ui.res.stringResource
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The Browse page: what the whole community has published.
@@ -96,8 +99,7 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
     ) {
         if (!vm.available) {
             Text(
-                text = "The community library lives in the cloud, and this build has no " +
-                    "cloud configured, so there is nothing to browse.",
+                text = stringResource(R.string.community_not_configured),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 lineHeight = 19.sp,
@@ -108,7 +110,7 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("Search the community library", fontSize = 13.4.sp) },
+            placeholder = { Text(stringResource(R.string.community_search), fontSize = 13.4.sp) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
             modifier = Modifier.fillMaxWidth(),
@@ -125,17 +127,17 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
 
         Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
             ScopeChip(
-                label = "Everything",
+                label = stringResource(R.string.community_scope_all),
                 selected = scope == CommunityClient.BrowseScope.EVERYTHING,
                 onClick = { vm.setScope(CommunityClient.BrowseScope.EVERYTHING) },
             )
             ScopeChip(
-                label = "Names",
+                label = stringResource(R.string.community_scope_names),
                 selected = scope == CommunityClient.BrowseScope.NAMES,
                 onClick = { vm.setScope(CommunityClient.BrowseScope.NAMES) },
             )
             ScopeChip(
-                label = "Authors",
+                label = stringResource(R.string.community_scope_authors),
                 selected = scope == CommunityClient.BrowseScope.AUTHORS,
                 onClick = { vm.setScope(CommunityClient.BrowseScope.AUTHORS) },
             )
@@ -161,7 +163,7 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
 
         if (loading && items.isEmpty()) {
             Text(
-                text = "Loading the community library…",
+                text = stringResource(R.string.community_loading),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
             )
@@ -170,10 +172,9 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
         if (!loading && items.isEmpty() && error == null) {
             Text(
                 text = if (query.isBlank()) {
-                    "Nothing published yet. Be the first: open one of your beats and " +
-                        "choose Publish."
+                    stringResource(R.string.community_empty)
                 } else {
-                    "Nothing in the community library matches “$query”."
+                    stringResource(R.string.community_no_match, query)
                 },
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
@@ -255,10 +256,10 @@ private fun CommunityCard(
         )
         Text(
             text = buildString {
-                append("by ${item.authorName ?: "A devotee"}")
+                append(Strings.get(R.string.community_by, item.authorName ?: Strings.get(R.string.community_a_devotee)))
                 append(" · ")
-                append(if (item.kind == PublishedKind.PLAYLIST) "list" else "beat")
-                if (item.copies > 0) append(" · ${item.copies} ${if (item.copies == 1L) "copy" else "copies"}")
+                append(Strings.get(if (item.kind == PublishedKind.PLAYLIST) R.string.community_kind_list else R.string.community_kind_beat))
+                if (item.copies > 0) append(" · " + Strings.plural(R.plurals.community_copies, item.copies.toInt(), item.copies))
             },
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 12.sp,
@@ -273,7 +274,7 @@ private fun CommunityCard(
             val average = item.averageStars
             Text(
                 text = if (average == null) {
-                    "not rated yet"
+                    stringResource(R.string.community_not_rated)
                 } else {
                     "%.1f ★ (%d)".format(average, item.ratingCount)
                 },
@@ -291,7 +292,7 @@ private fun CommunityCard(
             // Disabled AND relabelled once a copy exists: a greyed-out "Add" with
             // no reason looks broken. Deleting the copy brings Add back (#11).
             SecondaryButton(
-                label = if (inLibrary) "✓ In your library" else "Add to library",
+                label = if (inLibrary) stringResource(R.string.community_in_library) else stringResource(R.string.community_add),
                 modifier = Modifier.weight(1f),
                 minHeight = 44.dp,
                 enabled = !inLibrary,
@@ -299,7 +300,7 @@ private fun CommunityCard(
             )
             if (mine) {
                 SecondaryButton(
-                    label = "Unpublish",
+                    label = stringResource(R.string.community_unpublish),
                     modifier = Modifier.weight(1f),
                     minHeight = 44.dp,
                     onClick = onUnpublish,
@@ -312,7 +313,7 @@ private fun CommunityCard(
         // like "Add to library" but does that is a mis-tap waiting to happen.
         if (canPromote) {
             SecondaryButton(
-                label = "Make this a built-in beat",
+                label = stringResource(R.string.promote_title),
                 icon = KcIcons.Cap,
                 minHeight = 44.dp,
                 onClick = onPromote,
@@ -321,8 +322,7 @@ private fun CommunityCard(
 
         if (!signedIn) {
             Text(
-                text = "Added to this device only. Sign in to keep it in your account " +
-                    "across devices.",
+                text = stringResource(R.string.community_device_only),
                 color = KirtanTheme.colors.faint,
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
@@ -381,9 +381,9 @@ private fun StarRow(selected: Int?, onRate: (Int) -> Unit) {
             Icon(
                 imageVector = if (filled) Icons.Rounded.Star else Icons.Rounded.StarBorder,
                 contentDescription = if (selected == star) {
-                    "Remove your $star-star rating"
+                    Strings.plural(R.plurals.rate_remove, star, star)
                 } else {
-                    "Rate $star ${if (star == 1) "star" else "stars"}"
+                    Strings.plural(R.plurals.rate_stars, star, star)
                 },
                 tint = if (filled) PaletteToken.CLAY.color else KirtanTheme.colors.rule,
                 modifier = Modifier
@@ -418,7 +418,7 @@ private fun PromoteSheet(
     // one's half-typed heading.
     var heading by remember(item.id) { mutableStateOf(CommunityViewModel.DEFAULT_HEADING) }
 
-    KcSheet(title = "Make this a built-in beat", onDismiss = onDismiss) {
+    KcSheet(title = stringResource(R.string.promote_title), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
             Text(
                 text = item.name,
@@ -427,15 +427,13 @@ private fun PromoteSheet(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "It joins the Built in list for everyone using this app, on their " +
-                    "next launch. The beat stays in the community library too, and a " +
-                    "playlist that already points at it keeps working.",
+                text = stringResource(R.string.promote_body),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 lineHeight = 19.sp,
             )
 
-            SectionLabel("Section heading")
+            SectionLabel(stringResource(R.string.promote_heading))
             OutlinedTextField(
                 value = heading,
                 onValueChange = { heading = it },
@@ -453,14 +451,14 @@ private fun PromoteSheet(
                 ),
             )
             Text(
-                text = "An existing heading puts it in that section; a new one starts one.",
+                text = stringResource(R.string.promote_heading_hint),
                 color = KirtanTheme.colors.faint,
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
             )
 
-            PrimaryButton(label = "Promote", onClick = { onConfirm(heading) })
-            SecondaryButton(label = "Cancel", onClick = onDismiss)
+            PrimaryButton(label = stringResource(R.string.promote_confirm), onClick = { onConfirm(heading) })
+            SecondaryButton(label = stringResource(R.string.common_cancel), onClick = onDismiss)
         }
     }
 }

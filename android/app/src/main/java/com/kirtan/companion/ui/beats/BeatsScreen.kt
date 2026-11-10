@@ -63,6 +63,11 @@ import com.kirtan.companion.ui.strip.BeatStrip
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import com.kirtan.companion.ui.transport.TransportViewModel
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
+import com.kirtan.companion.ui.BeatText
 
 /** Where the Beats screen has drilled to. Dies with the screen, as on the web. */
 private sealed interface BeatsPage {
@@ -152,13 +157,11 @@ internal fun BeatsScreen(
         importPreview = null
         library.importShared(payload) { result ->
             importResult = when {
-                result.beats.isEmpty() -> "Nothing was imported."
+                result.beats.isEmpty() -> Strings.get(R.string.import_nothing)
                 result.categoryId != null ->
-                    "Added ${result.beats.size} " +
-                        (if (result.beats.size == 1) "beat" else "beats") +
-                        " as a new list."
+                    Strings.plural(R.plurals.import_added_list, result.beats.size, result.beats.size)
 
-                else -> "Added to Your beats."
+                else -> Strings.get(R.string.import_added_custom)
             }
             // A shared list arrives as its own playlist; land the user on it so
             // they can see what came in rather than guessing where it went.
@@ -184,7 +187,7 @@ internal fun BeatsScreen(
             if (page != BeatsPage.Landing) {
                 HairlineIconButton(
                     icon = KcIcons.Back,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.common_back),
                     onClick = { page = BeatsPage.Landing },
                 )
             } else {
@@ -192,9 +195,9 @@ internal fun BeatsScreen(
             }
             Text(
                 text = when (val p = page) {
-                    BeatsPage.Landing -> "Beats"
+                    BeatsPage.Landing -> stringResource(R.string.tab_beats)
                     is BeatsPage.Category -> library.categoryName(p.id)
-                    BeatsPage.Community -> "Community"
+                    BeatsPage.Community -> stringResource(R.string.community_title)
                 },
                 color = PaletteToken.SYAHI.color,
                 fontSize = 26.sp,
@@ -262,7 +265,7 @@ internal fun BeatsScreen(
         }
 
         PrimaryButton(
-            label = if (beat != null) "Start · ${beat.name}" else "Start",
+            label = if (beat != null) stringResource(R.string.beats_start_named, beat.name) else stringResource(R.string.beats_start),
             icon = KcIcons.Start,
             enabled = transportState.ready && beat != null,
             radius = KirtanTheme.dimens.radiusSectionCard,
@@ -275,24 +278,24 @@ internal fun BeatsScreen(
         // A swipe is easy to make by accident; deleting someone's beat should
         // not be. One deliberate tap on the revealed button, then this.
         com.kirtan.companion.ui.components.KcSheet(
-            title = "Delete ${target.name}?",
+            title = stringResource(R.string.beats_delete_title, target.name),
             onDismiss = { pendingDelete = null },
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space3)) {
                 Text(
-                    text = "It will be removed from your library and from every list it is in.",
+                    text = stringResource(R.string.beats_delete_body),
                     color = PaletteToken.SYAHI_SOFT.color,
                     fontSize = 13.4.sp,
                 )
                 PrimaryButton(
-                    label = "Delete",
+                    label = stringResource(R.string.common_delete),
                     icon = KcIcons.Trash,
                     onClick = {
                         target.id?.let { library.deleteBeat(it) }
                         pendingDelete = null
                     },
                 )
-                SecondaryButton(label = "Cancel", onClick = { pendingDelete = null })
+                SecondaryButton(label = stringResource(R.string.common_cancel), onClick = { pendingDelete = null })
             }
         }
     }
@@ -397,7 +400,7 @@ private fun LandingPage(
 
         item {
             SectionCard(
-                title = "Built in",
+                title = stringResource(R.string.cat_builtin),
                 meta = builtInMeta,
                 onClick = { onOpenCategory(BUILTIN_CATEGORY) },
             )
@@ -405,11 +408,11 @@ private fun LandingPage(
 
         item {
             SectionCard(
-                title = "Your beats",
+                title = stringResource(R.string.cat_custom),
                 meta = if (state.customBeats.isEmpty()) {
-                    "Nothing saved yet"
+                    stringResource(R.string.beats_nothing_saved)
                 } else {
-                    "${state.customBeats.size} saved"
+                    pluralStringResource(R.plurals.beats_saved_count, state.customBeats.size, state.customBeats.size)
                 },
                 onClick = { onOpenCategory(CUSTOM_CATEGORY) },
             )
@@ -417,27 +420,27 @@ private fun LandingPage(
 
         item {
             SectionCard(
-                title = "Import",
-                meta = "Paste a code or link someone sent you",
+                title = stringResource(R.string.import_title),
+                meta = stringResource(R.string.import_meta),
                 onClick = onOpenImport,
             )
         }
 
         item {
             SectionCard(
-                title = "Community",
-                meta = "Browse and publish shared beats",
+                title = stringResource(R.string.community_title),
+                meta = stringResource(R.string.community_meta),
                 onClick = onOpenCommunity,
             )
         }
 
         if (state.categories.isNotEmpty()) {
-            item { SectionLabel("Playlists") }
+            item { SectionLabel(stringResource(R.string.playlists_title)) }
             items(count = state.categories.size) { index ->
                 val category = state.categories[index]
                 SectionCard(
                     title = category.name,
-                    meta = "${category.beatIds.size} beats",
+                    meta = pluralStringResource(R.plurals.beat_count, category.beatIds.size, category.beatIds.size),
                     onClick = { onOpenCategory(category.id) },
                 )
             }
@@ -476,13 +479,13 @@ private fun SearchCard(
             .padding(dimens.space4),
         verticalArrangement = Arrangement.spacedBy(dimens.space3),
     ) {
-        SectionLabel("Search")
+        SectionLabel(stringResource(R.string.search_title))
 
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
             placeholder = {
-                Text("Find a beat by name", fontSize = 15.2.sp, color = KirtanTheme.colors.faint)
+                Text(stringResource(R.string.search_placeholder), fontSize = 15.2.sp, color = KirtanTheme.colors.faint)
             },
             leadingIcon = {
                 Icon(
@@ -496,7 +499,7 @@ private fun SearchCard(
                 if (query.isNotEmpty()) {
                     HairlineIconButton(
                         icon = KcIcons.Back,
-                        contentDescription = "Clear search",
+                        contentDescription = stringResource(R.string.search_clear),
                         onClick = { onQueryChange("") },
                         size = 28.dp,
                     )
@@ -517,7 +520,7 @@ private fun SearchCard(
         )
 
         when {
-            query.isBlank() -> Hint("Search every beat in your library by name.")
+            query.isBlank() -> Hint(stringResource(R.string.search_hint))
 
             else -> {
                 val matches = remember(query, allBeats) {
@@ -525,7 +528,7 @@ private fun SearchCard(
                     allBeats.filter { it.name.lowercase().contains(needle) }
                 }
                 if (matches.isEmpty()) {
-                    Hint("No beat is named “$query”.")
+                    Hint(stringResource(R.string.search_none, query))
                 } else {
                     matches.forEach { beat ->
                         SwipeBeatRow(
@@ -561,9 +564,9 @@ private fun Hint(text: String) {
  * launch, or the fallback it shipped with.
  */
 private fun shippedSourceLine(source: ShippedSource, count: Int): String = when (source) {
-    ShippedSource.SERVER -> "Up to date with the server · $count beats"
-    ShippedSource.CACHED -> "From the last check · $count beats"
-    ShippedSource.COMPILED -> "Ships with the app · $count beats"
+    ShippedSource.SERVER -> Strings.plural(R.plurals.shipped_server, count, count)
+    ShippedSource.CACHED -> Strings.plural(R.plurals.shipped_cached, count, count)
+    ShippedSource.COMPILED -> Strings.plural(R.plurals.shipped_compiled, count, count)
 }
 
 /**
@@ -576,7 +579,7 @@ private fun shippedSourceLine(source: ShippedSource, count: Int): String = when 
  */
 private fun shippedLine(status: ShippedStatus, canCheck: Boolean): String = when {
     !canCheck -> shippedSourceLine(ShippedSource.COMPILED, status.count)
-    status.checking -> "Checking the server…"
+    status.checking -> Strings.get(R.string.shipped_checking_server)
     status.notice != null -> status.notice!!
     else -> shippedSourceLine(status.source, status.count)
 }
@@ -668,7 +671,7 @@ private fun CategoryPage(
         if (categoryId != BUILTIN_CATEGORY && beats.isNotEmpty()) {
             item(key = "share-list") {
                 SecondaryButton(
-                    label = "Share list",
+                    label = stringResource(R.string.share_list),
                     icon = KcIcons.Share,
                     onClick = { onShareList(categoryName, beats) },
                 )
@@ -678,7 +681,7 @@ private fun CategoryPage(
             // share link follows.
             item(key = "publish-list") {
                 SecondaryButton(
-                    label = "Publish to community",
+                    label = stringResource(R.string.publish_to_community),
                     icon = KcIcons.Globe,
                     onClick = { onPublishList(categoryName, beats) },
                 )
@@ -695,9 +698,9 @@ private fun CategoryPage(
                     if (canCheckForUpdates) {
                         SecondaryButton(
                             label = if (shipped.checking) {
-                                "Checking…"
+                                stringResource(R.string.shipped_checking)
                             } else {
-                                "Check for beat updates"
+                                stringResource(R.string.shipped_check)
                             },
                             icon = KcIcons.Globe,
                             enabled = !shipped.checking,
@@ -720,14 +723,14 @@ private fun CategoryPage(
             beats.mapNotNull { it.group }.distinct().forEach { group ->
                 val inGroup = beats.filter { it.group == group }
                 if (inGroup.isNotEmpty()) {
-                    item(key = "heading-$group") { SectionLabel(group) }
+                    item(key = "heading-$group") { SectionLabel(BeatText.group(group)) }
                     items(count = inGroup.size, key = { i -> "beat-${inGroup[i].id}" }) { index ->
                         SwipeBeat(inGroup[index])
                     }
                 }
             }
         } else if (beats.isEmpty()) {
-            item { Hint("Nothing here yet.") }
+            item { Hint(stringResource(R.string.beats_nothing_here)) }
         } else {
             items(count = beats.size, key = { i -> "beat-${beats[i].id}" }) { index ->
                 SwipeBeat(beats[index])
@@ -752,10 +755,10 @@ private fun SwipeBeatRow(
 ) {
     val key = "beat-${beat.id}"
     val actions = buildList {
-        add(SwipeAction("Share", KcIcons.Share, SwipeColors.shareBg, SwipeColors.shareFg) { onShareBeat(beat) })
+        add(SwipeAction(Strings.get(R.string.common_share), KcIcons.Share, SwipeColors.shareBg, SwipeColors.shareFg) { onShareBeat(beat) })
         // Built-ins can't be deleted, only customised; theirs is Share alone.
         if (!beat.isBuiltIn && beat.id != null) {
-            add(SwipeAction("Delete", KcIcons.Trash, SwipeColors.deleteBg, SwipeColors.deleteFg) { onDeleteBeat(beat) })
+            add(SwipeAction(Strings.get(R.string.common_delete), KcIcons.Trash, SwipeColors.deleteBg, SwipeColors.deleteFg) { onDeleteBeat(beat) })
         }
     }
     SwipeActionsRow(
@@ -803,7 +806,7 @@ private fun BeatRow(beat: Beat, onClick: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = "${beat.note} · ${beat.steps} cells",
+                text = "${BeatText.note(beat.note)} · " + pluralStringResource(R.plurals.beat_cells, beat.steps, beat.steps),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
             )
@@ -830,7 +833,7 @@ private fun BeatDetailSheet(
     com.kirtan.companion.ui.components.KcSheet(title = beat.name, onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
             Text(
-                text = "${beat.note} · ${beat.bpm} BPM · ${beat.steps} cells",
+                text = "${BeatText.note(beat.note)} · ${beat.bpm} BPM · " + pluralStringResource(R.plurals.beat_cells, beat.steps, beat.steps),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 fontWeight = FontWeight.Medium,
@@ -844,9 +847,9 @@ private fun BeatDetailSheet(
                     lineHeight = 20.sp,
                 )
             }
-            PrimaryButton(label = "Play this beat", icon = KcIcons.Play, onClick = onPlay)
+            PrimaryButton(label = stringResource(R.string.beats_play_this), icon = KcIcons.Play, onClick = onPlay)
             com.kirtan.companion.ui.components.SecondaryButton(
-                label = if (beat.isBuiltIn) "Customize" else "Edit",
+                label = if (beat.isBuiltIn) stringResource(R.string.common_customize) else stringResource(R.string.common_edit),
                 icon = KcIcons.Pencil,
                 onClick = onEdit,
             )
@@ -857,7 +860,7 @@ private fun BeatDetailSheet(
                 // Community's promote, so "affects what ships" reads the same way in
                 // both places.
                 com.kirtan.companion.ui.components.SecondaryButton(
-                    label = "Edit for everyone",
+                    label = stringResource(R.string.maint_edit_for_everyone),
                     icon = KcIcons.Cap,
                     onClick = onEditShipped,
                 )
@@ -868,24 +871,24 @@ private fun BeatDetailSheet(
                 // same way in all three places. The confirm sheet names the blast
                 // radius before the write happens.
                 com.kirtan.companion.ui.components.SecondaryButton(
-                    label = "Remove from built-ins",
+                    label = stringResource(R.string.maint_remove_builtin),
                     icon = KcIcons.Cap,
                     onClick = onRemoveShipped,
                 )
             }
             com.kirtan.companion.ui.components.SecondaryButton(
-                label = "Share",
+                label = stringResource(R.string.common_share),
                 icon = KcIcons.Share,
                 onClick = onShare,
             )
             com.kirtan.companion.ui.components.SecondaryButton(
-                label = "Publish to community",
+                label = stringResource(R.string.publish_to_community),
                 icon = KcIcons.Globe,
                 onClick = onPublish,
             )
             if (!beat.isBuiltIn && beat.id != null) {
                 com.kirtan.companion.ui.components.SecondaryButton(
-                    label = "Delete",
+                    label = stringResource(R.string.common_delete),
                     onClick = {
                         library.deleteBeat(beat.id)
                         onDismiss()
@@ -926,7 +929,7 @@ private fun ResultStrip(message: String, onDismiss: () -> Unit) {
         Spacer(Modifier.width(dimens.space2))
         HairlineIconButton(
             icon = KcIcons.Check,
-            contentDescription = "Dismiss",
+            contentDescription = stringResource(R.string.common_dismiss),
             onClick = onDismiss,
             size = 28.dp,
             tint = PaletteToken.CLAY.color,
@@ -956,7 +959,7 @@ private fun ErrorStrip(message: String, onDismiss: () -> Unit) {
         Spacer(Modifier.width(dimens.space2))
         HairlineIconButton(
             icon = KcIcons.Back,
-            contentDescription = "Dismiss",
+            contentDescription = stringResource(R.string.common_dismiss),
             onClick = onDismiss,
             size = 28.dp,
             tint = PaletteToken.DANGER.color,

@@ -48,6 +48,9 @@ import com.kirtan.companion.ui.library.LibraryViewModel
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import com.kirtan.companion.ui.transport.TransportViewModel
+import androidx.compose.ui.res.stringResource
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The Learn tab: a "falling notes" view of the loaded beat.
@@ -81,7 +84,7 @@ internal fun LearnScreen(
     ) {
         if (beat == null) {
             Text(
-                text = "Pick a beat on Home to learn it here.",
+                text = stringResource(R.string.learn_pick_beat),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
             )
@@ -91,7 +94,7 @@ internal fun LearnScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             HairlineIconButton(
                 icon = KcIcons.Back,
-                contentDescription = "Previous beat",
+                contentDescription = stringResource(R.string.common_prev_beat),
                 onClick = { library.cycleBeat(-1) },
             )
             Column(
@@ -107,21 +110,21 @@ internal fun LearnScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Watch the strokes land, and play along",
+                    text = stringResource(R.string.learn_subtitle),
                     color = PaletteToken.SYAHI_SOFT.color,
                     fontSize = 12.sp,
                 )
             }
             HairlineIconButton(
                 icon = KcIcons.ChevronRight,
-                contentDescription = "Next beat",
+                contentDescription = stringResource(R.string.common_next_beat),
                 onClick = { library.cycleBeat(1) },
             )
         }
 
         val leftHanded = state.settings.learnLeftHanded
         SecondaryButton(
-            label = if (leftHanded) "Left-handed · dayan on the left" else "Right-handed · dayan on the right",
+            label = if (leftHanded) stringResource(R.string.learn_left_handed) else stringResource(R.string.learn_right_handed),
             onClick = { transport.setLearnLeftHanded(!leftHanded) },
             minHeight = 38.dp,
         )
@@ -143,7 +146,7 @@ internal fun LearnScreen(
             // a 1-BPM nudge is a performer's adjustment, not a learner's.
             HairlineIconButton(
                 icon = KcIcons.Back,
-                contentDescription = "Slower",
+                contentDescription = stringResource(R.string.common_slower),
                 onClick = { transport.nudgeBpm(-5) },
             )
             Text(
@@ -155,12 +158,12 @@ internal fun LearnScreen(
             )
             HairlineIconButton(
                 icon = KcIcons.ChevronRight,
-                contentDescription = "Faster",
+                contentDescription = stringResource(R.string.common_faster),
                 onClick = { transport.nudgeBpm(5) },
             )
             Spacer(Modifier.weight(1f))
             PrimaryButton(
-                label = if (state.playing) "Pause" else "Play",
+                label = if (state.playing) stringResource(R.string.common_pause) else stringResource(R.string.common_play),
                 icon = if (state.playing) KcIcons.Pause else KcIcons.Play,
                 enabled = state.ready,
                 onClick = { transport.togglePlay(beat) },
@@ -279,14 +282,14 @@ private fun HighwayCanvas(
             )
             drawText(label, topLeft = Offset(cx - label.size.width / 2f, size.height - labelH + 4.dp.toPx()))
             val sub = measurer.measure(
-                "${column.lane.label} · ${if (column.stroke == Stroke.OPEN) "open" else "closed"}",
+                "${column.lane.label} · " + Strings.get(if (column.stroke == Stroke.OPEN) R.string.learn_open else R.string.learn_closed),
                 TextStyle(color = soft, fontSize = 9.sp),
             )
             drawText(sub, topLeft = Offset(cx - sub.size.width / 2f, size.height - sub.size.height.toFloat()))
         }
 
         if (!playing) {
-            val hint = measurer.measure("Press Play — strokes land on the line", TextStyle(color = soft, fontSize = 12.sp))
+            val hint = measurer.measure(Strings.get(R.string.learn_press_play), TextStyle(color = soft, fontSize = 12.sp))
             val pad = 6.dp.toPx()
             val at = Offset(size.width / 2 - hint.size.width / 2f, hitY - pxPerStep / 2 - hint.size.height / 2f)
             drawRoundRect(

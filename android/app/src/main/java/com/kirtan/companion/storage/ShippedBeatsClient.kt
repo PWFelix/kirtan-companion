@@ -31,6 +31,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
 import kotlin.math.roundToInt
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The built-in beat set as served by the database, and the cache that stands in
@@ -156,12 +158,12 @@ class ShippedBeatsClient(
             // just promoted a beat needs to know it did not arrive, and both of
             // those other lines would tell them everything is fine.
             fetched == null ->
-                "The server sent a beat set this app couldn't use, so nothing changed."
+                Strings.get(R.string.shipped_unusable)
             // Compared as beats, not as revisions: two different `updated_at`
             // values can describe the same nine beats (a re-run seed, a promoted
             // beat that was then reverted), and "updated" would be a lie.
-            beats == previous -> "Already up to date · ${beats.size} beats"
-            else -> "Built-in beats updated · ${beats.size} beats"
+            beats == previous -> Strings.plural(R.plurals.shipped_up_to_date, beats.size, beats.size)
+            else -> Strings.plural(R.plurals.shipped_updated, beats.size, beats.size)
         }
         _status.update {
             it.copy(checking = false, checkedAt = now(), count = beats.size, notice = notice)
@@ -181,7 +183,7 @@ class ShippedBeatsClient(
             columns = COLUMNS,
             order = "ordinal.asc",
             requireSession = false,
-            whileDoing = "loading the built-in beats",
+            whileDoing = Strings.get(R.string.doing_load_builtin),
         )
         val rows = body as? JsonArray ?: return null
         val beats = shippedBeatsOf(rows) ?: run {
@@ -225,7 +227,7 @@ class ShippedBeatsClient(
             table = MAINTAINERS,
             columns = "user_id",
             limit = 1,
-            whileDoing = "checking whether you may edit the built-in beats",
+            whileDoing = Strings.get(R.string.doing_check_maintainer),
         )
         (rows as? JsonArray)?.isNotEmpty() == true
     } catch (e: CancellationException) {
@@ -273,11 +275,10 @@ class ShippedBeatsClient(
                 sourcePublishedId = item.id,
                 description = beat.description,
             ),
-            "That beat can't become a built-in one — its name or its pattern is " +
-                "outside what the built-in set allows.",
+            Strings.get(R.string.err_promote_invalid),
         )
 
-        client.upsert(TABLE, row, onConflict = "id", whileDoing = "making that a built-in beat")
+        client.upsert(TABLE, row, onConflict = "id", whileDoing = Strings.get(R.string.doing_promote))
         // Silent: the caller has its own "promoted" message, and a set that now
         // holds one more beat is not news the user needs twice.
         refetch()
@@ -319,7 +320,7 @@ class ShippedBeatsClient(
     suspend fun updateShippedBeat(edited: Beat) {
         val id = edited.id ?: throw StorageError(
             StorageErrorCode.UNKNOWN,
-            "That beat has no id, so there is no built-in row to update.",
+            Strings.get(R.string.err_no_id_update),
         )
         val meta = currentRow(id) ?: throw notInTheSet()
         val row = checkedRow(
@@ -331,14 +332,13 @@ class ShippedBeatsClient(
                 sourcePublishedId = meta.sourcePublishedId,
                 description = meta.description,
             ),
-            "That edit can't be saved — its name or its pattern is outside what " +
-                "the built-in set allows.",
+            Strings.get(R.string.err_edit_invalid),
         )
         val written = client.update(
             TABLE,
             row,
             filters = listOf("id" to "eq.$id"),
-            whileDoing = "save that for everyone",
+            whileDoing = Strings.get(R.string.doing_save_for_everyone),
         )
         if ((written as? JsonArray).isNullOrEmpty()) throw notInTheSet()
 
@@ -369,7 +369,7 @@ class ShippedBeatsClient(
     suspend fun removeShippedBeat(beat: Beat) {
         val id = beat.id ?: throw StorageError(
             StorageErrorCode.UNKNOWN,
-            "That beat has no id, so there is no built-in row to remove.",
+            Strings.get(R.string.err_no_id_remove),
         )
         val meta = currentRow(id) ?: throw notInTheSet()
 
@@ -379,7 +379,7 @@ class ShippedBeatsClient(
         val deleted = client.delete(
             TABLE,
             filters = listOf("id" to "eq.$id"),
-            whileDoing = "remove that from the built-in beats",
+            whileDoing = Strings.get(R.string.doing_remove_builtin),
         )
         if ((deleted as? JsonArray).isNullOrEmpty()) throw notInTheSet()
 
@@ -397,7 +397,7 @@ class ShippedBeatsClient(
      */
     private fun notInTheSet() = StorageError(
         StorageErrorCode.NOT_FOUND,
-        "That beat isn't in the built-in set any more, so there was nothing to update.",
+        Strings.get(R.string.err_not_in_set),
     )
 
     /**
@@ -416,7 +416,7 @@ class ShippedBeatsClient(
             filters = listOf("id" to "eq.$id"),
             limit = 1,
             requireSession = false,
-            whileDoing = "loading the built-in beats",
+            whileDoing = Strings.get(R.string.doing_load_builtin),
         )
         val row = (body as? JsonArray)?.firstOrNull() as? JsonObject ?: return null
         return ShippedRowMeta(
@@ -452,7 +452,7 @@ class ShippedBeatsClient(
             table = TABLE,
             columns = "id, ordinal",
             requireSession = false,
-            whileDoing = "loading the built-in beats",
+            whileDoing = Strings.get(R.string.doing_load_builtin),
         )
         val rows = (body as? JsonArray).orEmpty()
         // Ids are collected whether or not the rest of the row would parse: an

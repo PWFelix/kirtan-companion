@@ -14,6 +14,8 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.put
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The [BeatsProvider] backed by Supabase — the cloud twin of
@@ -64,7 +66,7 @@ class SupabaseBeatsProvider(
                 columns = "id, name, data",
                 filters = ownerFilter,
                 order = "created_at.asc",
-                whileDoing = "your beats",
+                whileDoing = Strings.get(R.string.doing_your_beats),
             )
         }
         val playlists = async {
@@ -73,7 +75,7 @@ class SupabaseBeatsProvider(
                 columns = "id, name, beat_ids",
                 filters = ownerFilter,
                 order = "created_at.asc",
-                whileDoing = "your playlists",
+                whileDoing = Strings.get(R.string.doing_your_playlists),
             )
         }
         val profile = async { activeCategoryId() }
@@ -101,7 +103,7 @@ class SupabaseBeatsProvider(
             columns = "active_category_id",
             filters = listOf("id" to "eq.$userId"),
             one = true,
-            whileDoing = "your settings",
+            whileDoing = Strings.get(R.string.doing_your_settings),
         ) as? JsonObject
         row?.get("active_category_id")?.stringContent()?.takeIf { it.isNotBlank() }
             ?: BUILTIN_CATEGORY
@@ -114,7 +116,7 @@ class SupabaseBeatsProvider(
             table = "beats",
             body = beatRow(draft),
             one = true,
-            whileDoing = "that beat",
+            whileDoing = Strings.get(R.string.doing_that_beat),
         )
         return rowToBeat(row)
     }
@@ -129,7 +131,7 @@ class SupabaseBeatsProvider(
         val rows = client.insert(
             table = "beats",
             body = buildJsonArray { drafts.forEach { add(beatRow(it)) } },
-            whileDoing = "those beats",
+            whileDoing = Strings.get(R.string.doing_those_beats),
         )
         return rowsOf(rows).map { rowToBeat(it) }
     }
@@ -148,13 +150,13 @@ class SupabaseBeatsProvider(
             },
             filters = listOf("id" to "eq.$id") + ownerFilter,
             one = true,
-            whileDoing = "that beat",
+            whileDoing = Strings.get(R.string.doing_that_beat),
         )
         return rowToBeat(row)
     }
 
     override suspend fun deleteBeat(id: String) {
-        client.delete("beats", listOf("id" to "eq.$id") + ownerFilter, "that change")
+        client.delete("beats", listOf("id" to "eq.$id") + ownerFilter, Strings.get(R.string.doing_that_change))
     }
 
     override suspend fun createCategory(draft: CategoryDraft): Category {
@@ -166,7 +168,7 @@ class SupabaseBeatsProvider(
                 put("beat_ids", beatIdsArray(draft.beatIds))
             },
             one = true,
-            whileDoing = "that playlist",
+            whileDoing = Strings.get(R.string.doing_that_playlist),
         )
         return rowToCategory(row)
     }
@@ -181,13 +183,13 @@ class SupabaseBeatsProvider(
             },
             filters = listOf("id" to "eq.$id") + ownerFilter,
             one = true,
-            whileDoing = "that playlist",
+            whileDoing = Strings.get(R.string.doing_that_playlist),
         )
         return rowToCategory(row)
     }
 
     override suspend fun deleteCategory(id: String) {
-        client.delete("playlists", listOf("id" to "eq.$id") + ownerFilter, "that change")
+        client.delete("playlists", listOf("id" to "eq.$id") + ownerFilter, Strings.get(R.string.doing_that_change))
     }
 
     /**
@@ -202,7 +204,7 @@ class SupabaseBeatsProvider(
                 put("active_category_id", id)
             },
             onConflict = "id",
-            whileDoing = "that change",
+            whileDoing = Strings.get(R.string.doing_that_change),
         )
     }
 
@@ -274,27 +276,27 @@ internal object SupabaseRows {
      * has something to look for.
      */
     fun toBeat(row: JsonElement?): Beat {
-        val obj = row as? JsonObject ?: throw unreadable("one of your beats")
-        val id = obj["id"]?.stringContent() ?: throw unreadable("one of your beats")
+        val obj = row as? JsonObject ?: throw unreadable(Strings.get(R.string.doing_one_of_your_beats))
+        val id = obj["id"]?.stringContent() ?: throw unreadable(Strings.get(R.string.doing_one_of_your_beats))
         val name = obj["name"]?.stringContent().orEmpty()
         val beat = LibraryJson.decodeBeat(obj["data"]) ?: throw StorageError(
             StorageErrorCode.UNKNOWN,
-            "One of your saved beats (\"$name\") is in a format this version of the app can't read.",
+            Strings.get(R.string.err_beat_format, name),
         )
         return beat.copy(id = id)
     }
 
     /** A `playlists` row as an app category. */
     fun toCategory(row: JsonElement?): Category {
-        val obj = row as? JsonObject ?: throw unreadable("one of your playlists")
-        val id = obj["id"]?.stringContent() ?: throw unreadable("one of your playlists")
+        val obj = row as? JsonObject ?: throw unreadable(Strings.get(R.string.doing_one_of_your_playlists))
+        val id = obj["id"]?.stringContent() ?: throw unreadable(Strings.get(R.string.doing_one_of_your_playlists))
         val beatIds = when (val element = obj["beat_ids"]) {
             // An empty progression is a legal playlist, and a NULL column (which
             // the schema's default makes impossible but a hand-run migration might)
             // reads as one rather than failing the whole load.
             null, is JsonNull -> emptyList()
             is JsonArray -> element.mapNotNull { (it as? JsonPrimitive)?.content }
-            else -> throw unreadable("one of your playlists")
+            else -> throw unreadable(Strings.get(R.string.doing_one_of_your_playlists))
         }
         return Category(
             id = id,
@@ -305,7 +307,7 @@ internal object SupabaseRows {
 
     private fun unreadable(what: String) = StorageError(
         StorageErrorCode.UNKNOWN,
-        "The server sent $what this version of the app can't read.",
+        Strings.get(R.string.err_server_unreadable_what, what),
     )
 }
 

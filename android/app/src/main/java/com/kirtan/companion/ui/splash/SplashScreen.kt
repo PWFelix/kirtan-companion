@@ -24,6 +24,7 @@ import com.kirtan.companion.data.PaletteToken
 import com.kirtan.companion.ui.Wordmark
 import com.kirtan.companion.ui.components.PrimaryButton
 import com.kirtan.companion.ui.theme.color
+import androidx.compose.ui.res.stringResource
 
 /**
  * The entry screen.
@@ -84,7 +85,7 @@ internal fun SplashScreen(
                 // The label reflects loading but never disables: the web app's
                 // rule is that the button is always pressable, because the load
                 // resolving is not a precondition for entering the app.
-                label = if (ready) "Begin" else "Begin · loading sounds…",
+                label = if (ready) stringResource(R.string.splash_begin) else stringResource(R.string.splash_loading),
                 onClick = onBegin,
                 modifier = Modifier.widthIn(max = 300.dp),
                 minHeight = 56.dp,

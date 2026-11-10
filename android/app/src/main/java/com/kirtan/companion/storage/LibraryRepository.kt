@@ -21,6 +21,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicInteger
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * Everything the user has saved, and its persistence — the port of
@@ -238,9 +240,9 @@ class LibraryRepository(
 
     /** The heading for a category, including the two virtual ones. */
     fun categoryName(categoryId: String): String = when (categoryId) {
-        BUILTIN_CATEGORY -> "Built in"
-        CUSTOM_CATEGORY -> "Your beats"
-        else -> _state.value.categories.firstOrNull { it.id == categoryId }?.name ?: "Beats"
+        BUILTIN_CATEGORY -> Strings.get(R.string.cat_builtin)
+        CUSTOM_CATEGORY -> Strings.get(R.string.cat_custom)
+        else -> _state.value.categories.firstOrNull { it.id == categoryId }?.name ?: Strings.get(R.string.tab_beats)
     }
 
     fun dismissError() {

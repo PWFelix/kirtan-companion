@@ -32,6 +32,8 @@ import kotlinx.serialization.json.put
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The one Supabase client for the whole app: its configuration, the PostgREST
@@ -163,7 +165,7 @@ class SupabaseClient private constructor(
         val callback = parseOAuthCallback(callbackUrl)
             ?: throw StorageError(
                 StorageErrorCode.UNKNOWN,
-                "That sign-in link didn't carry a code, so the sign-in couldn't be finished. Try again.",
+                Strings.get(R.string.err_signin_no_code),
             )
         val pending = sessions.readPending()
         // The pending pair is cleared whatever happens: a code is single-use, and
@@ -172,13 +174,13 @@ class SupabaseClient private constructor(
         if (pending == null) {
             throw StorageError(
                 StorageErrorCode.UNKNOWN,
-                "The sign-in took too long and expired. Try again.",
+                Strings.get(R.string.err_signin_expired),
             )
         }
         if (callback.state != null && callback.state != pending.state) {
             throw StorageError(
                 StorageErrorCode.UNKNOWN,
-                "That sign-in didn't come from this app, so it was refused.",
+                Strings.get(R.string.err_signin_foreign),
             )
         }
 
@@ -191,10 +193,10 @@ class SupabaseClient private constructor(
             query = listOf("grant_type" to "pkce"),
             body = body,
             bearer = null,
-            whileDoing = "finish signing in",
+            whileDoing = Strings.get(R.string.doing_finish_sign_in),
         ) ?: throw StorageError(
             StorageErrorCode.UNKNOWN,
-            "The server didn't return a session, so the sign-in couldn't be finished.",
+            Strings.get(R.string.err_signin_no_session),
         )
         return storeSession(token)
     }
@@ -210,7 +212,7 @@ class SupabaseClient private constructor(
             query = listOf("grant_type" to "password"),
             body = body,
             bearer = null,
-            whileDoing = "sign in",
+            whileDoing = Strings.get(R.string.doing_sign_in),
         ) ?: throw signedOutWithoutSession()
         return storeSession(token)
     }
@@ -228,7 +230,7 @@ class SupabaseClient private constructor(
             put("password", password)
             if (!name.isNullOrBlank()) put("data", buildJsonObject { put("name", name) })
         }
-        val result = auth("signup", emptyList(), body, null, "create that account") ?: return null
+        val result = auth("signup", emptyList(), body, null, Strings.get(R.string.doing_create_account)) ?: return null
         return if (result.containsKey("access_token")) storeSession(result) else null
     }
 
@@ -239,7 +241,7 @@ class SupabaseClient private constructor(
         sessions.clearQuietly()
         if (current == null) return
         try {
-            auth("logout", emptyList(), null, current.accessToken, "sign out")
+            auth("logout", emptyList(), null, current.accessToken, Strings.get(R.string.doing_sign_out))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -261,7 +263,7 @@ class SupabaseClient private constructor(
         val current = _session.value ?: sessions.read()
             ?: throw StorageError(
                 StorageErrorCode.UNAVAILABLE,
-                "You're signed out, so that couldn't be saved. Sign in and try again.",
+                Strings.get(R.string.err_signed_out),
             )
         if (!current.needsRefresh()) return current.accessToken
         val fresh = refresh(current)
@@ -277,7 +279,7 @@ class SupabaseClient private constructor(
             query = listOf("grant_type" to "refresh_token"),
             body = body,
             bearer = null,
-            whileDoing = "refresh your sign-in",
+            whileDoing = Strings.get(R.string.doing_refresh_sign_in),
         ) ?: throw signedOutWithoutSession()
         return sessionOf(token, fallback = session)
     }
@@ -292,7 +294,7 @@ class SupabaseClient private constructor(
 
     private fun signedOutWithoutSession() = StorageError(
         StorageErrorCode.UNAVAILABLE,
-        "That didn't return a session, so you're still signed out. Try again.",
+        Strings.get(R.string.err_still_signed_out),
     )
 
     // ── PostgREST ──────────────────────────────────────────────────────────
@@ -455,7 +457,7 @@ class SupabaseClient private constructor(
                 // the server, which is a different fact from "the server said no".
                 throw StorageError(
                     StorageErrorCode.NETWORK,
-                    "Couldn't reach the server, so $whileDoing didn't go through. Check your connection and try again.",
+                    Strings.get(R.string.err_offline_what, whileDoing),
                     e,
                 )
             }
@@ -500,7 +502,7 @@ class SupabaseClient private constructor(
         } catch (e: Exception) {
             throw StorageError(
                 StorageErrorCode.NETWORK,
-                "Couldn't reach the server, so that didn't go through. Check your connection and try again.",
+                Strings.get(R.string.err_offline),
                 e,
             )
         }
@@ -516,7 +518,7 @@ class SupabaseClient private constructor(
     private fun parseOrThrow(text: String, whileDoing: String): JsonElement =
         text.parseJsonOrNull() ?: throw StorageError(
             StorageErrorCode.UNKNOWN,
-            "The server sent something this app couldn't read while trying to $whileDoing.",
+            Strings.get(R.string.err_server_unreadable_doing, whileDoing),
         )
 
     /**
@@ -532,7 +534,7 @@ class SupabaseClient private constructor(
             ?: fallback?.userId
             ?: throw StorageError(
                 StorageErrorCode.UNKNOWN,
-                "The server didn't say who you are, so that sign-in couldn't be completed.",
+                Strings.get(R.string.err_signin_no_user),
             )
         val accessToken = token["access_token"]?.stringContent() ?: fallback?.accessToken
         val refreshToken = token["refresh_token"]?.stringContent() ?: fallback?.refreshToken
@@ -719,7 +721,7 @@ internal class SessionStore(
     }
 
     suspend fun writePending(verifier: String, state: String) {
-        write("the sign-in") { prefs ->
+        write(Strings.get(R.string.doing_the_sign_in)) { prefs ->
             prefs[Keys.AUTH_PENDING_VERIFIER] = verifier
             prefs[Keys.AUTH_PENDING_STATE] = state
         }
@@ -727,7 +729,7 @@ internal class SessionStore(
 
     suspend fun clearPending() {
         try {
-            write("the sign-in") { prefs ->
+            write(Strings.get(R.string.doing_the_sign_in)) { prefs ->
                 prefs.remove(Keys.AUTH_PENDING_VERIFIER)
                 prefs.remove(Keys.AUTH_PENDING_STATE)
             }
@@ -751,7 +753,7 @@ internal class SessionStore(
         } catch (e: Exception) {
             throw StorageError(
                 StorageErrorCode.UNAVAILABLE,
-                "This device wouldn't let the app keep you signed in, so $whileDoing couldn't be completed.",
+                Strings.get(R.string.err_keep_signed_in, whileDoing),
                 e,
             )
         }
@@ -903,19 +905,19 @@ internal fun restFailure(status: Int, body: JsonElement?, whileDoing: String): S
     return when {
         code == "23505" -> StorageError(
             StorageErrorCode.CONFLICT,
-            "That already exists.",
+            Strings.get(R.string.err_exists),
         )
         code == "PGRST116" -> StorageError(
             StorageErrorCode.NOT_FOUND,
-            "$whileDoing no longer exists.",
+            Strings.get(R.string.err_gone),
         )
         code == "42501" || status == 401 || status == 403 -> StorageError(
             StorageErrorCode.UNAVAILABLE,
-            "You're signed out, so that couldn't be saved. Sign in and try again.",
+            Strings.get(R.string.err_signed_out),
         )
         else -> StorageError(
             StorageErrorCode.UNKNOWN,
-            "Something went wrong with $whileDoing. $detail".trim(),
+            Strings.get(R.string.err_went_wrong_with, whileDoing, detail).trim(),
         )
     }
 }
@@ -933,11 +935,11 @@ internal fun authFailure(status: Int, body: JsonElement?, whileDoing: String): S
         .orEmpty()
     val message = when {
         status == 400 && "invalid" in description.lowercase() ->
-            "That email and password didn't match. Try again."
+            Strings.get(R.string.err_bad_credentials)
         status == 401 || status == 403 ->
-            "You're signed out, so that couldn't be saved. Sign in and try again."
-        description.isNotBlank() -> "Couldn't $whileDoing. $description"
-        else -> "Couldn't $whileDoing. The server refused the request."
+            Strings.get(R.string.err_signed_out)
+        description.isNotBlank() -> Strings.get(R.string.err_couldnt_detail, whileDoing, description)
+        else -> Strings.get(R.string.err_couldnt_refused, whileDoing)
     }
     return StorageError(
         if (status == 401 || status == 403) StorageErrorCode.UNAVAILABLE else StorageErrorCode.UNKNOWN,

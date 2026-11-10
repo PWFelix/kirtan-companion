@@ -36,6 +36,9 @@ import com.kirtan.companion.ui.components.SectionLabel
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.kirtan.companion.R
 
 /**
  * The account section of Settings: sign in, sign out, and nothing else.
@@ -63,13 +66,12 @@ internal fun AccountSection(container: AppContainer) {
     val scope = rememberCoroutineScope()
 
     Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
-        SectionLabel("Account")
+        SectionLabel(stringResource(R.string.account_title))
 
         val supabase = container.supabase
         if (supabase == null) {
             Text(
-                text = "Cloud sync isn't configured in this build, so there is nothing " +
-                    "to sign in to. Everything you make is stored on this device.",
+                text = stringResource(R.string.account_not_configured),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 lineHeight = 19.sp,
@@ -107,25 +109,25 @@ internal fun AccountSection(container: AppContainer) {
         val current = session
         if (current != null) {
             Text(
-                text = current.email ?: current.displayName ?: "Signed in",
+                text = current.email ?: current.displayName ?: stringResource(R.string.account_signed_in),
                 color = PaletteToken.SYAHI.color,
                 fontSize = 15.2.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Your beats and lists sync to this account.",
+                text = stringResource(R.string.account_syncs),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
             )
             SecondaryButton(
-                label = "Sign out",
+                label = stringResource(R.string.account_sign_out),
                 enabled = !busy,
                 minHeight = 46.dp,
                 onClick = { run { supabase.signOut() } },
             )
         } else {
             PrimaryButton(
-                label = if (busy) "Signing in…" else "Sign in with Google",
+                label = if (busy) stringResource(R.string.account_signing_in) else stringResource(R.string.account_google),
                 enabled = !busy,
                 minHeight = 50.dp,
                 onClick = {
@@ -141,7 +143,7 @@ internal fun AccountSection(container: AppContainer) {
             )
 
             SecondaryButton(
-                label = if (emailFormOpen) "Hide email sign-in" else "Use email instead",
+                label = if (emailFormOpen) stringResource(R.string.account_hide_email) else stringResource(R.string.account_use_email),
                 minHeight = 44.dp,
                 onClick = { emailFormOpen = !emailFormOpen },
             )
@@ -151,7 +153,7 @@ internal fun AccountSection(container: AppContainer) {
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        placeholder = { Text("Email", fontSize = 13.4.sp) },
+                        placeholder = { Text(stringResource(R.string.account_email), fontSize = 13.4.sp) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         modifier = Modifier.fillMaxWidth(),
@@ -160,7 +162,7 @@ internal fun AccountSection(container: AppContainer) {
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        placeholder = { Text("Password", fontSize = 13.4.sp) },
+                        placeholder = { Text(stringResource(R.string.account_password), fontSize = 13.4.sp) },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
@@ -168,7 +170,7 @@ internal fun AccountSection(container: AppContainer) {
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
                         SecondaryButton(
-                            label = "Sign in",
+                            label = stringResource(R.string.account_sign_in),
                             enabled = !busy && email.isNotBlank() && password.isNotEmpty(),
                             modifier = Modifier.weight(1f),
                             minHeight = 44.dp,
@@ -177,7 +179,7 @@ internal fun AccountSection(container: AppContainer) {
                             },
                         )
                         SecondaryButton(
-                            label = "Create account",
+                            label = stringResource(R.string.account_create),
                             enabled = !busy && email.isNotBlank() && password.isNotEmpty(),
                             modifier = Modifier.weight(1f),
                             minHeight = 44.dp,
@@ -239,38 +241,38 @@ internal fun MigrationPromptSheet(container: AppContainer) {
     val scope = rememberCoroutineScope()
 
     KcSheet(
-        title = "Move your beats to your account?",
+        title = stringResource(R.string.migrate_title),
         onDismiss = { container.pendingMigration.value = null },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
             Text(
-                text = "This device holds ${local.beats.size} " +
-                    (if (local.beats.size == 1) "beat" else "beats") +
+                text = pluralStringResource(R.plurals.migrate_beats, local.beats.size, local.beats.size) +
                     (if (local.categories.isEmpty()) "" else
-                        " and ${local.categories.size} " +
-                            (if (local.categories.size == 1) "list" else "lists")) +
-                    " that are not in your account yet.",
+                        pluralStringResource(R.plurals.migrate_lists, local.categories.size, local.categories.size)) +
+                    pluralStringResource(
+                        R.plurals.migrate_tail,
+                        local.beats.size + local.categories.size,
+                    ),
                 color = PaletteToken.SYAHI.color,
                 fontSize = 15.2.sp,
                 lineHeight = 21.sp,
             )
             Text(
-                text = "Moving copies them up; the copies on this device stay until " +
-                    "you delete them. Leaving them here means this account starts empty.",
+                text = stringResource(R.string.migrate_body),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
                 SecondaryButton(
-                    label = "Leave on device",
+                    label = stringResource(R.string.migrate_leave),
                     enabled = !busy,
                     modifier = Modifier.weight(1f),
                     minHeight = 46.dp,
                     onClick = { container.pendingMigration.value = null },
                 )
                 PrimaryButton(
-                    label = if (busy) "Moving…" else "Move them",
+                    label = if (busy) stringResource(R.string.migrate_moving) else stringResource(R.string.migrate_move),
                     enabled = !busy,
                     modifier = Modifier.weight(1f),
                     minHeight = 46.dp,

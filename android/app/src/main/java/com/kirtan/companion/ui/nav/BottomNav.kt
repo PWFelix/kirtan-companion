@@ -42,14 +42,17 @@ import com.kirtan.companion.data.PaletteToken
 import com.kirtan.companion.ui.icons.KcIcons
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import com.kirtan.companion.R
 
 /** The five destinations, in the fixed order the web app's tab array uses. */
-internal enum class Tab(val icon: ImageVector, val label: String) {
-    HOME(KcIcons.Home, "Home"),
-    BEATS(KcIcons.Beats, "Beats"),
-    EDITOR(KcIcons.Pencil, "Editor"),
-    LEARN(KcIcons.Cap, "Learn"),
-    SETTINGS(KcIcons.Cog, "Settings"),
+internal enum class Tab(val icon: ImageVector, @StringRes val label: Int) {
+    HOME(KcIcons.Home, R.string.tab_home),
+    BEATS(KcIcons.Beats, R.string.tab_beats),
+    EDITOR(KcIcons.Pencil, R.string.tab_editor),
+    LEARN(KcIcons.Cap, R.string.tab_learn),
+    SETTINGS(KcIcons.Cog, R.string.tab_settings),
 }
 
 /** index.css's nav easing: `cubic-bezier(0.22, 1, 0.36, 1)`, decelerating. */
@@ -182,7 +185,7 @@ private fun NavCell(
         )
         Spacer(Modifier.height(dimens.navLabelGap))
         Text(
-            text = tab.label,
+            text = stringResource(tab.label),
             color = ink,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,

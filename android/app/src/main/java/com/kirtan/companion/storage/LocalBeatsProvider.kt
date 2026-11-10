@@ -9,6 +9,8 @@ import com.kirtan.companion.data.model.Library
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import java.io.IOException
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The [BeatsProvider] backed by this device's DataStore.
@@ -85,7 +87,7 @@ class LocalBeatsProvider(
         // again after an IOException, and minting inside would mean two ids for
         // one beat with no way to know which was stored.
         val beat = draft.copy(id = newId())
-        mutate("that beat") { prefs, out ->
+        mutate(Strings.get(R.string.doing_that_beat)) { prefs, out ->
             out[Keys.BEATS] = LibraryJson.encodeBeats(beatsIn(prefs) + beat)
         }
         return beat
@@ -94,7 +96,7 @@ class LocalBeatsProvider(
     // One write for the whole batch — see the note on BeatsProvider.createBeats.
     override suspend fun createBeats(drafts: List<Beat>): List<Beat> {
         val beats = drafts.map { it.copy(id = newId()) }
-        mutate("those beats") { prefs, out ->
+        mutate(Strings.get(R.string.doing_those_beats)) { prefs, out ->
             out[Keys.BEATS] = LibraryJson.encodeBeats(beatsIn(prefs) + beats)
         }
         return beats
@@ -102,10 +104,10 @@ class LocalBeatsProvider(
 
     override suspend fun updateBeat(id: String, patch: Beat): Beat {
         val beat = patch.copy(id = id)
-        mutate("that beat") { prefs, out ->
+        mutate(Strings.get(R.string.doing_that_beat)) { prefs, out ->
             val beats = beatsIn(prefs)
             val index = beats.indexOfFirst { it.id == id }
-            if (index == -1) throw notFound("That beat no longer exists.")
+            if (index == -1) throw notFound(Strings.get(R.string.err_beat_gone))
             out[Keys.BEATS] =
                 LibraryJson.encodeBeats(beats.toMutableList().also { it[index] = beat })
         }
@@ -113,24 +115,24 @@ class LocalBeatsProvider(
     }
 
     override suspend fun deleteBeat(id: String) {
-        mutate("that change") { prefs, out ->
+        mutate(Strings.get(R.string.doing_that_change)) { prefs, out ->
             out[Keys.BEATS] = LibraryJson.encodeBeats(beatsIn(prefs).filterNot { it.id == id })
         }
     }
 
     override suspend fun createCategory(draft: CategoryDraft): Category {
         val category = Category(id = newId(), name = draft.name, beatIds = draft.beatIds)
-        mutate("that list") { prefs, out ->
+        mutate(Strings.get(R.string.doing_that_list)) { prefs, out ->
             out[Keys.CATEGORIES] = LibraryJson.encodeCategories(categoriesIn(prefs) + category)
         }
         return category
     }
 
     override suspend fun updateCategory(id: String, patch: CategoryPatch): Category =
-        mutate("that list") { prefs, out ->
+        mutate(Strings.get(R.string.doing_that_list)) { prefs, out ->
             val categories = categoriesIn(prefs)
             val index = categories.indexOfFirst { it.id == id }
-            if (index == -1) throw notFound("That list no longer exists.")
+            if (index == -1) throw notFound(Strings.get(R.string.err_list_gone))
             val current = categories[index]
             // A null field in the patch means "leave it alone" — see
             // CategoryPatch for why the two halves are patched separately.
@@ -144,14 +146,14 @@ class LocalBeatsProvider(
         }
 
     override suspend fun deleteCategory(id: String) {
-        mutate("that change") { prefs, out ->
+        mutate(Strings.get(R.string.doing_that_change)) { prefs, out ->
             out[Keys.CATEGORIES] =
                 LibraryJson.encodeCategories(categoriesIn(prefs).filterNot { it.id == id })
         }
     }
 
     override suspend fun setActiveCategory(id: String) {
-        mutate("that change") { _, out -> out[Keys.ACTIVE_CATEGORY] = id }
+        mutate(Strings.get(R.string.doing_that_change)) { _, out -> out[Keys.ACTIVE_CATEGORY] = id }
     }
 
     // ── Reading ────────────────────────────────────────────────────────────
@@ -161,9 +163,9 @@ class LocalBeatsProvider(
     } catch (e: CancellationException) {
         throw e
     } catch (e: IOException) {
-        throw classify(e, "your beats")
+        throw classify(e, Strings.get(R.string.doing_your_beats))
     } catch (e: Exception) {
-        throw unknown(e, "your beats")
+        throw unknown(e, Strings.get(R.string.doing_your_beats))
     }
 
     /**
@@ -240,13 +242,13 @@ class LocalBeatsProvider(
         return if (full) {
             StorageError(
                 StorageErrorCode.QUOTA,
-                "There's no room left on this device, so that couldn't be saved. Freeing up some storage will fix it.",
+                Strings.get(R.string.err_device_full),
                 error,
             )
         } else {
             StorageError(
                 StorageErrorCode.UNAVAILABLE,
-                "This device wouldn't let the app write its storage, so $whileDoing couldn't be saved.",
+                Strings.get(R.string.err_device_write_blocked, whileDoing),
                 error,
             )
         }
@@ -254,7 +256,7 @@ class LocalBeatsProvider(
 
     private fun corrupt(key: String): StorageError = StorageError(
         StorageErrorCode.UNAVAILABLE,
-        "Your saved beats couldn't be read — the file holding them is damaged. Nothing has been deleted; try again, and if it keeps happening the library may need to be reset.",
+        Strings.get(R.string.err_library_damaged),
     ).also { log.warn("[storage] $key was unreadable and has NOT been overwritten", it) }
 
     private fun notFound(message: String): StorageError =
@@ -262,7 +264,7 @@ class LocalBeatsProvider(
 
     private fun unknown(cause: Throwable?, whileDoing: String): StorageError = StorageError(
         StorageErrorCode.UNKNOWN,
-        "Something went wrong saving $whileDoing. It may not have been kept.",
+        Strings.get(R.string.err_saving_what, whileDoing),
         cause,
     ).also { if (cause != null) log.warn("[storage] write failed while saving $whileDoing", cause) }
 }

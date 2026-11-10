@@ -71,6 +71,10 @@ import com.kirtan.companion.ui.strip.BeatStrip
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import com.kirtan.companion.ui.transport.TransportViewModel
+import androidx.compose.ui.res.stringResource
+import com.kirtan.companion.R
+import androidx.compose.ui.res.pluralStringResource
+import com.kirtan.companion.ui.BeatText
 
 /** Which of the home screen's three sheets is open, if any. */
 private enum class HomeSheet { PICKER, MIXER, TEMPO }
@@ -162,7 +166,7 @@ internal fun HomeScreen(
 
             if (beat == null) {
                 Text(
-                    text = "Loading beats…",
+                    text = stringResource(R.string.home_loading_beats),
                     color = PaletteToken.SYAHI_SOFT.color,
                     fontSize = 15.2.sp,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
@@ -211,7 +215,7 @@ internal fun HomeScreen(
 
             if (state.outputFailed) {
                 Text(
-                    text = "Could not open the audio output. Check that another app is not holding it.",
+                    text = stringResource(R.string.home_audio_failed),
                     color = PaletteToken.DANGER.color,
                     fontSize = 13.4.sp,
                 )
@@ -222,7 +226,7 @@ internal fun HomeScreen(
         // require scrolling to reach.
         if (beat != null) {
             PrimaryButton(
-                label = if (state.playing) "Pause" else "Play",
+                label = if (state.playing) stringResource(R.string.common_pause) else stringResource(R.string.common_play),
                 icon = if (state.playing) KcIcons.Pause else KcIcons.Play,
                 enabled = state.ready,
                 onClick = { transport.togglePlay(beat) },
@@ -285,7 +289,7 @@ private fun BeatSwitcherRow(
     ) {
         HairlineIconButton(
             icon = KcIcons.Back,
-            contentDescription = "Previous beat",
+            contentDescription = stringResource(R.string.common_prev_beat),
             onClick = onPrevious,
         )
 
@@ -319,7 +323,7 @@ private fun BeatSwitcherRow(
                 )
             }
             Text(
-                text = "${beat.note} · ${beat.steps} cells",
+                text = "${BeatText.note(beat.note)} · " + pluralStringResource(R.plurals.beat_cells, beat.steps, beat.steps),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 fontWeight = FontWeight.Medium,
@@ -330,12 +334,12 @@ private fun BeatSwitcherRow(
 
         HairlineIconButton(
             icon = KcIcons.ChevronRight,
-            contentDescription = "Next beat",
+            contentDescription = stringResource(R.string.common_next_beat),
             onClick = onNext,
         )
         HairlineIconButton(
             icon = KcIcons.Pencil,
-            contentDescription = if (beat.isBuiltIn) "Customize this beat" else "Edit this beat",
+            contentDescription = if (beat.isBuiltIn) stringResource(R.string.home_customize_beat) else stringResource(R.string.home_edit_beat),
             onClick = onEdit,
         )
     }
@@ -363,7 +367,7 @@ private fun TransportControls(
         ) {
             HairlineIconButton(
                 icon = KcIcons.Back,
-                contentDescription = "Slower",
+                contentDescription = stringResource(R.string.common_slower),
                 onClick = { onNudge(-1) },
                 enabled = bpm > MIN_BPM,
                 size = 48.dp,
@@ -396,7 +400,7 @@ private fun TransportControls(
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        text = "BPM",
+                        text = stringResource(R.string.tempo_bpm),
                         color = PaletteToken.SYAHI_SOFT.color,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -409,7 +413,7 @@ private fun TransportControls(
 
             HairlineIconButton(
                 icon = KcIcons.ChevronRight,
-                contentDescription = "Faster",
+                contentDescription = stringResource(R.string.common_faster),
                 onClick = { onNudge(1) },
                 enabled = bpm < MAX_BPM,
                 size = 48.dp,
@@ -431,19 +435,19 @@ private fun TransportControls(
             )
             HairlineIconButton(
                 icon = if (tempoLocked) KcIcons.LockClosed else KcIcons.LockOpen,
-                contentDescription = if (tempoLocked) "Unlock tempo" else "Lock tempo",
+                contentDescription = if (tempoLocked) stringResource(R.string.tempo_unlock) else stringResource(R.string.tempo_lock),
                 onClick = onToggleLock,
                 filled = tempoLocked,
             )
             SecondaryButton(
-                label = "Tap",
+                label = stringResource(R.string.tempo_tap),
                 onClick = onTapTempo,
                 modifier = Modifier.width(84.dp),
                 minHeight = 44.dp,
             )
         }
 
-        SecondaryButton(label = "Mixer", icon = KcIcons.Mixer, onClick = onOpenMixer)
+        SecondaryButton(label = stringResource(R.string.mixer_title), icon = KcIcons.Mixer, onClick = onOpenMixer)
     }
 }
 
@@ -461,9 +465,9 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
     val settings = state.settings
     val dimens = KirtanTheme.dimens
 
-    KcSheet(title = "Mixer", onDismiss = onDismiss) {
+    KcSheet(title = stringResource(R.string.mixer_title), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
-            SectionLabel("Master")
+            SectionLabel(stringResource(R.string.mixer_master))
             KcSlider(
                 value = settings.masterVolume,
                 onValueChange = { transport.changeVolume(it) },
@@ -480,14 +484,14 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
         // EXPERIMENT: human timing and loudness variation (engine/Humanizer.kt).
         // Fixed levels rather than a slider so it's easy to A/B by ear.
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
-            SectionLabel("Feel")
+            SectionLabel(stringResource(R.string.feel_title))
             // Five segments on a 360dp phone: tight gaps and side padding, or
             // "Human" and "Loose" ellipsize.
             Row(horizontalArrangement = Arrangement.spacedBy(dimens.space1)) {
                 for (feel in Feel.entries) {
                     if (feel == settings.feel) {
                         PrimaryButton(
-                            label = feel.label,
+                            label = feelLabel(feel),
                             onClick = {},
                             modifier = Modifier.weight(1f),
                             minHeight = 44.dp,
@@ -496,7 +500,7 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
                         )
                     } else {
                         SecondaryButton(
-                            label = feel.label,
+                            label = feelLabel(feel),
                             onClick = { transport.setFeel(feel) },
                             modifier = Modifier.weight(1f),
                             minHeight = 44.dp,
@@ -507,11 +511,9 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
             }
             Text(
                 text = if (settings.feel == Feel.DRAG) {
-                    "Laid back, the Bengali way: the drum sits just behind the beat, " +
-                        "least on sam, so the \"1\" stays solid for singing."
+                    stringResource(R.string.feel_drag_hint)
                 } else {
-                    "Small changes in timing and loudness, so the drum sounds played " +
-                        "rather than programmed."
+                    stringResource(R.string.feel_hint)
                 },
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
@@ -545,9 +547,9 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
                     HairlineIconButton(
                         icon = if (settings.isMuted(lane)) KcIcons.SpeakerMuted else KcIcons.Speaker,
                         contentDescription = if (settings.isMuted(lane)) {
-                            "Unmute ${lane.label}"
+                            stringResource(R.string.mixer_unmute, lane.label)
                         } else {
-                            "Mute ${lane.label}"
+                            stringResource(R.string.mixer_mute, lane.label)
                         },
                         onClick = { transport.toggleMute(lane) },
                         size = 40.dp,
@@ -580,7 +582,7 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
         }
 
         Text(
-            text = "100% is balanced for phone speakers — the bass end is already boosted.",
+            text = stringResource(R.string.mixer_balanced_hint),
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 12.sp,
         )
@@ -609,7 +611,7 @@ private fun LaneTonePanels(
     ) {
         PanelToggle(
             icon = KcIcons.Eq,
-            label = "Tone",
+            label = stringResource(R.string.mixer_tone),
             open = eqOpen,
             accent = accent,
             onClick = onToggleEq,
@@ -617,7 +619,7 @@ private fun LaneTonePanels(
         )
         PanelToggle(
             icon = KcIcons.Tune,
-            label = "Tune",
+            label = stringResource(R.string.mixer_tune),
             open = tuneOpen,
             accent = accent,
             onClick = onToggleTune,
@@ -748,12 +750,12 @@ private fun TempoSheet(
     onDismiss: () -> Unit,
 ) {
     KcSheet(
-        title = "Tempo",
+        title = stringResource(R.string.tempo_title),
         onDismiss = onDismiss,
         headerAction = {
             HairlineIconButton(
                 icon = KcIcons.Check,
-                contentDescription = "Set tempo",
+                contentDescription = stringResource(R.string.tempo_set),
                 onClick = onCommit,
                 filled = true,
                 tint = PaletteToken.ON_CLAY.color,
@@ -796,7 +798,7 @@ private fun TempoSheet(
             )
 
             Text(
-                text = "BPM",
+                text = stringResource(R.string.tempo_bpm),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -837,7 +839,7 @@ private fun BeatPickerSheet(
         ) + libraryState.categories.map { it.id }
     }
 
-    KcSheet(title = "Choose a beat", onDismiss = onDismiss) {
+    KcSheet(title = stringResource(R.string.home_choose_beat), onDismiss = onDismiss) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space2),
@@ -854,7 +856,7 @@ private fun BeatPickerSheet(
         val beats = remember(tab, libraryState) { library.categoryBeats(tab) }
         if (beats.isEmpty()) {
             Text(
-                text = "This category is empty — add beats to it on the Beats page.",
+                text = stringResource(R.string.home_category_empty),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 modifier = Modifier.padding(vertical = KirtanTheme.dimens.space4),
@@ -940,7 +942,7 @@ private fun PickRow(beat: Beat, selected: Boolean, onClick: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = beat.note,
+                text = BeatText.note(beat.note),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = dimens.space2),
@@ -950,3 +952,15 @@ private fun PickRow(beat: Beat, selected: Boolean, onClick: () -> Unit) {
         BeatStrip(beat = beat, mini = true)
     }
 }
+
+/** The feel's name on its segment; the engine's enum carries only an English debug label. */
+@Composable
+internal fun feelLabel(feel: Feel): String = stringResource(
+    when (feel) {
+        Feel.OFF -> R.string.feel_off
+        Feel.TIGHT -> R.string.feel_tight
+        Feel.HUMAN -> R.string.feel_human
+        Feel.LOOSE -> R.string.feel_loose
+        Feel.DRAG -> R.string.feel_drag
+    },
+)

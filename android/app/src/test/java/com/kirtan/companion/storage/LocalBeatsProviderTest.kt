@@ -18,6 +18,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import com.kirtan.companion.EnglishStrings
 
 /**
  * The on-device provider, against a REAL DataStore over a real file.
@@ -30,6 +31,9 @@ import java.io.File
  * next write instead of replacing the user's library with an empty one.
  */
 class LocalBeatsProviderTest {
+    // Storage and editor text comes from values/strings.xml; read it as English.
+    init { EnglishStrings.install() }
+
 
     @get:Rule
     val folder = TemporaryFolder()

@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The library, as the screens see it.
@@ -219,7 +221,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         if (client == null) {
             onDone(
                 null,
-                "This build has no server configured, so the built-in beats can't be edited.",
+                Strings.get(R.string.maint_no_server),
             )
             return
         }
@@ -244,7 +246,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         if (client == null) {
             onDone(
                 false,
-                "This build has no server configured, so the built-in beats can't be edited.",
+                Strings.get(R.string.maint_no_server),
             )
             return
         }

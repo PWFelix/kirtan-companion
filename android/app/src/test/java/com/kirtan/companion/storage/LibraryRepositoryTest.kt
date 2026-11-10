@@ -20,6 +20,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.kirtan.companion.EnglishStrings
 
 /**
  * The layer above the providers — `useBeatLibrary.js` as a class.
@@ -40,6 +41,9 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryRepositoryTest {
+    // Storage and editor text comes from values/strings.xml; read it as English.
+    init { EnglishStrings.install() }
+
 
     /** Stand-ins for the compiled-in beats: two, with names worth colliding with. */
     private val shipped = listOf(

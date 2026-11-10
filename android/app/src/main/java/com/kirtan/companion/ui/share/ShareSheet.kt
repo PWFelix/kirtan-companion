@@ -44,6 +44,10 @@ import com.kirtan.companion.ui.icons.KcIcons
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
+import androidx.compose.ui.res.pluralStringResource
 
 /** What is being shared out: one beat, or a whole progression. */
 internal sealed interface ShareTarget {
@@ -119,13 +123,13 @@ internal fun ShareSheet(
         copied = label
     }
 
-    KcSheet(title = "Share ${target.title}", onDismiss = onDismiss) {
+    KcSheet(title = stringResource(R.string.share_title, target.title), onDismiss = onDismiss) {
         Text(
             text = when (target) {
                 is ShareTarget.BeatTarget ->
-                    "The whole beat travels inside the link. Nothing is uploaded."
+                    stringResource(R.string.share_beat_note)
                 is ShareTarget.CategoryTarget ->
-                    "All ${target.beats.size} beats in this list travel inside the link. Nothing is uploaded."
+                    pluralStringResource(R.plurals.share_list_note, target.beats.size, target.beats.size)
             },
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 13.4.sp,
@@ -134,9 +138,7 @@ internal fun ShareSheet(
 
         if (!ShareLink.pointsAtWeb) {
             Text(
-                text = "No web origin is configured, so this link opens the Android app " +
-                    "rather than the site. Set SHARE_WEB_BASE at build time to share a link " +
-                    "anyone can open in a browser.",
+                text = stringResource(R.string.share_no_web_base),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
@@ -164,21 +166,21 @@ internal fun ShareSheet(
             horizontalArrangement = Arrangement.spacedBy(dimens.space2),
         ) {
             SecondaryButton(
-                label = "Copy link",
-                onClick = { copy(link, "Link copied") },
+                label = stringResource(R.string.share_copy_link),
+                onClick = { copy(link, Strings.get(R.string.share_link_copied)) },
                 modifier = Modifier.weight(1f),
                 minHeight = 44.dp,
             )
             SecondaryButton(
-                label = "Copy code",
-                onClick = { copy(code, "Code copied") },
+                label = stringResource(R.string.share_copy_code),
+                onClick = { copy(code, Strings.get(R.string.share_code_copied)) },
                 modifier = Modifier.weight(1f),
                 minHeight = 44.dp,
             )
         }
 
         PrimaryButton(
-            label = "Share…",
+            label = stringResource(R.string.share_more),
             icon = KcIcons.Share,
             onClick = { nativeShare(context, target.title, link) },
         )
@@ -194,7 +196,7 @@ internal fun ShareSheet(
         // Only a single beat can replace a baked-in entry; a list has no id.
         if (target is ShareTarget.BeatTarget) {
             SecondaryButton(
-                label = "Export source…",
+                label = stringResource(R.string.share_export_source),
                 onClick = { exportOpen = true },
                 minHeight = 44.dp,
             )
@@ -219,7 +221,7 @@ private fun nativeShare(context: Context, subject: String, link: String) {
         putExtra(Intent.EXTRA_SUBJECT, subject)
         putExtra(Intent.EXTRA_TEXT, link)
     }
-    val chooser = Intent.createChooser(send, "Share beat").apply {
+    val chooser = Intent.createChooser(send, Strings.get(R.string.share_beat)).apply {
         // Started from a Compose context that may not be an Activity.
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
@@ -255,10 +257,9 @@ private fun ExportSheet(beat: Beat, onDismiss: () -> Unit) {
         }
     }
 
-    KcSheet(title = "Export ${beat.name}", onDismiss = onDismiss) {
+    KcSheet(title = stringResource(R.string.share_export_title, beat.name), onDismiss = onDismiss) {
         Text(
-            text = "Source for replacing the baked-in beat. Paste into BOTH files so the " +
-                "two platforms stay identical — see the note in BeatSourceExport.",
+            text = stringResource(R.string.share_export_body),
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 12.sp,
             lineHeight = 17.sp,
@@ -288,7 +289,7 @@ private fun SourceBlock(label: String, source: String, onCopy: () -> Unit) {
             SectionLabel(label, modifier = Modifier.weight(1f))
             HairlineIconButton(
                 icon = KcIcons.Share,
-                contentDescription = "Copy $label",
+                contentDescription = stringResource(R.string.share_copy_named, label),
                 onClick = onCopy,
                 size = 36.dp,
             )

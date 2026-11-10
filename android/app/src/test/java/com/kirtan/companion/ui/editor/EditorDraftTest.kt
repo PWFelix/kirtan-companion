@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.kirtan.companion.EnglishStrings
 
 /**
  * The editor's draft model, tested without a compositor.
@@ -17,6 +18,9 @@ import org.junit.Test
  * what gets persisted. The Compose file owns only presentation.
  */
 class EditorDraftTest {
+    // Storage and editor text comes from values/strings.xml; read it as English.
+    init { EnglishStrings.install() }
+
 
     // ── Seeding ────────────────────────────────────────────────────────────
 

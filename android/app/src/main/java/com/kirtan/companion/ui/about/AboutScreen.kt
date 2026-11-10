@@ -34,6 +34,7 @@ import com.kirtan.companion.ui.components.HairlineIconButton
 import com.kirtan.companion.ui.icons.KcIcons
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
+import androidx.compose.ui.res.stringResource
 
 /**
  * About: the name, the splash's mridanga, and the dedication.
@@ -64,7 +65,7 @@ internal fun AboutScreen(onBack: () -> Unit) {
             .verticalScroll(rememberScrollState()),
     ) {
         Spacer(Modifier.height(dimens.space4))
-        HairlineIconButton(icon = KcIcons.Back, contentDescription = "Back", onClick = onBack)
+        HairlineIconButton(icon = KcIcons.Back, contentDescription = stringResource(R.string.common_back), onClick = onBack)
 
         Box(
             modifier = Modifier.fillMaxWidth().height(380.dp),
@@ -87,8 +88,7 @@ internal fun AboutScreen(onBack: () -> Unit) {
         ) {
             // The name's gloss, under the lockup it explains.
             Text(
-                text = "Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, " +
-                    "courageous or heroic in relation to the mṛdaṅga.",
+                text = stringResource(R.string.about_meaning),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 14.sp,
                 lineHeight = 21.sp,
@@ -103,13 +103,13 @@ internal fun AboutScreen(onBack: () -> Unit) {
                 textAlign = TextAlign.Center,
             )
             Text(
-                text = "a World Sankirtan Party production",
+                text = stringResource(R.string.about_production),
                 color = PaletteToken.SYAHI.color,
                 fontSize = 15.sp,
                 textAlign = TextAlign.Center,
             )
             Text(
-                text = "All glories to Śrīla Prabhupāda!",
+                text = stringResource(R.string.about_glories),
                 color = PaletteToken.SYAHI.color,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -117,7 +117,7 @@ internal fun AboutScreen(onBack: () -> Unit) {
             )
             version?.let {
                 Text(
-                    text = "Version $it",
+                    text = stringResource(R.string.about_version, it),
                     color = KirtanTheme.colors.faint,
                     fontSize = 12.sp,
                 )

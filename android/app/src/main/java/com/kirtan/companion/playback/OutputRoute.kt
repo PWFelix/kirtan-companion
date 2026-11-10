@@ -11,6 +11,8 @@ import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * Where the drum is coming out: the phone's speaker, wired headphones, or a
@@ -29,7 +31,8 @@ data class OutputRoute(
     val bluetooth: Boolean,
 ) {
     companion object {
-        val SPEAKER = OutputRoute("speaker", "Phone speaker", bluetooth = false)
+        // A getter, not a constant: the label is resolved in the current language.
+        val SPEAKER get() = OutputRoute("speaker", Strings.get(R.string.route_speaker), bluetooth = false)
     }
 }
 
@@ -98,14 +101,14 @@ class OutputRouteWatcher(context: Context) {
         return when {
             isBluetooth(device.type) -> OutputRoute(
                 key = "bt:${name.ifEmpty { "unknown" }}",
-                label = name.ifEmpty { "Bluetooth speaker" },
+                label = name.ifEmpty { Strings.get(R.string.route_bluetooth) },
                 bluetooth = true,
             )
-            isWired(device.type) -> OutputRoute("wired", "Wired headphones", bluetooth = false)
+            isWired(device.type) -> OutputRoute("wired", Strings.get(R.string.route_wired), bluetooth = false)
             device.type == PlatformDevice.TYPE_BUILTIN_SPEAKER -> OutputRoute.SPEAKER
             else -> OutputRoute(
                 key = "other:${device.type}:$name",
-                label = name.ifEmpty { "External audio" },
+                label = name.ifEmpty { Strings.get(R.string.route_external) },
                 bluetooth = false,
             )
         }

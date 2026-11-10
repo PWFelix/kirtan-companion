@@ -19,6 +19,8 @@ class KirtanApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Before the container: its storage layer may phrase an error at once.
+        Strings.bind(resources)
         container = AppContainer(this)
     }
 }

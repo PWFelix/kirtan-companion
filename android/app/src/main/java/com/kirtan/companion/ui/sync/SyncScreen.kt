@@ -60,6 +60,9 @@ import com.kirtan.companion.ui.transport.TransportViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * Sync sound and display: line the playhead up with what is actually heard on
@@ -85,6 +88,7 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
     val state by transport.state.collectAsState()
     val dimens = KirtanTheme.dimens
     val scope = rememberCoroutineScope()
+    val flashLabel = stringResource(R.string.sync_flash_label)
 
     var clicking by remember { mutableStateOf(false) }
     var tapping by remember { mutableStateOf(false) }
@@ -141,18 +145,16 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(dimens.space4),
     ) {
         Spacer(Modifier.height(dimens.space4))
-        HairlineIconButton(icon = KcIcons.Back, contentDescription = "Back", onClick = onBack)
+        HairlineIconButton(icon = KcIcons.Back, contentDescription = stringResource(R.string.common_back), onClick = onBack)
 
         Text(
-            text = "Sync sound and display",
+            text = stringResource(R.string.sync_row_title),
             color = PaletteToken.SYAHI.color,
             fontSize = 26.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = "Bluetooth speakers play a little after the screen. If the strip " +
-                "or the highway runs ahead of the drum, set the delay here. Each " +
-                "speaker remembers its own.",
+            text = stringResource(R.string.sync_intro),
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 14.sp,
             lineHeight = 20.sp,
@@ -166,12 +168,11 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
         )
 
         // ── 1. Tap along ───────────────────────────────────────────────────
-        SectionLabel("1 · Tap along")
+        SectionLabel(stringResource(R.string.sync_tap_heading))
         Text(
             text = when {
-                !tapping -> "Start the click, then look away and tap the circle " +
-                    "on every click you hear."
-                else -> "Tap on every click. Listen, don't watch."
+                !tapping -> stringResource(R.string.sync_tap_idle)
+                else -> stringResource(R.string.sync_tap_active)
             },
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 14.sp,
@@ -183,7 +184,7 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
             enabled = tapping,
             label = when {
                 tapping -> "${counted.coerceAtMost(SyncCalibration.TAPS_NEEDED)} / ${SyncCalibration.TAPS_NEEDED}"
-                else -> "Tap"
+                else -> stringResource(R.string.sync_pad)
             },
             onTap = { uptimeMillis ->
                 if (!tapping) return@TapPad
@@ -199,15 +200,13 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
 
         when (val r = result) {
             is SyncCalibration.Result.Delay -> Text(
-                text = "Done. The display now runs ${describe(r.ms)}. " +
-                    "Check it below and fine-tune if you need to.",
+                text = stringResource(R.string.sync_done, describe(r.ms)),
                 color = PaletteToken.SYAHI.color,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
             )
             SyncCalibration.Result.TooUneven -> Text(
-                text = "Those taps were too uneven to measure. Try again, " +
-                    "keeping a steady tap with the click.",
+                text = stringResource(R.string.sync_uneven),
                 color = PaletteToken.CLAY.color,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
@@ -217,9 +216,9 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
 
         PrimaryButton(
             label = when {
-                tapping -> "Cancel"
-                result != null -> "Tap again"
-                else -> "Start tapping"
+                tapping -> stringResource(R.string.common_cancel)
+                result != null -> stringResource(R.string.sync_tap_again)
+                else -> stringResource(R.string.sync_start_tapping)
             },
             onClick = {
                 if (tapping) {
@@ -234,10 +233,9 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
         )
 
         // ── 2. Line up ─────────────────────────────────────────────────────
-        SectionLabel("2 · Line up")
+        SectionLabel(stringResource(R.string.sync_line_up_heading))
         Text(
-            text = "The light flashes where the display thinks each click is. " +
-                "Slide until flash and click happen together.",
+            text = stringResource(R.string.sync_line_up_text),
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 14.sp,
             lineHeight = 20.sp,
@@ -252,7 +250,7 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
                     .size(56.dp)
                     .clip(CircleShape)
                     .background(PaletteToken.CLAY.color.copy(alpha = 0.12f + 0.88f * flash))
-                    .semantics { contentDescription = "Flash on each click" },
+                    .semantics { contentDescription = flashLabel },
             )
             Column(Modifier.weight(1f)) {
                 Text(
@@ -271,12 +269,12 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
             SecondaryButton(
-                label = if (clicking) "Stop click" else "Play click",
+                label = if (clicking) stringResource(R.string.sync_stop_click) else stringResource(R.string.sync_play_click),
                 onClick = { if (clicking) stopClick() else startClick() },
                 modifier = Modifier.weight(1f),
             )
             SecondaryButton(
-                label = "Reset to 0",
+                label = stringResource(R.string.sync_reset),
                 onClick = { transport.setDisplayDelay(0) },
                 modifier = Modifier.weight(1f),
             )
@@ -287,14 +285,18 @@ internal fun SyncScreen(transport: TransportViewModel, onBack: () -> Unit) {
 
 /** "on time", "120 ms later", "30 ms earlier". */
 private fun describe(ms: Int): String = when {
-    ms == 0 -> "on time, with no extra delay"
-    ms > 0 -> "$ms ms later"
-    else -> "${-ms} ms earlier"
+    ms == 0 -> Strings.get(R.string.sync_on_time_inline)
+    ms > 0 -> Strings.get(R.string.sync_later, ms)
+    else -> Strings.get(R.string.sync_earlier, -ms)
 }
 
 @Composable
 private fun RouteCard(label: String, bluetooth: Boolean, delayMs: Int, reportedMs: Int?) {
     val dimens = KirtanTheme.dimens
+    // Read here: the AnnotatedString builder below is not a composable scope.
+    val delayNone = stringResource(R.string.sync_delay_none)
+    val delayValue = stringResource(R.string.sync_delay_value)
+    val reportedLine = stringResource(R.string.sync_reported)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -304,7 +306,7 @@ private fun RouteCard(label: String, bluetooth: Boolean, delayMs: Int, reportedM
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
-            text = "PLAYING THROUGH",
+            text = stringResource(R.string.sync_playing_through).uppercase(),
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
@@ -318,9 +320,11 @@ private fun RouteCard(label: String, bluetooth: Boolean, delayMs: Int, reportedM
         )
         Text(
             text = buildString {
-                append("Display delay: ")
-                append(if (delayMs == 0) "none" else "${if (delayMs > 0) "+" else ""}$delayMs ms")
-                if (reportedMs != null) append(" · phone reports $reportedMs ms, already allowed for")
+                append(
+                    if (delayMs == 0) delayNone
+                    else String.format(delayValue, "${if (delayMs > 0) "+" else ""}$delayMs"),
+                )
+                if (reportedMs != null) append(" · " + String.format(reportedLine, reportedMs))
             },
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 13.sp,
@@ -335,6 +339,7 @@ private fun RouteCard(label: String, bluetooth: Boolean, delayMs: Int, reportedM
 @Composable
 private fun TapPad(enabled: Boolean, label: String, onTap: (uptimeMillis: Long) -> Unit) {
     var pressed by remember { mutableStateOf(false) }
+    val padLabel = stringResource(R.string.sync_pad_label)
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
@@ -356,7 +361,7 @@ private fun TapPad(enabled: Boolean, label: String, onTap: (uptimeMillis: Long) 
                         pressed = false
                     }
                 }
-                .semantics { contentDescription = "Tap pad: tap on every click" },
+                .semantics { contentDescription = padLabel },
             contentAlignment = Alignment.Center,
         ) {
             Text(

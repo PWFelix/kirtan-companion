@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The community library: browse what everyone has published, copy it into your
@@ -147,7 +149,7 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
         val client = community ?: return
         val me = session.value
         if (me == null) {
-            onDone("Sign in to rate community beats.")
+            onDone(Strings.get(R.string.community_sign_in_to_rate))
             return
         }
         val clearing = _myRatings.value[item.id] == stars
@@ -178,21 +180,21 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
         // The card hides Add once a copy exists; this guards a double tap that
         // lands before the library state catches up.
         if (item.id in inLibrary.value) {
-            onDone("“${item.name}” is already in your library.")
+            onDone(Strings.get(R.string.community_already_have, item.name))
             return
         }
         val payload = client.toImportPayload(item)
         if (payload == null) {
-            onDone("That item couldn't be read — it may have been published by a newer version of the app.")
+            onDone(Strings.get(R.string.community_unreadable))
             return
         }
         viewModelScope.launch {
             val result = container.library.importShared(payload, sourceItemId = item.id)
             val message = when {
-                result.beats.isEmpty() -> "Nothing was added."
+                result.beats.isEmpty() -> Strings.get(R.string.community_nothing_added)
                 result.categoryId != null ->
-                    "Added ${result.beats.size} beats as the list “${item.name}”."
-                else -> "Added “${item.name}” to Your beats."
+                    Strings.plural(R.plurals.community_added_list, result.beats.size, result.beats.size, item.name)
+                else -> Strings.get(R.string.community_added_custom, item.name)
             }
             onDone(message)
             launch { client.incrementCopies(item.id) }
@@ -205,7 +207,7 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 client.unpublish(item.id)
                 _items.value = _items.value.filterNot { it.id == item.id }
-                onDone("Removed “${item.name}” from the community library.")
+                onDone(Strings.get(R.string.community_removed, item.name))
             } catch (e: Exception) {
                 onDone(storageErrorMessage(e))
             }
@@ -239,13 +241,13 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
         val client = container.shippedBeats ?: return
         val beat = promotable(item)
         if (beat == null) {
-            onDone("Only a single beat can become a built-in — not a list.")
+            onDone(Strings.get(R.string.promote_not_list))
             return
         }
         viewModelScope.launch {
             try {
                 client.promote(item, beat, heading.trim().ifEmpty { DEFAULT_HEADING })
-                onDone("“${beat.name}” is now one of the built-in beats.")
+                onDone(Strings.get(R.string.promote_done, beat.name))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -268,14 +270,14 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
         val client = community ?: return
         val current = session.value
         if (current == null) {
-            onDone("Sign in to publish to the community library.")
+            onDone(Strings.get(R.string.community_sign_in_to_publish))
             return
         }
         viewModelScope.launch {
             try {
                 client.publish(payload, current.userId, current.displayName)
                 refresh()
-                onDone("Published “$name” to the community library.")
+                onDone(Strings.get(R.string.community_published, name))
             } catch (e: Exception) {
                 onDone(storageErrorMessage(e))
             }

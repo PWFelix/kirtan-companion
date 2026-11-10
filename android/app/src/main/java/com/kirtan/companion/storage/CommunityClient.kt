@@ -13,6 +13,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.time.OffsetDateTime
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The PUBLIC side of the backend: the community library the Browse screen shows.
@@ -87,7 +89,7 @@ class CommunityClient(
             order = "created_at.desc",
             limit = limit,
             requireSession = false,
-            whileDoing = "load the community library",
+            whileDoing = Strings.get(R.string.doing_load_community),
         )
         return rowsOf(rows).mapNotNull { itemOf(it) }
     }
@@ -146,10 +148,10 @@ class CommunityClient(
             put("name", name)
             put("payload", body)
         }
-        val created = client.insert(TABLE, row, one = true, whileDoing = "publish that")
+        val created = client.insert(TABLE, row, one = true, whileDoing = Strings.get(R.string.doing_publish))
         return itemOf(created) ?: throw StorageError(
             StorageErrorCode.UNKNOWN,
-            "The server didn't return the beat you just published.",
+            Strings.get(R.string.err_publish_no_echo),
         )
     }
 
@@ -160,14 +162,14 @@ class CommunityClient(
             columns = COLUMNS,
             filters = listOf("author_id" to "eq.$authorId"),
             order = "created_at.desc",
-            whileDoing = "load your shared beats",
+            whileDoing = Strings.get(R.string.doing_load_shared),
         )
         return rowsOf(rows).mapNotNull { itemOf(it) }
     }
 
     /** Remove a published item. RLS lets only its author through. */
     suspend fun unpublish(id: String) {
-        client.delete(TABLE, listOf("id" to "eq.$id"), "unpublish that")
+        client.delete(TABLE, listOf("id" to "eq.$id"), Strings.get(R.string.doing_unpublish))
     }
 
     /**
@@ -183,7 +185,7 @@ class CommunityClient(
             client.rpc(
                 function = "increment_published_copies",
                 args = buildJsonObject { put("pub_id", id) },
-                whileDoing = "count that copy",
+                whileDoing = Strings.get(R.string.doing_count_copy),
             )
         } catch (e: CancellationException) {
             throw e
@@ -209,7 +211,7 @@ class CommunityClient(
             client.delete(
                 RATINGS,
                 listOf("item_id" to "eq.$itemId", "user_id" to "eq.$userId"),
-                "remove that rating",
+                Strings.get(R.string.doing_remove_rating),
             )
             return
         }
@@ -222,7 +224,7 @@ class CommunityClient(
                 put("stars", stars)
             },
             onConflict = "item_id,user_id",
-            whileDoing = "save that rating",
+            whileDoing = Strings.get(R.string.doing_save_rating),
         )
     }
 
@@ -239,7 +241,7 @@ class CommunityClient(
                 "user_id" to "eq.$userId",
                 "item_id" to "in.(${itemIds.joinToString(",")})",
             ),
-            whileDoing = "load your ratings",
+            whileDoing = Strings.get(R.string.doing_load_ratings),
         )
         return rowsOf(rows).mapNotNull { row ->
             val obj = row as? JsonObject ?: return@mapNotNull null

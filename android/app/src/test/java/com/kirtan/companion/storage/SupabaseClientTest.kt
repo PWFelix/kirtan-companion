@@ -26,6 +26,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import com.kirtan.companion.EnglishStrings
 
 /**
  * The cloud plumbing that can be checked without a network.
@@ -43,6 +44,9 @@ import java.io.File
  * Supabase project.
  */
 class SupabaseClientTest {
+    // Storage and editor text comes from values/strings.xml; read it as English.
+    init { EnglishStrings.install() }
+
 
     @get:Rule
     val folder = TemporaryFolder()
@@ -201,7 +205,7 @@ class SupabaseClientTest {
         val error = restFailure(406, errorBody("PGRST116", "no rows"), "that beat")
 
         assertEquals(StorageErrorCode.NOT_FOUND, error.code)
-        assertEquals("that beat no longer exists.", error.message)
+        assertEquals("That no longer exists.", error.message)
     }
 
     @Test

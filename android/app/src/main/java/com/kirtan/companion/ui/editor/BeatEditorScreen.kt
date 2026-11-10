@@ -71,6 +71,10 @@ import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import com.kirtan.companion.ui.transport.TransportViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The beat editor: overview, zoom and pads in one scrolling region.
@@ -184,7 +188,7 @@ internal fun BeatEditorScreen(
             previewing = false
         }
         if (!draft.hasAnyHit) {
-            saveError = "Add at least one stroke before saving."
+            saveError = Strings.get(R.string.editor_need_stroke)
             return
         }
         saveError = null
@@ -219,7 +223,7 @@ internal fun BeatEditorScreen(
             if (onBack != null) {
                 HairlineIconButton(
                     icon = KcIcons.Back,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.common_back),
                     onClick = onBack,
                 )
                 Spacer(Modifier.width(dimens.space2))
@@ -238,7 +242,7 @@ internal fun BeatEditorScreen(
                     Box {
                         if (draft.name.isEmpty()) {
                             Text(
-                                text = "Name your beat",
+                                text = stringResource(R.string.editor_name_placeholder),
                                 color = colors.faint,
                                 fontSize = 26.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -301,7 +305,7 @@ internal fun BeatEditorScreen(
         Spacer(Modifier.height(dimens.space3))
         if (savesAsCopy) {
             Text(
-                text = "Built-in beats stay as they are. Saving adds your version to your library and plays it.",
+                text = stringResource(R.string.editor_builtin_copy_note),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = dimens.space2),
@@ -309,9 +313,9 @@ internal fun BeatEditorScreen(
         }
         PrimaryButton(
             label = when {
-                saving -> "Saving…"
-                savesAsCopy -> "Save as my version"
-                else -> "Save beat"
+                saving -> stringResource(R.string.common_saving)
+                savesAsCopy -> stringResource(R.string.editor_save_copy)
+                else -> stringResource(R.string.editor_save)
             },
             enabled = !saving,
             onClick = ::handleSave,
@@ -319,9 +323,9 @@ internal fun BeatEditorScreen(
     }
 
     if (feelOpen) {
-        KcSheet(title = "Feel & meter", onDismiss = { feelOpen = false }) {
+        KcSheet(title = stringResource(R.string.editor_feel_meter), onDismiss = { feelOpen = false }) {
             Text(
-                text = "Changing the feel clears the grid.",
+                text = stringResource(R.string.editor_feel_clears),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
             )
@@ -350,14 +354,14 @@ internal fun BeatEditorScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = preset.label,
+                        text = meterLabel(preset),
                         color = PaletteToken.SYAHI.color,
                         fontSize = 15.2.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
-                        text = preset.sig,
+                        text = meterSig(preset),
                         color = PaletteToken.SYAHI_SOFT.color,
                         fontSize = 12.sp,
                     )
@@ -462,20 +466,20 @@ private fun ZoomZone(
         ) {
             HairlineIconButton(
                 icon = KcIcons.Back,
-                contentDescription = "Previous page",
+                contentDescription = stringResource(R.string.editor_prev_page),
                 onClick = { onPage(-1) },
                 enabled = draft.page > 0,
                 size = 36.dp,
             )
             Text(
-                text = "${draft.windowStart + 1}–${draft.windowEnd} of ${draft.steps}",
+                text = stringResource(R.string.editor_page_range, draft.windowStart + 1, draft.windowEnd, draft.steps),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
             HairlineIconButton(
                 icon = KcIcons.ChevronRight,
-                contentDescription = "Next page",
+                contentDescription = stringResource(R.string.editor_next_page),
                 onClick = { onPage(1) },
                 enabled = draft.page < draft.pageCount - 1,
                 size = 36.dp,
@@ -600,7 +604,7 @@ private fun PadsZone(draft: EditorDraft, onPad: (PadSpec) -> Unit) {
                 letterSpacing = 1.sp,
             )
             Text(
-                text = "  · tap the ${if (kartal) "drum" else "kartal"} row to switch",
+                text = "  · " + stringResource(if (kartal) R.string.editor_switch_to_drum else R.string.editor_switch_to_kartal),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
             )
@@ -658,7 +662,7 @@ private fun PadButton(
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
-            text = pad.label,
+            text = if (pad.rest) stringResource(R.string.editor_rest) else pad.label,
             color = PaletteToken.SYAHI.color,
             fontSize = 13.4.sp,
             fontWeight = FontWeight.Bold,
@@ -707,20 +711,20 @@ private fun ControlsZone(
             horizontalArrangement = Arrangement.spacedBy(dimens.space2),
         ) {
             SecondaryButton(
-                label = "Undo",
+                label = stringResource(R.string.editor_undo),
                 onClick = onUndo,
                 enabled = draft.canUndo,
                 modifier = Modifier.weight(1f),
                 minHeight = 44.dp,
             )
             SecondaryButton(
-                label = "Clear",
+                label = stringResource(R.string.editor_clear),
                 onClick = onClear,
                 modifier = Modifier.weight(1f),
                 minHeight = 44.dp,
             )
             SecondaryButton(
-                label = if (previewing) "Stop" else "Preview",
+                label = if (previewing) stringResource(R.string.common_stop) else stringResource(R.string.editor_preview),
                 onClick = onPreview,
                 modifier = Modifier.weight(1f),
                 minHeight = 44.dp,
@@ -733,7 +737,7 @@ private fun ControlsZone(
             horizontalArrangement = Arrangement.spacedBy(dimens.space3),
         ) {
             SecondaryButton(
-                label = draft.meter.label + " ▾",
+                label = meterLabel(draft.meter) + " ▾",
                 onClick = onFeel,
                 modifier = Modifier.weight(1f),
                 minHeight = 44.dp,
@@ -744,20 +748,20 @@ private fun ControlsZone(
             ) {
                 HairlineIconButton(
                     icon = KcIcons.Back,
-                    contentDescription = "Remove a group",
+                    contentDescription = stringResource(R.string.editor_remove_group),
                     onClick = { onLength(false) },
                     enabled = canRemove,
                     size = 40.dp,
                 )
                 Text(
-                    text = "${draft.steps} cells",
+                    text = pluralStringResource(R.plurals.beat_cells, draft.steps, draft.steps),
                     color = PaletteToken.SYAHI.color,
                     fontSize = 13.4.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 HairlineIconButton(
                     icon = KcIcons.ChevronRight,
-                    contentDescription = "Add a group",
+                    contentDescription = stringResource(R.string.editor_add_group),
                     onClick = { onLength(true) },
                     size = 40.dp,
                 )
@@ -777,7 +781,7 @@ private fun ControlsZone(
                 style = TextStyle(fontFeatureSettings = "tnum"),
             )
             Text(
-                text = "BPM",
+                text = stringResource(R.string.tempo_bpm),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
@@ -791,4 +795,27 @@ private fun ControlsZone(
             )
         }
     }
+}
+
+/**
+ * A meter's name in the reader's language. The presets carry English labels as
+ * their identity in tests and logs; the screen looks the words up by id, and a
+ * signature that is just digits ("6/8 · 3+3") passes through unchanged.
+ */
+@Composable
+private fun meterLabel(preset: MeterPreset): String = when (preset.id) {
+    "std" -> stringResource(R.string.meter_std)
+    "trip" -> stringResource(R.string.meter_trip)
+    "dbl" -> stringResource(R.string.meter_dbl)
+    "68" -> stringResource(R.string.meter_68)
+    "78" -> stringResource(R.string.meter_78)
+    "custom" -> stringResource(R.string.meter_custom)
+    else -> preset.label
+}
+
+@Composable
+private fun meterSig(preset: MeterPreset): String = when (preset.id) {
+    "std" -> stringResource(R.string.meter_sig_std)
+    "dbl" -> stringResource(R.string.meter_sig_dbl)
+    else -> preset.sig
 }

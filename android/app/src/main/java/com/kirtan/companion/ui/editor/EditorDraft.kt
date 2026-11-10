@@ -7,6 +7,8 @@ import com.kirtan.companion.data.model.LaneId
 import com.kirtan.companion.data.model.Stroke
 import kotlin.math.ceil
 import kotlin.math.min
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The beat editor's draft model, pure and Android-free.
@@ -317,7 +319,7 @@ data class EditorDraft(
 
         return Beat(
             id = id,
-            name = name.trim().ifEmpty { "Custom Beat" },
+            name = name.trim().ifEmpty { Strings.get(R.string.editor_default_name) },
             note = "Custom",
             bpm = bpm,
             steps = steps,
@@ -335,7 +337,7 @@ data class EditorDraft(
         for (lane in LaneId.ORDERED) out[lane] = pattern(lane)
         return Beat(
             id = "preview",
-            name = name.trim().ifEmpty { "Preview" },
+            name = name.trim().ifEmpty { Strings.get(R.string.editor_preview) },
             note = "Custom",
             bpm = bpm,
             steps = steps,

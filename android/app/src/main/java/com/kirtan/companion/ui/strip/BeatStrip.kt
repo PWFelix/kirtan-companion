@@ -55,6 +55,8 @@ import com.kirtan.companion.data.model.Stroke
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import kotlin.math.roundToInt
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /** The gap between cells, and the minimum a cell may be squeezed to. */
 private val CELL_GAP = 2.dp
@@ -278,9 +280,9 @@ private fun LaneBlock(
     Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
         if (!mini) {
             val description = if (muted) {
-                "${lane.label} drum, muted, tap to unmute"
+                Strings.get(R.string.strip_lane_muted, lane.label)
             } else {
-                "${lane.label} drum, playing, tap to mute"
+                Strings.get(R.string.strip_lane_playing, lane.label)
             }
             Text(
                 text = lane.label.uppercase(),
@@ -309,7 +311,7 @@ private fun LaneBlock(
         Row(
             modifier = Modifier
                 .alpha(if (muted) 0.3f else 1f)
-                .semantics { contentDescription = "${lane.label} pattern" },
+                .semantics { contentDescription = Strings.get(R.string.strip_lane_pattern, lane.label) },
             horizontalArrangement = Arrangement.spacedBy(CELL_GAP),
         ) {
             // Exactly `beat.steps` cells whatever the stored pattern's length:

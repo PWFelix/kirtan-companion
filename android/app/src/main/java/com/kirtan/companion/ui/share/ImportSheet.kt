@@ -25,6 +25,10 @@ import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.strip.BeatStrip
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
 
 /**
  * The inbound path: paste a code or link, decode it, then CONFIRM before anything
@@ -50,11 +54,10 @@ internal fun ImportSheet(
     var input by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
-    KcSheet(title = "Import", onDismiss = onDismiss) {
+    KcSheet(title = stringResource(R.string.import_title), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
             Text(
-                text = "Paste a share code or link. A whole link works — the code is " +
-                    "read out of it either way.",
+                text = stringResource(R.string.import_intro),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 lineHeight = 19.sp,
@@ -68,7 +71,7 @@ internal fun ImportSheet(
                 },
                 placeholder = {
                     Text(
-                        text = "Paste a share code or link",
+                        text = stringResource(R.string.import_placeholder),
                         fontSize = 13.4.sp,
                         color = KirtanTheme.colors.faint,
                     )
@@ -96,12 +99,12 @@ internal fun ImportSheet(
             }
 
             PrimaryButton(
-                label = "Preview",
+                label = stringResource(R.string.import_preview),
                 enabled = input.isNotBlank(),
                 onClick = {
                     val payload = ShareCodec.decodeShare(ShareCodec.codeFromInput(input))
                     if (payload == null) {
-                        error = "That is not a Kirtan share code or link. Nothing was imported."
+                        error = Strings.get(R.string.import_not_a_code)
                     } else {
                         onDecoded(payload)
                     }
@@ -109,9 +112,7 @@ internal fun ImportSheet(
             )
 
             Text(
-                text = "An imported beat is always saved under a NEW id, so it can never " +
-                    "overwrite one of yours — a single beat lands in Your beats, a list " +
-                    "arrives as its own playlist.",
+                text = stringResource(R.string.import_new_id_note),
                 color = KirtanTheme.colors.faint,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
@@ -136,22 +137,21 @@ internal fun ImportConfirmSheet(
     val dimens = KirtanTheme.dimens
 
     when (payload) {
-        ShareCodec.SharePayload.Invalid -> KcSheet(title = "Can't open that link", onDismiss = onDismiss) {
+        ShareCodec.SharePayload.Invalid -> KcSheet(title = stringResource(R.string.import_cant_open), onDismiss = onDismiss) {
             Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
                 Text(
-                    text = "The code was damaged, truncated, or made by a newer version of " +
-                        "the app. Nothing was imported.",
+                    text = stringResource(R.string.import_damaged),
                     color = PaletteToken.SYAHI_SOFT.color,
                     fontSize = 13.4.sp,
                     lineHeight = 19.sp,
                 )
-                PrimaryButton(label = "Close", onClick = onDismiss)
+                PrimaryButton(label = stringResource(R.string.common_close), onClick = onDismiss)
             }
         }
 
         is ShareCodec.SharePayload.BeatPayload -> {
             val beat = payload.beat
-            KcSheet(title = "Someone shared this", onDismiss = onDismiss) {
+            KcSheet(title = stringResource(R.string.import_shared_beat), onDismiss = onDismiss) {
                 Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
                     Text(
                         text = beat.name,
@@ -160,20 +160,20 @@ internal fun ImportConfirmSheet(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "${beat.steps} cells · suggested ${beat.bpm} BPM",
+                        text = pluralStringResource(R.plurals.beat_cells, beat.steps, beat.steps) + " · " + stringResource(R.string.import_suggested_bpm, beat.bpm),
                         color = PaletteToken.SYAHI_SOFT.color,
                         fontSize = 13.4.sp,
                     )
                     BeatStrip(beat = beat)
                     Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
                         SecondaryButton(
-                            label = "Cancel",
+                            label = stringResource(R.string.common_cancel),
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
                             minHeight = 46.dp,
                         )
                         PrimaryButton(
-                            label = "Add beat",
+                            label = stringResource(R.string.import_add_beat),
                             onClick = onAccept,
                             modifier = Modifier.weight(1f),
                             minHeight = 46.dp,
@@ -184,12 +184,10 @@ internal fun ImportConfirmSheet(
         }
 
         is ShareCodec.SharePayload.CategoryPayload -> {
-            KcSheet(title = "Someone shared a list", onDismiss = onDismiss) {
+            KcSheet(title = stringResource(R.string.import_shared_list), onDismiss = onDismiss) {
                 Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
                     Text(
-                        text = "Add ${payload.beats.size} " +
-                            (if (payload.beats.size == 1) "beat" else "beats") +
-                            " and the list “${payload.name}”?",
+                        text = pluralStringResource(R.plurals.import_add_list_q, payload.beats.size, payload.beats.size, payload.name),
                         color = PaletteToken.SYAHI.color,
                         fontSize = 15.2.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -212,13 +210,13 @@ internal fun ImportConfirmSheet(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
                         SecondaryButton(
-                            label = "Cancel",
+                            label = stringResource(R.string.common_cancel),
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
                             minHeight = 46.dp,
                         )
                         PrimaryButton(
-                            label = "Add all",
+                            label = stringResource(R.string.import_add_all),
                             onClick = onAccept,
                             modifier = Modifier.weight(1f),
                             minHeight = 46.dp,

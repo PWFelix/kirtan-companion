@@ -1,5 +1,8 @@
 package com.kirtan.companion.storage
 
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
+
 /**
  * The one error type crossing the storage boundary.
  *
@@ -70,13 +73,12 @@ class StorageError(
  * [LibraryRepository], which never surfaces one.
  */
 fun storageErrorMessage(error: Throwable?): String = when (error) {
-    is StorageError -> error.message ?: FALLBACK_MESSAGE
-    else -> FALLBACK_MESSAGE
+    is StorageError -> error.message ?: fallbackMessage()
+    else -> fallbackMessage()
 }
 
 /** The sentence used when nothing better is available. */
-internal const val FALLBACK_MESSAGE =
-    "Something went wrong saving that. Your beat may not have been kept."
+internal fun fallbackMessage(): String = Strings.get(R.string.err_fallback)
 
 /**
  * The logging seam.

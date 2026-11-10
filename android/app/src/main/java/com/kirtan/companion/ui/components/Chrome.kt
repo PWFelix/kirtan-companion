@@ -46,6 +46,8 @@ import com.kirtan.companion.data.PaletteToken
 import com.kirtan.companion.ui.icons.KcIcons
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
+import androidx.compose.ui.res.stringResource
+import com.kirtan.companion.R
 
 /**
  * The chrome every screen is built from.
@@ -346,7 +348,7 @@ internal fun KcSheet(
                 }
                 HairlineIconButton(
                     icon = KcIcons.Back,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.common_close),
                     onClick = onDismiss,
                 )
             }

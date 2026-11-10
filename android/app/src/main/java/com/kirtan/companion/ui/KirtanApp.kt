@@ -74,6 +74,8 @@ import com.kirtan.companion.ui.theme.color
 import com.kirtan.companion.ui.transport.TransportViewModel
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import com.kirtan.companion.R
 
 /**
  * The app shell: the splash gate, the current tab, and the one bottom nav.
@@ -442,7 +444,7 @@ private fun ShippedSaveSheet(
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    KcSheet(title = "Save for everyone", onDismiss = onDismiss) {
+    KcSheet(title = stringResource(R.string.maint_save_title), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
             Text(
                 text = beat.name,
@@ -451,9 +453,7 @@ private fun ShippedSaveSheet(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Every install of the app gets this version of the beat on its " +
-                    "next launch. Progressions that use it keep working — its id does " +
-                    "not change, even if you renamed it.",
+                text = stringResource(R.string.maint_save_body),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 lineHeight = 19.sp,
@@ -467,7 +467,7 @@ private fun ShippedSaveSheet(
                 )
             }
             PrimaryButton(
-                label = if (saving) "Saving…" else "Save for everyone",
+                label = if (saving) stringResource(R.string.common_saving) else stringResource(R.string.maint_save_title),
                 enabled = !saving,
                 onClick = {
                     saving = true
@@ -478,7 +478,7 @@ private fun ShippedSaveSheet(
                     }
                 },
             )
-            SecondaryButton(label = "Keep editing", onClick = onDismiss)
+            SecondaryButton(label = stringResource(R.string.maint_keep_editing), onClick = onDismiss)
         }
     }
 }
@@ -502,7 +502,7 @@ private fun ShippedRemoveSheet(
     var removing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    KcSheet(title = "Remove for everyone", onDismiss = onDismiss) {
+    KcSheet(title = stringResource(R.string.maint_remove_title), onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
             Text(
                 text = beat.name,
@@ -511,9 +511,7 @@ private fun ShippedRemoveSheet(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "This beat disappears from the Beats screen for everyone on their " +
-                    "next launch. Progressions that use it keep working — its id does not " +
-                    "change, only its visibility.",
+                text = stringResource(R.string.maint_remove_body),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 13.4.sp,
                 lineHeight = 19.sp,
@@ -527,7 +525,7 @@ private fun ShippedRemoveSheet(
                 )
             }
             PrimaryButton(
-                label = if (removing) "Removing…" else "Remove for everyone",
+                label = if (removing) stringResource(R.string.common_removing) else stringResource(R.string.maint_remove_title),
                 enabled = !removing,
                 onClick = {
                     removing = true
@@ -538,7 +536,7 @@ private fun ShippedRemoveSheet(
                     }
                 },
             )
-            SecondaryButton(label = "Cancel", onClick = onDismiss)
+            SecondaryButton(label = stringResource(R.string.common_cancel), onClick = onDismiss)
         }
     }
 }
@@ -584,7 +582,7 @@ private fun SettingsScreen(
     ) {
         Spacer(Modifier.height(dimens.space4))
         Text(
-            text = "Settings",
+            text = stringResource(R.string.tab_settings),
             color = PaletteToken.SYAHI.color,
             fontSize = 26.sp,
             fontWeight = FontWeight.SemiBold,
@@ -595,35 +593,34 @@ private fun SettingsScreen(
         // the notation toggles.
         AccountSection(container)
 
-        com.kirtan.companion.ui.components.SectionLabel("Notation")
+        com.kirtan.companion.ui.components.SectionLabel(stringResource(R.string.settings_notation))
 
         SettingsToggle(
-            title = "Show bols",
-            subtitle = "Print the spoken name of each stroke — Ta, Te, Ge, Khe — under the beat.",
+            title = stringResource(R.string.settings_show_bols),
+            subtitle = stringResource(R.string.settings_show_bols_sub),
             checked = state.settings.showBols,
             onCheckedChange = { transport.setShowBols(it) },
         )
         SettingsToggle(
-            title = "Show step numbers",
-            subtitle = "Print the counted pulse — 1 · 2 · 3 · 4 — above the beat.",
+            title = stringResource(R.string.settings_show_steps),
+            subtitle = stringResource(R.string.settings_show_steps_sub),
             checked = state.settings.showStepLabels,
             onCheckedChange = { transport.setShowStepLabels(it) },
         )
 
-        SectionLabel("Sound")
+        SectionLabel(stringResource(R.string.settings_sound))
         SettingsLink(
-            title = "Sync sound and display",
-            subtitle = "For Bluetooth speakers: line the beat on screen up with what you hear. " +
+            title = stringResource(R.string.sync_row_title),
+            subtitle = stringResource(R.string.sync_row_sub) + " " +
                 "${state.route.label}: " +
-                (if (state.displayDelayMs == 0) "no delay set." else "display ${state.displayDelayMs} ms later."),
+                (if (state.displayDelayMs == 0) stringResource(R.string.sync_row_no_delay)
+                else stringResource(R.string.sync_row_delay, state.displayDelayMs)),
             onClick = { onSyncOpenChange(true) },
         )
 
-        SectionLabel("Interface size")
+        SectionLabel(stringResource(R.string.settings_ui_size))
         Text(
-            text = "Scales the whole app — strip, controls, sheets and type together. " +
-                "Compact fits an extra row on a small phone; larger reads from across " +
-                "a room on a tablet.",
+            text = stringResource(R.string.settings_ui_size_hint),
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 12.sp,
             lineHeight = 17.sp,
@@ -643,14 +640,14 @@ private fun SettingsScreen(
         }
 
         com.kirtan.companion.ui.components.SecondaryButton(
-            label = "About",
+            label = stringResource(R.string.about_title),
             icon = com.kirtan.companion.ui.icons.KcIcons.Info,
             onClick = { aboutOpen = true },
         )
 
         Spacer(Modifier.height(dimens.space4))
         Text(
-            text = "Audio output · ${LocalContext.current.container.sampleRate} Hz",
+            text = stringResource(R.string.settings_audio_output, LocalContext.current.container.sampleRate),
             color = KirtanTheme.colors.faint,
             fontSize = 12.sp,
         )
@@ -712,6 +709,7 @@ private fun ScaleChip(
 @Composable
 private fun SyncPromptBanner(deviceLabel: String, onSync: () -> Unit, onDismiss: () -> Unit) {
     val dimens = KirtanTheme.dimens
+    val dismissLabel = stringResource(R.string.common_dismiss)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -723,20 +721,20 @@ private fun SyncPromptBanner(deviceLabel: String, onSync: () -> Unit, onDismiss:
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = "Playing through $deviceLabel",
+                text = stringResource(R.string.route_playing_through, deviceLabel),
                 color = PaletteToken.HEAD.color,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
             )
             Text(
-                text = "Is the screen ahead of the drum? Sync them.",
+                text = stringResource(R.string.route_prompt),
                 color = PaletteToken.HEAD.color.copy(alpha = 0.75f),
                 fontSize = 12.sp,
             )
         }
         Text(
-            text = "Sync",
+            text = stringResource(R.string.sync_title),
             color = PaletteToken.HEAD.color,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
@@ -752,7 +750,7 @@ private fun SyncPromptBanner(deviceLabel: String, onSync: () -> Unit, onDismiss:
             modifier = Modifier
                 .heightIn(min = 44.dp)
                 .clickable(onClick = onDismiss)
-                .semantics { contentDescription = "Dismiss" }
+                .semantics { contentDescription = dismissLabel }
                 .padding(horizontal = dimens.space3, vertical = dimens.space3),
         )
     }

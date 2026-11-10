@@ -9,6 +9,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.kirtan.companion.EnglishStrings
 
 /**
  * The maintainer export.
@@ -25,6 +26,9 @@ import org.junit.Test
  * exists to catch.
  */
 class BeatSourceExportTest {
+    // Storage and editor text comes from values/strings.xml; read it as English.
+    init { EnglishStrings.install() }
+
 
     /** The first shipped beat, and the only one with a cymbal row. */
     private val doubleTime = BEATS.first { it.id == "double_time_2" }
