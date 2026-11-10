@@ -10,9 +10,10 @@ import { BOLS, COMBO_BOLS } from "./data/bols.js";
  *    showing which page the zoom is on; doubles as the live visualiser.
  * 2. ZOOM      — one page of cells, magnified, the lanes aligned in a column
  *    (the two mridanga heads, plus the karatalas when present). The CURSOR is
- *    a column; tapping a cell moves it. A lane label above each row doubles as
- *    an "edit only this lane" toggle — which is how the cymbal row is authored,
- *    since the both-hands pads only write the drum.
+ *    a column; tapping a cell moves it AND picks the instrument the pads
+ *    write: a dayan or bayan cell means the mrdanga, a kartal cell the
+ *    karatalas. The editor opens on the mrdanga; the other instrument's rows
+ *    dim, and the pads carry a heading, so the switch is never a mystery.
  * 3. PADS      — one pad per enterable stroke (from data/bols.js). Tapping a
  *    pad writes the cursor column (or one lane when isolated), SOUNDS the
  *    sample(s), and advances the cursor.
@@ -99,10 +100,14 @@ function PencilIcon() {
 
 const soundName = (end, v) => (v === "O" ? `${end}_open` : v === "X" ? `${end}_closed` : null);
 
-// Pad palettes keyed by edit mode (both hands / one isolated lane). Each
-// pad's `write` names exactly the lanes it touches.
+// Pad palettes keyed by instrument. Each pad's `write` names exactly the
+// lanes it touches. The mrdanga set covers every dayan/bayan combination, so
+// any column can be written whole — no need to edit one head on its own.
+/** The instrument a lane belongs to: the two heads are one mrdanga. */
+const instrumentOf = (lane) => (lane === "kartal" ? "kartal" : "mrdanga");
+
 const PAD_SETS = {
-  both: [
+  mrdanga: [
     { key: "ta",   label: BOLS.dayan.O,      write: { dayan: "O",  bayan: null } },
     { key: "te",   label: BOLS.dayan.X,      write: { dayan: "X",  bayan: null } },
     { key: "ge",   label: BOLS.bayan.O,      write: { dayan: null, bayan: "O"  } },
@@ -113,19 +118,8 @@ const PAD_SETS = {
     { key: "tek",  label: COMBO_BOLS["X+X"], write: { dayan: "X",  bayan: "X"  } },
     { key: "rest", label: "Rest",            write: { dayan: null, bayan: null }, rest: true },
   ],
-  dayan: [
-    { key: "ta", label: BOLS.dayan.O, write: { dayan: "O" } },
-    { key: "te", label: BOLS.dayan.X, write: { dayan: "X" } },
-    { key: "rd", label: "Rest",       write: { dayan: null }, rest: true },
-  ],
-  bayan: [
-    { key: "ge",  label: BOLS.bayan.O, write: { bayan: "O" } },
-    { key: "khe", label: BOLS.bayan.X, write: { bayan: "X" } },
-    { key: "rb",  label: "Rest",       write: { bayan: null }, rest: true },
-  ],
-  // Karatalas are authored on their own (isolate the lane), so they only need
-  // an isolated pad set — ring, damped, rest. No "both" combo pads: the cymbal
-  // isn't struck together with a drum head under one bol.
+  // Ring, damped, rest. No combo pads: the cymbal isn't struck together with
+  // a drum head under one bol.
   kartal: [
     { key: "kch", label: BOLS.kartal.O, write: { kartal: "O" } },
     { key: "kdm", label: BOLS.kartal.X, write: { kartal: "X" } },
@@ -148,7 +142,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
   const [cursor, setCursor] = useState(0);
-  const [editLane, setEditLane] = useState("both");
+  // Which instrument the pads write: "mrdanga" | "kartal". Set by tapping a row.
+  const [instrument, setInstrument] = useState("mrdanga");
   const [feelOpen, setFeelOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const overviewRef = useRef(null);
@@ -356,14 +351,14 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
               ))}
             </div>
             {[["dayan", "Dayan", dayan], ["bayan", "Bayan", bayan], ["kartal", "Kartal", kartal]].map(([end, label, arr]) => {
-              const isolatedOut = editLane !== "both" && editLane !== end;
-              const active = editLane === end;
+              const rowInstrument = instrumentOf(end);
+              const pick = (i) => { setCursor(i); setInstrument(rowInstrument); };
               return (
-                <div key={end} style={{ opacity: isolatedOut ? 0.4 : 1 }}>
-                  <button onClick={() => setEditLane((m) => (m === end ? "both" : end))}
-                    aria-pressed={active}
-                    style={{ ...st.laneLabel, color: `var(--lane-${end})`, fontWeight: active ? 800 : 700 }}>
-                    {label}{active ? " · editing only" : ""}
+                <div key={end} style={{ opacity: rowInstrument === instrument ? 1 : 0.4 }}>
+                  <button onClick={() => pick(cursor)}
+                    aria-pressed={rowInstrument === instrument}
+                    style={{ ...st.laneLabel, color: `var(--lane-${end})` }}>
+                    {label}
                   </button>
                   <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
                     {arr.slice(windowStart, windowEnd).map((v, j) => {
@@ -371,7 +366,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
                       const isCursor = i === cursor;
                       const lit = previewing && i === step;
                       return (
-                        <button key={end + i} onClick={() => setCursor(i)}
+                        <button key={end + i} onClick={() => pick(i)}
                           aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
                           style={{ ...st.zoomCell,
                             borderColor: isCursor ? "var(--clay)" : "var(--rule)",
@@ -390,8 +385,14 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         </div>
 
         {/* ── PADS ── */}
+        <div style={st.padsHead}>
+          {instrument === "kartal" ? "Kartal" : "Mrdanga"}{" "}
+          <span style={st.padsHint}>
+            · tap the {instrument === "kartal" ? "drum" : "kartal"} row to switch
+          </span>
+        </div>
         <div style={st.pads}>
-          {PAD_SETS[editLane].map((pad) => {
+          {PAD_SETS[instrument].map((pad) => {
             const w = pad.write;
             const both = "dayan" in w && "bayan" in w;
             // Isolated pads write exactly one lane; colour the dot from it.
@@ -510,6 +511,8 @@ const st = {
   zoomNum: { textAlign: "center", fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)", lineHeight: 1 },
   zoomCell: { height: 56, borderRadius: 10, border: "1px solid var(--rule)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, transition: "border-color 120ms ease, background 120ms ease" },
 
+  padsHead: { flexShrink: 0, marginBottom: -6, fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-primary)" },
+  padsHint: { fontWeight: 500, letterSpacing: 0, textTransform: "none", color: "var(--ink-secondary)", fontSize: 12 },
   pads: { flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-2)" },
   pad: { minHeight: 58, borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 },
   padRest: { background: "transparent" },
