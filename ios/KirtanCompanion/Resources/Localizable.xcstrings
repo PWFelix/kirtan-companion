@@ -1311,6 +1311,16 @@
         }
       }
     },
+    "Language" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Idioma"
+          }
+        }
+      }
+    },
     "Learn" : {
       "localizations" : {
         "es" : {
@@ -2445,6 +2455,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sincronizar sonido y pantalla"
+          }
+        }
+      }
+    },
+    "System (%@)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sistema (%@)"
           }
         }
       }

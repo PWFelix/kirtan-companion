@@ -72,7 +72,7 @@ final class SupabaseClient {
         do {
             try await store.perform { $0.setString(KirtanStore.Keys.authSession, SessionJson.encode(session)) }
         } catch {
-            throw StorageError(.unavailable, String(localized: "This device wouldn't let the app keep you signed in, so that couldn't be completed."), error)
+            throw StorageError(.unavailable, String(localized: "This device wouldn't let the app keep you signed in, so that couldn't be completed.", bundle: .strings), error)
         }
     }
 
@@ -144,21 +144,21 @@ final class SupabaseClient {
     /// Finish an OAuth sign-in from the deep link the browser came back with.
     func completeOAuth(callbackUrl: String) async throws -> AuthSession {
         guard let callback = parseOAuthCallback(callbackUrl) else {
-            throw StorageError(.unknown, String(localized: "That sign-in link didn't carry a code, so the sign-in couldn't be finished. Try again."))
+            throw StorageError(.unknown, String(localized: "That sign-in link didn't carry a code, so the sign-in couldn't be finished. Try again.", bundle: .strings))
         }
         let pending = await readPending()
         // The pending pair is cleared whatever happens: a code is single-use, and leaving it
         // behind lets a stale link be replayed into a confusing failure.
         await clearPending()
         guard let pending else {
-            throw StorageError(.unknown, String(localized: "The sign-in took too long and expired. Try again."))
+            throw StorageError(.unknown, String(localized: "The sign-in took too long and expired. Try again.", bundle: .strings))
         }
         if let state = callback.state, state != pending.state {
-            throw StorageError(.unknown, String(localized: "That sign-in didn't come from this app, so it was refused."))
+            throw StorageError(.unknown, String(localized: "That sign-in didn't come from this app, so it was refused.", bundle: .strings))
         }
         let body = JValue.object([JPair(key: "auth_code", value: .str(callback.code)), JPair(key: "code_verifier", value: .str(pending.verifier))])
-        guard let token = try await auth(path: "token", query: [("grant_type", "pkce")], body: body, bearer: nil, whileDoing: String(localized: "finish signing in")) else {
-            throw StorageError(.unknown, String(localized: "The server didn't return a session, so the sign-in couldn't be finished."))
+        guard let token = try await auth(path: "token", query: [("grant_type", "pkce")], body: body, bearer: nil, whileDoing: String(localized: "finish signing in", bundle: .strings)) else {
+            throw StorageError(.unknown, String(localized: "The server didn't return a session, so the sign-in couldn't be finished.", bundle: .strings))
         }
         return try await storeSession(token)
     }
@@ -166,7 +166,7 @@ final class SupabaseClient {
     /// Email + password sign-in.
     func signInWithPassword(email: String, password: String) async throws -> AuthSession {
         let body = JValue.object([JPair(key: "email", value: .str(email)), JPair(key: "password", value: .str(password))])
-        guard let token = try await auth(path: "token", query: [("grant_type", "password")], body: body, bearer: nil, whileDoing: String(localized: "sign in")) else {
+        guard let token = try await auth(path: "token", query: [("grant_type", "password")], body: body, bearer: nil, whileDoing: String(localized: "sign in", bundle: .strings)) else {
             throw signedOutWithoutSession()
         }
         return try await storeSession(token)
@@ -180,7 +180,7 @@ final class SupabaseClient {
         if let name, !name.trimmingCharacters(in: .whitespaces).isEmpty {
             pairs.append(JPair(key: "data", value: JValue.object([JPair(key: "name", value: .str(name))])))
         }
-        guard let result = try await auth(path: "signup", query: [], body: JValue.object(pairs), bearer: nil, whileDoing: String(localized: "create that account")) else {
+        guard let result = try await auth(path: "signup", query: [], body: JValue.object(pairs), bearer: nil, whileDoing: String(localized: "create that account", bundle: .strings)) else {
             return nil
         }
         guard result.element("access_token") != nil else { return nil }
@@ -197,7 +197,7 @@ final class SupabaseClient {
         await clearStoredSession()
         guard let current else { return }
         do {
-            _ = try await auth(path: "logout", query: [], body: nil, bearer: current.accessToken, whileDoing: String(localized: "sign out"))
+            _ = try await auth(path: "logout", query: [], body: nil, bearer: current.accessToken, whileDoing: String(localized: "sign out", bundle: .strings))
         } catch {
             log.warn("[supabase] server sign-out failed; the local session was cleared", error)
         }
@@ -210,7 +210,7 @@ final class SupabaseClient {
         let stored = await readStoredSession()
         let current = session ?? stored
         guard let current else {
-            throw StorageError(.unavailable, String(localized: "You're signed out, so that couldn't be saved. Sign in and try again."))
+            throw StorageError(.unavailable, String(localized: "You're signed out, so that couldn't be saved. Sign in and try again.", bundle: .strings))
         }
         if !current.needsRefresh() { return current.accessToken }
         let fresh = try await refresh(current)
@@ -221,7 +221,7 @@ final class SupabaseClient {
 
     private func refresh(_ session: AuthSession) async throws -> AuthSession {
         let body = JValue.object([JPair(key: "refresh_token", value: .str(session.refreshToken))])
-        guard let token = try await auth(path: "token", query: [("grant_type", "refresh_token")], body: body, bearer: nil, whileDoing: String(localized: "refresh your sign-in")) else {
+        guard let token = try await auth(path: "token", query: [("grant_type", "refresh_token")], body: body, bearer: nil, whileDoing: String(localized: "refresh your sign-in", bundle: .strings)) else {
             throw signedOutWithoutSession()
         }
         return try sessionOf(token, fallback: session)
@@ -235,7 +235,7 @@ final class SupabaseClient {
     }
 
     private func signedOutWithoutSession() -> StorageError {
-        StorageError(.unavailable, String(localized: "That didn't return a session, so you're still signed out. Try again."))
+        StorageError(.unavailable, String(localized: "That didn't return a session, so you're still signed out. Try again.", bundle: .strings))
     }
 
     // ── PostgREST ──────────────────────────────────────────────────────────
@@ -307,7 +307,7 @@ final class SupabaseClient {
             } catch {
                 // A refused connection, a DNS failure, a timeout: nothing reached the
                 // server, a different fact from "the server said no".
-                throw StorageError(.network, String(localized: "Couldn't reach the server, so \(whileDoing) didn't go through. Check your connection and try again."), error)
+                throw StorageError(.network, String(localized: "Couldn't reach the server, so \(whileDoing) didn't go through. Check your connection and try again.", bundle: .strings), error)
             }
 
             let text = String(data: data, encoding: .utf8) ?? ""
@@ -328,7 +328,7 @@ final class SupabaseClient {
     /// A GoTrue call: anon-key auth, no session token, no clock-skew retry loop.
     private func auth(path: String, query: [(String, String)], body: JValue?, bearer: String?, whileDoing: String) async throws -> JValue? {
         let urlString = authUrl(config: config, path: path, query: query)
-        guard let url = URL(string: urlString) else { throw StorageError(.unknown, String(localized: "The server address in this build is not valid.")) }
+        guard let url = URL(string: urlString) else { throw StorageError(.unknown, String(localized: "The server address in this build is not valid.", bundle: .strings)) }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
@@ -346,7 +346,7 @@ final class SupabaseClient {
         } catch let error as CancellationError {
             throw error
         } catch {
-            throw StorageError(.network, String(localized: "Couldn't reach the server, so that didn't go through. Check your connection and try again."), error)
+            throw StorageError(.network, String(localized: "Couldn't reach the server, so that didn't go through. Check your connection and try again.", bundle: .strings), error)
         }
         let text = String(data: data, encoding: .utf8) ?? ""
         let parsed = JsonEl.parse(text)
@@ -358,7 +358,7 @@ final class SupabaseClient {
 
     private func parseOrThrow(_ text: String, whileDoing: String) throws -> JValue {
         guard let value = JsonEl.parse(text) else {
-            throw StorageError(.unknown, String(localized: "The server sent something this app couldn't read while trying to \(whileDoing)."))
+            throw StorageError(.unknown, String(localized: "The server sent something this app couldn't read while trying to \(whileDoing).", bundle: .strings))
         }
         return value
     }
@@ -371,7 +371,7 @@ final class SupabaseClient {
         let metadata = user?.element("user_metadata")
         let userId = user?.stringField("id") ?? fallback?.userId
         guard let userId else {
-            throw StorageError(.unknown, String(localized: "The server didn't say who you are, so that sign-in couldn't be completed."))
+            throw StorageError(.unknown, String(localized: "The server didn't say who you are, so that sign-in couldn't be completed.", bundle: .strings))
         }
         let accessToken = token?.stringField("access_token") ?? fallback?.accessToken
         let refreshToken = token?.stringField("refresh_token") ?? fallback?.refreshToken

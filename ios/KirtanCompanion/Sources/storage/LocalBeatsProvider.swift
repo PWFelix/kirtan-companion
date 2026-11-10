@@ -99,7 +99,7 @@ final class LocalBeatsProvider: BeatsProvider {
         try await store.perform { ctx in
             var beats = try self.beatsIn(ctx)
             guard let index = beats.firstIndex(where: { $0.id == id }) else {
-                throw self.notFound(String(localized: "That beat no longer exists."))
+                throw self.notFound(String(localized: "That beat no longer exists.", bundle: .strings))
             }
             beats[index] = beat
             ctx.setString(KirtanStore.Keys.beats, LibraryJson.encodeBeats(beats))
@@ -130,7 +130,7 @@ final class LocalBeatsProvider: BeatsProvider {
         try await store.perform { ctx in
             var categories = try self.categoriesIn(ctx)
             guard let index = categories.firstIndex(where: { $0.id == id }) else {
-                throw self.notFound(String(localized: "That list no longer exists."))
+                throw self.notFound(String(localized: "That list no longer exists.", bundle: .strings))
             }
             let current = categories[index]
             // A null field in the patch means "leave it alone" — see CategoryPatch.
@@ -165,7 +165,7 @@ final class LocalBeatsProvider: BeatsProvider {
     private func corrupt(_ key: String) -> StorageError {
         let error = StorageError(
             .unavailable,
-            String(localized: "Your saved beats couldn't be read — the file holding them is damaged. Nothing has been deleted; try again, and if it keeps happening the library may need to be reset."),
+            String(localized: "Your saved beats couldn't be read — the file holding them is damaged. Nothing has been deleted; try again, and if it keeps happening the library may need to be reset.", bundle: .strings),
         )
         log.warn("[storage] \(key) was unreadable and has NOT been overwritten", error)
         return error

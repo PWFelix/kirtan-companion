@@ -9,10 +9,25 @@ import AVFoundation
 /// devices: they belong to the hardware pairing, not the person.
 struct OutputRoute: Equatable {
     let key: String
-    let label: String
+    /// The device's own name ("JBL Flip 5"), or "" for outputs we name ourselves.
+    let name: String
     let bluetooth: Bool
 
-    static let speaker = OutputRoute(key: "speaker", label: String(localized: "Phone speaker"), bluetooth: false)
+    init(key: String, label name: String, bluetooth: Bool) {
+        self.key = key
+        self.name = name
+        self.bluetooth = bluetooth
+    }
+
+    /// What to call it on screen. Resolved on each read, not stored: routes outlive
+    /// a language switch in Settings, and a stored "Phone speaker" would stay English.
+    var label: String {
+        if !name.isEmpty { return name }
+        return key == "wired" ? String(localized: "Headphones", bundle: .strings)
+                              : String(localized: "Phone speaker", bundle: .strings)
+    }
+
+    static let speaker = OutputRoute(key: "speaker", label: "", bluetooth: false)
 
     /// Bluetooth ports, by name. A2DP is the usual music link; LE is newer
     /// hearing aids and LE Audio earbuds; HFP is a headset that only offered
@@ -27,7 +42,7 @@ struct OutputRoute: Equatable {
             return OutputRoute(key: "bt:\(name)", label: name, bluetooth: true)
         }
         if wiredPorts.contains(portType) {
-            return OutputRoute(key: "wired", label: String(localized: "Headphones"), bluetooth: false)
+            return OutputRoute(key: "wired", label: "", bluetooth: false)
         }
         if portType == .airPlay {
             let name = portName.isEmpty ? "AirPlay" : portName

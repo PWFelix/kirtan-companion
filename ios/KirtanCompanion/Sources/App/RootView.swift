@@ -106,14 +106,14 @@ struct SplashView: View {
 
             Wordmark(size: 38)
 
-            Text(String(localized: "Play along, one drummer fewer."))
+            Text(String(localized: "Play along, one drummer fewer.", bundle: .strings))
                 .font(.callout)
                 .foregroundStyle(Palette.syahiSoft)
 
             Spacer()
 
             Button(action: onBegin) {
-                Text(String(localized: "Begin"))
+                Text(String(localized: "Begin", bundle: .strings))
                     .font(.title3.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)

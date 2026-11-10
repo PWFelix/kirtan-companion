@@ -8,6 +8,10 @@ import SwiftUI
 // invert into and the web app declares no `prefers-color-scheme` block at all.
 @main
 struct KirtanApp: App {
+    init() {
+        // Before any view reads a string: the language picked in Settings.
+        AppLanguage.install()
+    }
 
     var body: some Scene {
         WindowGroup {

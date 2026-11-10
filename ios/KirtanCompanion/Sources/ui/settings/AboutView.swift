@@ -26,19 +26,19 @@ struct AboutView: View {
                 .frame(maxWidth: .infinity)
                 .clipped()
 
-                Text(String(localized: "Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, courageous or heroic in relation to the mṛdaṅga."))
+                Text(String(localized: "Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, courageous or heroic in relation to the mṛdaṅga.", bundle: .strings))
                     .font(.subheadline)
                     .foregroundStyle(Palette.syahiSoft)
                 Text("paraṁ vijayate śrī-kṛṣṇa-saṅkīrtanam")
                     .font(.title3.weight(.medium).italic())
                     .foregroundStyle(Palette.clay)
-                Text(String(localized: "a World Sankirtan Party production"))
+                Text(String(localized: "a World Sankirtan Party production", bundle: .strings))
                     .foregroundStyle(Palette.syahi)
-                Text(String(localized: "All glories to Śrīla Prabhupāda!"))
+                Text(String(localized: "All glories to Śrīla Prabhupāda!", bundle: .strings))
                     .font(.headline)
                     .foregroundStyle(Palette.syahi)
                 if let version {
-                    Text(String(localized: "Version \(version)"))
+                    Text(String(localized: "Version \(version)", bundle: .strings))
                         .font(.caption)
                         .foregroundStyle(Palette.faint)
                 }
@@ -48,7 +48,7 @@ struct AboutView: View {
             .padding(.bottom, 120)
         }
         .background(Palette.head.ignoresSafeArea())
-        .navigationTitle(String(localized: "About"))
+        .navigationTitle(String(localized: "About", bundle: .strings))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

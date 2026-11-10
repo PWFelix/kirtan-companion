@@ -18,19 +18,19 @@ struct SyncView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(String(localized: "Sync sound and display"))
+                Text(String(localized: "Sync sound and display", bundle: .strings))
                     .font(.system(size: 26, weight: .semibold, design: .serif))
                     .foregroundStyle(Palette.syahi)
-                Text(String(localized: "Bluetooth speakers play a little after the screen. If the strip or the highway runs ahead of the drum, set the delay here. Each speaker remembers its own."))
+                Text(String(localized: "Bluetooth speakers play a little after the screen. If the strip or the highway runs ahead of the drum, set the delay here. Each speaker remembers its own.", bundle: .strings))
                     .font(.subheadline)
                     .foregroundStyle(Palette.syahiSoft)
 
                 routeCard
 
-                sectionLabel(String(localized: "1 · Tap along"))
+                sectionLabel(String(localized: "1 · Tap along", bundle: .strings))
                 Text(tapping
-                     ? String(localized: "Tap on every click. Listen, don't watch.")
-                     : String(localized: "Start the click, then look away and tap the circle on every click you hear."))
+                     ? String(localized: "Tap on every click. Listen, don't watch.", bundle: .strings)
+                     : String(localized: "Start the click, then look away and tap the circle on every click you hear.", bundle: .strings))
                     .font(.subheadline)
                     .foregroundStyle(Palette.syahiSoft)
 
@@ -38,10 +38,10 @@ struct SyncView: View {
 
                 switch result {
                 case .delay(let ms):
-                    Text(String(localized: "Done. The display now runs \(describe(ms)). Check it below and fine-tune if you need to."))
+                    Text(String(localized: "Done. The display now runs \(describe(ms)). Check it below and fine-tune if you need to.", bundle: .strings))
                         .font(.subheadline).foregroundStyle(Palette.syahi)
                 case .tooUneven:
-                    Text(String(localized: "Those taps were too uneven to measure. Try again, keeping a steady tap with the click."))
+                    Text(String(localized: "Those taps were too uneven to measure. Try again, keeping a steady tap with the click.", bundle: .strings))
                         .font(.subheadline).foregroundStyle(Palette.clay)
                 case nil:
                     EmptyView()
@@ -57,15 +57,15 @@ struct SyncView: View {
                         tapping = true
                     }
                 } label: {
-                    Text(tapping ? String(localized: "Cancel") : (result != nil ? String(localized: "Tap again") : String(localized: "Start tapping")))
+                    Text(tapping ? String(localized: "Cancel", bundle: .strings) : (result != nil ? String(localized: "Tap again", bundle: .strings) : String(localized: "Start tapping", bundle: .strings)))
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 54)
                         .foregroundStyle(Palette.head)
                         .background(Palette.clay, in: RoundedRectangle(cornerRadius: 18))
                 }
 
-                sectionLabel(String(localized: "2 · Line up"))
-                Text(String(localized: "The light flashes where the display thinks each click is. Slide until flash and click happen together."))
+                sectionLabel(String(localized: "2 · Line up", bundle: .strings))
+                Text(String(localized: "The light flashes where the display thinks each click is. Slide until flash and click happen together.", bundle: .strings))
                     .font(.subheadline)
                     .foregroundStyle(Palette.syahiSoft)
 
@@ -75,7 +75,7 @@ struct SyncView: View {
                             .fill(Palette.clay.opacity(0.12 + 0.88 * flash()))
                             .frame(width: 56, height: 56)
                     }
-                    .accessibilityLabel(String(localized: "Flash on each click"))
+                    .accessibilityLabel(String(localized: "Flash on each click", bundle: .strings))
                     VStack(alignment: .leading) {
                         Text(describe(transport.displayDelayMs).prefix(1).uppercased()
                              + describe(transport.displayDelayMs).dropFirst())
@@ -91,10 +91,10 @@ struct SyncView: View {
                 }
 
                 HStack(spacing: 8) {
-                    secondary(clicking ? String(localized: "Stop click") : String(localized: "Play click")) {
+                    secondary(clicking ? String(localized: "Stop click", bundle: .strings) : String(localized: "Play click", bundle: .strings)) {
                         if clicking { stopClick() } else { startClick() }
                     }
-                    secondary(String(localized: "Reset to 0")) { transport.setDisplayDelay(0) }
+                    secondary(String(localized: "Reset to 0", bundle: .strings)) { transport.setDisplayDelay(0) }
                 }
             }
             .padding(24)
@@ -110,7 +110,7 @@ struct SyncView: View {
 
     private var routeCard: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(String(localized: "PLAYING THROUGH"))
+            Text(String(localized: "PLAYING THROUGH", bundle: .strings))
                 .font(.caption.weight(.semibold)).tracking(1)
                 .foregroundStyle(Palette.syahiSoft)
             Text(transport.route.bluetooth ? "\(transport.route.label) · Bluetooth" : transport.route.label)
@@ -126,14 +126,14 @@ struct SyncView: View {
     private var delayLine: String {
         let ms = transport.displayDelayMs
         let signed = "\(ms > 0 ? "+" : "")\(ms)"
-        var line = ms == 0 ? String(localized: "Display delay: none") : String(localized: "Display delay: \(signed) ms")
-        if clicking { line += " · " + String(localized: "phone reports \(transport.reportedOutputLatencyMs) ms, already allowed for") }
+        var line = ms == 0 ? String(localized: "Display delay: none", bundle: .strings) : String(localized: "Display delay: \(signed) ms", bundle: .strings)
+        if clicking { line += " · " + String(localized: "phone reports \(transport.reportedOutputLatencyMs) ms, already allowed for", bundle: .strings) }
         return line
     }
 
     private var tapPad: some View {
         let counted = min(max(taps.count - SyncCalibration.warmUp, 0), SyncCalibration.tapsNeeded)
-        return Text(tapping ? "\(counted) / \(SyncCalibration.tapsNeeded)" : String(localized: "sync.pad", defaultValue: "Tap"))
+        return Text(tapping ? "\(counted) / \(SyncCalibration.tapsNeeded)" : String(localized: "sync.pad", defaultValue: "Tap", bundle: .strings))
             .font(.system(size: 30, weight: .bold))
             .foregroundStyle(Palette.clayDeep)
             .frame(width: 190, height: 190)
@@ -153,7 +153,7 @@ struct SyncView: View {
                     }
                     .onEnded { _ in pressed = false }
             )
-            .accessibilityLabel(String(localized: "Tap pad: tap on every click"))
+            .accessibilityLabel(String(localized: "Tap pad: tap on every click", bundle: .strings))
     }
 
     private func sectionLabel(_ text: String) -> some View {
@@ -208,8 +208,8 @@ struct SyncView: View {
 
 /// "on time", "120 ms later", "30 ms earlier".
 private func describe(_ ms: Int) -> String {
-    if ms == 0 { return String(localized: "on time, with no extra delay") }
-    return ms > 0 ? String(localized: "\(ms) ms later") : String(localized: "\(-ms) ms earlier")
+    if ms == 0 { return String(localized: "on time, with no extra delay", bundle: .strings) }
+    return ms > 0 ? String(localized: "\(ms) ms later", bundle: .strings) : String(localized: "\(-ms) ms earlier", bundle: .strings)
 }
 
 /// "Playing through JBL Flip 5 · Sync the display?" — shown once per Bluetooth
@@ -222,14 +222,14 @@ struct SyncPromptBanner: View {
     var body: some View {
         HStack(spacing: 4) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(String(localized: "Playing through \(deviceLabel)"))
+                Text(String(localized: "Playing through \(deviceLabel)", bundle: .strings))
                     .font(.footnote.bold()).lineLimit(1)
-                Text(String(localized: "Is the screen ahead of the drum? Sync them."))
+                Text(String(localized: "Is the screen ahead of the drum? Sync them.", bundle: .strings))
                     .font(.caption).opacity(0.75)
             }
             .foregroundStyle(Palette.head)
             Spacer(minLength: 4)
-            Button(String(localized: "Sync"), action: onSync)
+            Button(String(localized: "Sync", bundle: .strings), action: onSync)
                 .font(.subheadline.bold())
                 .foregroundStyle(Palette.head)
                 .frame(minWidth: 44, minHeight: 44)
@@ -238,7 +238,7 @@ struct SyncPromptBanner: View {
             }
             .foregroundStyle(Palette.head.opacity(0.7))
             .frame(minWidth: 44, minHeight: 44)
-            .accessibilityLabel(String(localized: "Dismiss"))
+            .accessibilityLabel(String(localized: "Dismiss", bundle: .strings))
         }
         .padding(.leading, 16).padding(.trailing, 6).padding(.vertical, 6)
         .background(Palette.syahi, in: RoundedRectangle(cornerRadius: 14))

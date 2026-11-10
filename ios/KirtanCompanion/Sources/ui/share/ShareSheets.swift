@@ -53,11 +53,11 @@ struct ShareSheetView: View {
     var body: some View {
         let code = self.code
         let link = ShareLinks.forCode(code)
-        SheetScaffold(title: String(localized: "Share \(target.title)"), onDismiss: onDismiss) {
+        SheetScaffold(title: String(localized: "Share \(target.title)", bundle: .strings), onDismiss: onDismiss) {
             Text(blurb).font(.subheadline).foregroundStyle(Palette.syahiSoft)
 
             if ShareLinks.webBase.isEmpty {
-                Text(String(localized: "No web origin is configured, so this link opens the app rather than the site."))
+                Text(String(localized: "No web origin is configured, so this link opens the app rather than the site.", bundle: .strings))
                     .font(.caption).foregroundStyle(Palette.faint)
             }
 
@@ -68,13 +68,13 @@ struct ShareSheetView: View {
             .background(Palette.headSunken, in: RoundedRectangle(cornerRadius: 10))
 
             HStack(spacing: 10) {
-                SecondaryButton(title: String(localized: "Copy link")) { UIPasteboard.general.string = link; copied = String(localized: "Link copied") }
-                SecondaryButton(title: String(localized: "Copy code")) { UIPasteboard.general.string = code; copied = String(localized: "Code copied") }
+                SecondaryButton(title: String(localized: "Copy link", bundle: .strings)) { UIPasteboard.general.string = link; copied = String(localized: "Link copied", bundle: .strings) }
+                SecondaryButton(title: String(localized: "Copy code", bundle: .strings)) { UIPasteboard.general.string = code; copied = String(localized: "Code copied", bundle: .strings) }
             }
 
             if let url = URL(string: link) {
                 ShareLink(item: url, subject: Text(target.title)) {
-                    Label(String(localized: "Share…"), systemImage: "square.and.arrow.up")
+                    Label(String(localized: "Share…", bundle: .strings), systemImage: "square.and.arrow.up")
                         .primaryButtonLabel()
                 }
             }
@@ -87,8 +87,8 @@ struct ShareSheetView: View {
 
     private var blurb: String {
         switch target {
-        case .beat: return String(localized: "The whole beat travels inside the link. Nothing is uploaded.")
-        case .category(_, let beats): return String(localized: "All \(beats.count) beats in this list travel inside the link. Nothing is uploaded.")
+        case .beat: return String(localized: "The whole beat travels inside the link. Nothing is uploaded.", bundle: .strings)
+        case .category(_, let beats): return String(localized: "All \(beats.count) beats in this list travel inside the link. Nothing is uploaded.", bundle: .strings)
         }
     }
 }
@@ -104,10 +104,10 @@ struct ImportSheetView: View {
     @State private var error: String?
 
     var body: some View {
-        SheetScaffold(title: String(localized: "Import"), onDismiss: onDismiss) {
-            Text(String(localized: "Paste a share code or link. A whole link works — the code is read out of it either way."))
+        SheetScaffold(title: String(localized: "Import", bundle: .strings), onDismiss: onDismiss) {
+            Text(String(localized: "Paste a share code or link. A whole link works — the code is read out of it either way.", bundle: .strings))
                 .font(.subheadline).foregroundStyle(Palette.syahiSoft)
-            TextField(String(localized: "Paste a share code or link"), text: $input, axis: .vertical)
+            TextField(String(localized: "Paste a share code or link", bundle: .strings), text: $input, axis: .vertical)
                 .lineLimit(2...4)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -124,13 +124,13 @@ struct ImportSheetView: View {
                 if let payload = ShareCodec.decodeShare(code), payload != .invalid {
                     onDecoded(payload)
                 } else {
-                    error = String(localized: "That is not a Kirtan share code or link. Nothing was imported.")
+                    error = String(localized: "That is not a Kirtan share code or link. Nothing was imported.", bundle: .strings)
                 }
             } label: {
-                Text(String(localized: "Preview")).primaryButtonLabel()
+                Text(String(localized: "Preview", bundle: .strings)).primaryButtonLabel()
             }
             .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
-            Text(String(localized: "An imported beat is always saved under a NEW id, so it can never overwrite one of yours — a single beat lands in Your beats, a list arrives as its own playlist."))
+            Text(String(localized: "An imported beat is always saved under a NEW id, so it can never overwrite one of yours — a single beat lands in Your beats, a list arrives as its own playlist.", bundle: .strings))
                 .font(.caption).foregroundStyle(Palette.faint)
         }
     }
@@ -146,22 +146,22 @@ struct ImportConfirmView: View {
     var body: some View {
         switch payload {
         case .invalid:
-            SheetScaffold(title: String(localized: "Can't open that link"), onDismiss: onDismiss) {
-                Text(String(localized: "The code was damaged, truncated, or made by a newer version of the app. Nothing was imported."))
+            SheetScaffold(title: String(localized: "Can't open that link", bundle: .strings), onDismiss: onDismiss) {
+                Text(String(localized: "The code was damaged, truncated, or made by a newer version of the app. Nothing was imported.", bundle: .strings))
                     .font(.subheadline).foregroundStyle(Palette.syahiSoft)
-                Button(action: onDismiss) { Text(String(localized: "Close")).primaryButtonLabel() }
+                Button(action: onDismiss) { Text(String(localized: "Close", bundle: .strings)).primaryButtonLabel() }
             }
         case .beat(let beat):
-            SheetScaffold(title: String(localized: "Someone shared this"), onDismiss: onDismiss) {
+            SheetScaffold(title: String(localized: "Someone shared this", bundle: .strings), onDismiss: onDismiss) {
                 Text(beat.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.syahi)
-                Text(String(localized: "\(beat.steps) cells") + " · " + String(localized: "suggested \(beat.bpm) BPM")).font(.subheadline).foregroundStyle(Palette.syahiSoft)
+                Text(String(localized: "\(beat.steps) cells", bundle: .strings) + " · " + String(localized: "suggested \(beat.bpm) BPM", bundle: .strings)).font(.subheadline).foregroundStyle(Palette.syahiSoft)
                 BeatStripView(beat: beat).frame(height: 90)
-                buttons(accept: String(localized: "Add to my beats"))
+                buttons(accept: String(localized: "Add to my beats", bundle: .strings))
             }
         case .category(let name, let beats):
-            SheetScaffold(title: String(localized: "Someone shared a list"), onDismiss: onDismiss) {
+            SheetScaffold(title: String(localized: "Someone shared a list", bundle: .strings), onDismiss: onDismiss) {
                 Text(name).font(.title2.weight(.semibold)).foregroundStyle(Palette.syahi)
-                Text(String(localized: "\(beats.count) beats")).font(.subheadline).foregroundStyle(Palette.syahiSoft)
+                Text(String(localized: "\(beats.count) beats", bundle: .strings)).font(.subheadline).foregroundStyle(Palette.syahiSoft)
                 ForEach(Array(beats.enumerated()), id: \.offset) { _, beat in
                     HStack {
                         Text(beat.name).foregroundStyle(Palette.syahi)
@@ -170,14 +170,14 @@ struct ImportConfirmView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                buttons(accept: String(localized: "Add list"))
+                buttons(accept: String(localized: "Add list", bundle: .strings))
             }
         }
     }
 
     private func buttons(accept: String) -> some View {
         HStack(spacing: 10) {
-            SecondaryButton(title: String(localized: "Cancel"), action: onDismiss)
+            SecondaryButton(title: String(localized: "Cancel", bundle: .strings), action: onDismiss)
             Button(action: onAccept) { Text(accept).primaryButtonLabel() }
         }
     }
@@ -192,17 +192,17 @@ struct MigrationSheetView: View {
     @State private var busy = false
 
     var body: some View {
-        SheetScaffold(title: String(localized: "Move your beats to your account?"), onDismiss: { container.auth.pendingMigration = nil }) {
+        SheetScaffold(title: String(localized: "Move your beats to your account?", bundle: .strings), onDismiss: { container.auth.pendingMigration = nil }) {
             Text(summary).font(.subheadline).foregroundStyle(Palette.syahi)
-            Text(String(localized: "Moving copies them up; the copies on this device stay until you delete them. Leaving them here means this account starts empty."))
+            Text(String(localized: "Moving copies them up; the copies on this device stay until you delete them. Leaving them here means this account starts empty.", bundle: .strings))
                 .font(.caption).foregroundStyle(Palette.syahiSoft)
             HStack(spacing: 10) {
-                SecondaryButton(title: String(localized: "Leave on device")) { container.auth.pendingMigration = nil }
+                SecondaryButton(title: String(localized: "Leave on device", bundle: .strings)) { container.auth.pendingMigration = nil }
                     .disabled(busy)
                 Button {
                     busy = true
                     Task { _ = await container.acceptMigration(); busy = false }
-                } label: { Text(busy ? String(localized: "Moving…") : String(localized: "Move them")).primaryButtonLabel() }
+                } label: { Text(busy ? String(localized: "Moving…", bundle: .strings) : String(localized: "Move them", bundle: .strings)).primaryButtonLabel() }
                 .disabled(busy)
             }
         }
@@ -210,9 +210,9 @@ struct MigrationSheetView: View {
 
     private var summary: String {
         let b = local.beats.count, c = local.categories.count
-        var s = String(localized: "This device holds \(b) beats")
-        if c > 0 { s += String(localized: " and \(c) lists") }
-        return s + (b + c == 1 ? String(localized: " that is not in your account yet.") : String(localized: " that are not in your account yet."))
+        var s = String(localized: "This device holds \(b) beats", bundle: .strings)
+        if c > 0 { s += String(localized: " and \(c) lists", bundle: .strings) }
+        return s + (b + c == 1 ? String(localized: " that is not in your account yet.", bundle: .strings) : String(localized: " that are not in your account yet.", bundle: .strings))
     }
 }
 
@@ -234,7 +234,7 @@ struct SheetScaffold<Content: View>: View {
                         Image(systemName: "xmark").font(.body.weight(.semibold))
                             .foregroundStyle(Palette.syahiSoft).frame(width: 32, height: 32)
                     }
-                    .accessibilityLabel(String(localized: "Close"))
+                    .accessibilityLabel(String(localized: "Close", bundle: .strings))
                 }
                 content()
             }

@@ -29,7 +29,7 @@ struct LearnView: View {
                 )
                 controls(beat)
             } else {
-                Text(String(localized: "Pick a beat on Home to learn it here."))
+                Text(String(localized: "Pick a beat on Home to learn it here.", bundle: .strings))
                     .foregroundStyle(Palette.syahiSoft)
             }
         }
@@ -42,18 +42,18 @@ struct LearnView: View {
 
     private func header(_ beat: Beat) -> some View {
         HStack {
-            iconButton("chevron.left", String(localized: "Previous beat")) { cycle(-1) }
+            iconButton("chevron.left", String(localized: "Previous beat", bundle: .strings)) { cycle(-1) }
             VStack(spacing: 2) {
                 Text(beat.name)
                     .font(.system(size: 22, weight: .semibold, design: .serif))
                     .foregroundStyle(Palette.syahi)
                     .lineLimit(1)
-                Text(String(localized: "Watch the strokes land, and play along"))
+                Text(String(localized: "Watch the strokes land, and play along", bundle: .strings))
                     .font(.caption)
                     .foregroundStyle(Palette.syahiSoft)
             }
             .frame(maxWidth: .infinity)
-            iconButton("chevron.right", String(localized: "Next beat")) { cycle(1) }
+            iconButton("chevron.right", String(localized: "Next beat", bundle: .strings)) { cycle(1) }
         }
     }
 
@@ -61,7 +61,7 @@ struct LearnView: View {
     private var handToggle: some View {
         let left = transport.settings.learnLeftHanded
         return Button { transport.setLearnLeftHanded(!left) } label: {
-            Text(left ? String(localized: "Left-handed · dayan on the left") : String(localized: "Right-handed · dayan on the right"))
+            Text(left ? String(localized: "Left-handed · dayan on the left", bundle: .strings) : String(localized: "Right-handed · dayan on the right", bundle: .strings))
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Palette.syahi)
                 .frame(maxWidth: .infinity, minHeight: 38)
@@ -72,15 +72,15 @@ struct LearnView: View {
     private func controls(_ beat: Beat) -> some View {
         HStack(spacing: 10) {
             // Learning wants SLOWER more than anything: 5 BPM steps.
-            iconButton("minus", String(localized: "Slower")) { transport.nudgeBpm(-5) }
+            iconButton("minus", String(localized: "Slower", bundle: .strings)) { transport.nudgeBpm(-5) }
             Text("\(transport.bpm) BPM")
                 .font(.headline)
                 .monospacedDigit()
                 .foregroundStyle(Palette.syahi)
-            iconButton("plus", String(localized: "Faster")) { transport.nudgeBpm(5) }
+            iconButton("plus", String(localized: "Faster", bundle: .strings)) { transport.nudgeBpm(5) }
             Spacer()
             Button { transport.togglePlay(beat) } label: {
-                Label(transport.playing ? String(localized: "Pause") : String(localized: "Play"),
+                Label(transport.playing ? String(localized: "Pause", bundle: .strings) : String(localized: "Play", bundle: .strings),
                       systemImage: transport.playing ? "pause.fill" : "play.fill")
                     .font(.headline)
                     .frame(width: 130, height: 48)
@@ -187,13 +187,13 @@ private struct HighwayCanvas: View {
                        with: .color(hot ? color : color.opacity(0.35)), lineWidth: hot ? 4 : 2)
             ctx.draw(Text(column.bol).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.syahi),
                      at: CGPoint(x: cx, y: size.height - labelH + 12))
-            let sub = "\(column.lane.label) · " + (column.stroke == .open ? String(localized: "open") : String(localized: "closed"))
+            let sub = "\(column.lane.label) · " + (column.stroke == .open ? String(localized: "open", bundle: .strings) : String(localized: "closed", bundle: .strings))
             ctx.draw(Text(sub).font(.system(size: 9)).foregroundStyle(Palette.syahiSoft),
                      at: CGPoint(x: cx, y: size.height - 6))
         }
 
         if !playing {
-            let hint = ctx.resolve(Text(String(localized: "Press Play — strokes land on the line"))
+            let hint = ctx.resolve(Text(String(localized: "Press Play — strokes land on the line", bundle: .strings))
                 .font(.system(size: 12)).foregroundStyle(Palette.syahiSoft))
             let s = hint.measure(in: size)
             let center = CGPoint(x: size.width / 2, y: hitY - pxPerStep / 2)

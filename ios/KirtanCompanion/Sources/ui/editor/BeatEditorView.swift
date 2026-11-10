@@ -36,10 +36,10 @@ struct BeatEditorView: View {
 
         var title: String {
             switch self {
-            case .new: return String(localized: "New beat")
-            case .edit: return String(localized: "Edit beat")
-            case .fork: return String(localized: "Edit a copy")
-            case .everyone: return String(localized: "Edit for everyone")
+            case .new: return String(localized: "New beat", bundle: .strings)
+            case .edit: return String(localized: "Edit beat", bundle: .strings)
+            case .fork: return String(localized: "Edit a copy", bundle: .strings)
+            case .everyone: return String(localized: "Edit for everyone", bundle: .strings)
             }
         }
     }
@@ -47,7 +47,7 @@ struct BeatEditorView: View {
     private var transport: TransportViewModel { container.transport }
 
     // ── The draft. All of it means nothing outside this view. ──
-    @State private var name = String(localized: "New beat")
+    @State private var name = String(localized: "New beat", bundle: .strings)
     @State private var bpm = 120
     @State private var beatsPerBar = 4.0
     @State private var cellsPerGroup = 2
@@ -96,8 +96,8 @@ struct BeatEditorView: View {
             .background(Palette.head.ignoresSafeArea())
         }
         .onAppear(perform: seed)
-        .alert(String(localized: "Not saved"), isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
-            Button(String(localized: "OK"), role: .cancel) { saveError = nil }
+        .alert(String(localized: "Not saved", bundle: .strings), isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+            Button(String(localized: "OK", bundle: .strings), role: .cancel) { saveError = nil }
         } message: {
             Text(saveError ?? "")
         }
@@ -158,23 +158,23 @@ struct BeatEditorView: View {
     // MARK: controls
 
     private var nameField: some View {
-        TextField(String(localized: "Name"), text: $name)
+        TextField(String(localized: "Name", bundle: .strings), text: $name)
             .textFieldStyle(.roundedBorder)
             .font(.body)
     }
 
     private var meterRow: some View {
         HStack(spacing: 12) {
-            control(String(localized: "Meter")) {
-                Picker(String(localized: "Meter"), selection: meterBinding) {
+            control(String(localized: "Meter", bundle: .strings)) {
+                Picker(String(localized: "Meter", bundle: .strings), selection: meterBinding) {
                     if let keptMeter {
-                        Text(String(localized: "As written (\(keptMeter.steps))")).tag(MeterPreset?.none)
+                        Text(String(localized: "As written (\(keptMeter.steps))", bundle: .strings)).tag(MeterPreset?.none)
                     }
                     ForEach(meters, id: \.label) { m in Text(m.label).tag(MeterPreset?.some(m)) }
                 }
                 .pickerStyle(.menu)
             }
-            control(String(localized: "Tempo")) {
+            control(String(localized: "Tempo", bundle: .strings)) {
                 Stepper("\(bpm)", value: $bpm, in: 40...240, step: 1)
                     .font(.footnote.monospacedDigit())
             }
@@ -284,9 +284,9 @@ struct BeatEditorView: View {
 
     private var pads: some View {
         HStack(spacing: 10) {
-            padButton(.open, String(localized: "Open"), symbol: "circle.fill")
-            padButton(.closed, String(localized: "Closed"), symbol: "square.fill")
-            padButton(nil, String(localized: "Rest"), symbol: "circle.dotted")
+            padButton(.open, String(localized: "Open", bundle: .strings), symbol: "circle.fill")
+            padButton(.closed, String(localized: "Closed", bundle: .strings), symbol: "square.fill")
+            padButton(nil, String(localized: "Rest", bundle: .strings), symbol: "circle.dotted")
             Spacer()
             Button {
                 dayan = Array(repeating: nil, count: steps)
@@ -328,7 +328,7 @@ struct BeatEditorView: View {
             Button {
                 previewing ? stopPreview() : startPreview()
             } label: {
-                Label(previewing ? String(localized: "Stop") : String(localized: "Preview"),
+                Label(previewing ? String(localized: "Stop", bundle: .strings) : String(localized: "Preview", bundle: .strings),
                       systemImage: previewing ? "stop.fill" : "play.fill")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Palette.onClay)
@@ -374,7 +374,7 @@ struct BeatEditorView: View {
         let seed = mode.seed
         var beat = Beat(
             id: keepsIdentity ? seed?.id : nil,
-            name: name.trimmingCharacters(in: .whitespaces) == "" ? String(localized: "New beat") : name,
+            name: name.trimmingCharacters(in: .whitespaces) == "" ? String(localized: "New beat", bundle: .strings) : name,
             note: keepsIdentity ? (seed?.note ?? "") : "",
             bpm: bpm,
             steps: steps,
@@ -493,9 +493,9 @@ private struct MeterPreset: Identifiable, Hashable {
 
     static let allCases: [MeterPreset] = [
         .init(beatsPerBar: 4, cellsPerGroup: 1, label: "4/4"),
-        .init(beatsPerBar: 4, cellsPerGroup: 2, label: String(localized: "8 (eighths)")),
-        .init(beatsPerBar: 4, cellsPerGroup: 3, label: String(localized: "12 (triplets)")),
-        .init(beatsPerBar: 4, cellsPerGroup: 4, label: String(localized: "16 (sixteenths)")),
+        .init(beatsPerBar: 4, cellsPerGroup: 2, label: String(localized: "8 (eighths)", bundle: .strings)),
+        .init(beatsPerBar: 4, cellsPerGroup: 3, label: String(localized: "12 (triplets)", bundle: .strings)),
+        .init(beatsPerBar: 4, cellsPerGroup: 4, label: String(localized: "16 (sixteenths)", bundle: .strings)),
         .init(beatsPerBar: 3, cellsPerGroup: 2, label: "6 (3/4)"),
     ]
 

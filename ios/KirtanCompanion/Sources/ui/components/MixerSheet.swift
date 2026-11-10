@@ -26,11 +26,11 @@ struct MixerSheet: View {
                 .padding(20)
             }
             .background(Palette.head.ignoresSafeArea())
-            .navigationTitle(String(localized: "Sound"))
+            .navigationTitle(String(localized: "Sound", bundle: .strings))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(String(localized: "Done")) { dismiss() }
+                    Button(String(localized: "Done", bundle: .strings)) { dismiss() }
                 }
             }
         }
@@ -40,7 +40,7 @@ struct MixerSheet: View {
 
     private var masterSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "Master"))
+            Text(String(localized: "Master", bundle: .strings))
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Palette.syahiSoft)
             Slider(
@@ -50,7 +50,7 @@ struct MixerSheet: View {
                 ),
                 in: 0...1
             ) {
-                Text(String(localized: "Master"))
+                Text(String(localized: "Master", bundle: .strings))
             } minimumValueLabel: {
                 Image(systemName: "speaker").foregroundStyle(Palette.faint)
             } maximumValueLabel: {
@@ -65,10 +65,10 @@ struct MixerSheet: View {
     /// Four fixed levels rather than a slider, so it is easy to A/B by ear.
     private var feelSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "Feel"))
+            Text(String(localized: "Feel", bundle: .strings))
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Palette.syahiSoft)
-            Picker(String(localized: "Feel"), selection: Binding(
+            Picker(String(localized: "Feel", bundle: .strings), selection: Binding(
                 get: { transport.settings.feel },
                 set: { transport.setFeel($0) }
             )) {
@@ -76,8 +76,8 @@ struct MixerSheet: View {
             }
             .pickerStyle(.segmented)
             Text(transport.settings.feel == .drag
-                 ? String(localized: "Laid back, the Bengali way: the drum sits just behind the beat, least on sam, so the \"1\" stays solid for singing.")
-                 : String(localized: "Small changes in timing and loudness, so the drum sounds played rather than programmed."))
+                 ? String(localized: "Laid back, the Bengali way: the drum sits just behind the beat, least on sam, so the \"1\" stays solid for singing.", bundle: .strings)
+                 : String(localized: "Small changes in timing and loudness, so the drum sounds played rather than programmed.", bundle: .strings))
                 .font(.caption)
                 .foregroundStyle(Palette.syahiSoft)
         }
@@ -125,7 +125,7 @@ struct MixerSheet: View {
                 transport.toggleEqPanel(lane)
             } label: {
                 HStack {
-                    Text(String(localized: "Equaliser"))
+                    Text(String(localized: "Equaliser", bundle: .strings))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Palette.syahi)
                     Spacer()
@@ -162,7 +162,7 @@ struct MixerSheet: View {
                 transport.toggleTunePanel(lane)
             } label: {
                 HStack {
-                    Text(String(localized: "Tune") + "  \(end.tuneCents >= 0 ? "+" : "")\(end.tuneCents)¢")
+                    Text(String(localized: "Tune", bundle: .strings) + "  \(end.tuneCents >= 0 ? "+" : "")\(end.tuneCents)¢")
                         .font(.subheadline.weight(.medium))
                         .monospacedDigit()
                         .foregroundStyle(Palette.syahi)

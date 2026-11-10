@@ -42,26 +42,26 @@ struct SettingsView: View {
 
     private var settings: some View {
         VStack(spacing: 12) {
-            Text(String(localized: "Settings"))
+            Text(String(localized: "Settings", bundle: .strings))
                 .font(.system(size: 26, weight: .semibold, design: .serif))
                 .foregroundStyle(Palette.syahi)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
 
             Form {
-                Section(String(localized: "Notation")) {
-                    Toggle(String(localized: "Show bol syllables"), isOn: bolBinding)
-                    Toggle(String(localized: "Show step labels"), isOn: stepLabelBinding)
+                Section(String(localized: "Notation", bundle: .strings)) {
+                    Toggle(String(localized: "Show bol syllables", bundle: .strings), isOn: bolBinding)
+                    Toggle(String(localized: "Show step labels", bundle: .strings), isOn: stepLabelBinding)
                 }
 
-                Section(String(localized: "Sound")) {
+                Section(String(localized: "Sound", bundle: .strings)) {
                     Button {
                         syncOpen = true
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(String(localized: "Sync sound and display")).foregroundStyle(Palette.syahi)
-                            Text(String(localized: "For Bluetooth speakers: line the beat on screen up with what you hear.") + " \(transport.route.label): " +
-                                 (transport.displayDelayMs == 0 ? String(localized: "no delay set.") : String(localized: "display \(transport.displayDelayMs) ms later.")))
+                            Text(String(localized: "Sync sound and display", bundle: .strings)).foregroundStyle(Palette.syahi)
+                            Text(String(localized: "For Bluetooth speakers: line the beat on screen up with what you hear.", bundle: .strings) + " \(transport.route.label): " +
+                                 (transport.displayDelayMs == 0 ? String(localized: "no delay set.", bundle: .strings) : String(localized: "display \(transport.displayDelayMs) ms later.", bundle: .strings)))
                                 .font(.footnote)
                                 .foregroundStyle(Palette.syahiSoft)
                         }
@@ -72,8 +72,20 @@ struct SettingsView: View {
                     cloudSection
                 }
 
+                Section(String(localized: "Language", bundle: .strings)) {
+                    Picker(String(localized: "Language", bundle: .strings), selection: Binding(
+                        get: { AppLanguage.choice ?? "" },
+                        set: { AppLanguage.set($0.isEmpty ? nil : $0) }
+                    )) {
+                        Text(String(localized: "System (\(AppLanguage.nativeName(AppLanguage.systemLanguage)))", bundle: .strings)).tag("")
+                        ForEach(AppLanguage.supported, id: \.self) { tag in
+                            Text(AppLanguage.nativeName(tag)).tag(tag)
+                        }
+                    }
+                }
+
                 Section {
-                    Button(String(localized: "About")) { aboutOpen = true }
+                    Button(String(localized: "About", bundle: .strings)) { aboutOpen = true }
                         .foregroundStyle(Palette.syahi)
                 }
             }
@@ -88,18 +100,18 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var cloudSection: some View {
-        Section(String(localized: "Cloud")) {
+        Section(String(localized: "Cloud", bundle: .strings)) {
             if let account = container.account {
-                LabeledContent(String(localized: "Signed in as"), value: container.auth.displayName)
+                LabeledContent(String(localized: "Signed in as", bundle: .strings), value: container.auth.displayName)
                 if let email = account.email, !email.isEmpty {
-                    LabeledContent(String(localized: "Email"), value: email)
+                    LabeledContent(String(localized: "Email", bundle: .strings), value: email)
                 }
-                Button(String(localized: "Sign out"), role: .destructive) {
+                Button(String(localized: "Sign out", bundle: .strings), role: .destructive) {
                     Task { await container.signOut() }
                 }
             } else {
                 SignInButton(container: container)
-                Text(String(localized: "An account keeps your beats and playlists in the cloud and lets you share to the community library."))
+                Text(String(localized: "An account keeps your beats and playlists in the cloud and lets you share to the community library.", bundle: .strings))
                     .font(.footnote)
                     .foregroundStyle(Palette.syahiSoft)
             }

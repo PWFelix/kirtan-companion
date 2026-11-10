@@ -14,10 +14,10 @@ struct NavigationShell: View {
 
         var title: String {
             switch self {
-            case .home: return String(localized: "Play")
-            case .beats: return String(localized: "Beats")
-            case .learn: return String(localized: "Learn")
-            case .settings: return String(localized: "Settings")
+            case .home: return String(localized: "Play", bundle: .strings)
+            case .beats: return String(localized: "Beats", bundle: .strings)
+            case .learn: return String(localized: "Learn", bundle: .strings)
+            case .settings: return String(localized: "Settings", bundle: .strings)
             }
         }
 
@@ -37,6 +37,9 @@ struct NavigationShell: View {
     @State private var editorMode: BeatEditorView.EditorMode?
     /// The sync screen, opened from the Bluetooth banner over whatever tab is up.
     @State private var syncOpen = false
+    /// The language picked in Settings ("" = system). Keying the tree on it re-renders
+    /// every screen when it changes; `destination` lives outside, so the tab stays.
+    @AppStorage(AppLanguage.defaultsKey) private var language = ""
 
     private var auth: AuthViewModel { container.auth }
 
@@ -99,6 +102,8 @@ struct NavigationShell: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .id(language)
+        .environment(\.locale, AppLanguage.choice.map(Locale.init(identifier:)) ?? .current)
         .animation(.easeInOut(duration: 0.22), value: editorMode != nil)
         .animation(.easeInOut(duration: 0.2), value: auth.notice)
         .sheet(isPresented: $syncOpen) { SyncView(transport: container.transport) }

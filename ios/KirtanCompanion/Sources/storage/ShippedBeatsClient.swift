@@ -87,11 +87,11 @@ final class ShippedBeatsClient {
         var notice: String? = nil
         if manual {
             if fetched == nil {
-                notice = String(localized: "The server sent a beat set this app couldn't use, so nothing changed.")
+                notice = String(localized: "The server sent a beat set this app couldn't use, so nothing changed.", bundle: .strings)
             } else if beats == previous {
-                notice = String(localized: "Already up to date · \(beats.count) beats")
+                notice = String(localized: "Already up to date · \(beats.count) beats", bundle: .strings)
             } else {
-                notice = String(localized: "Built-in beats updated · \(beats.count) beats")
+                notice = String(localized: "Built-in beats updated · \(beats.count) beats", bundle: .strings)
             }
         }
         status.checking = false
@@ -106,7 +106,7 @@ final class ShippedBeatsClient {
     private func refetch() async throws -> [Beat]? {
         let body = try await client.select(
             table: Self.table, columns: Self.columns, order: "ordinal.asc",
-            requireSession: false, whileDoing: String(localized: "load the built-in beats"),
+            requireSession: false, whileDoing: String(localized: "load the built-in beats", bundle: .strings),
         )
         guard let rows = body?.asArray() else { return nil }
         guard let beats = shippedBeatsOf(.array(rows)) else {
@@ -132,7 +132,7 @@ final class ShippedBeatsClient {
         do {
             let rows = try await client.select(
                 table: Self.maintainers, columns: "user_id", limit: 1,
-                whileDoing: String(localized: "check whether you may edit the built-in beats"),
+                whileDoing: String(localized: "check whether you may edit the built-in beats", bundle: .strings),
             )
             return !(rows?.asArray() ?? []).isEmpty
         } catch {
@@ -151,9 +151,9 @@ final class ShippedBeatsClient {
                 id: shippedIdFor(beat.name, taken: current.ids), ordinal: current.nextOrdinal,
                 heading: heading, beat: beat, sourcePublishedId: item.id, description: beat.description,
             ),
-            refusal: String(localized: "That beat can't become a built-in one — its name or its pattern is outside what the built-in set allows."),
+            refusal: String(localized: "That beat can't become a built-in one — its name or its pattern is outside what the built-in set allows.", bundle: .strings),
         )
-        _ = try await client.upsert(table: Self.table, body: row, onConflict: "id", whileDoing: String(localized: "make that a built-in beat"))
+        _ = try await client.upsert(table: Self.table, body: row, onConflict: "id", whileDoing: String(localized: "make that a built-in beat", bundle: .strings))
         try await refetch()
     }
 
@@ -163,7 +163,7 @@ final class ShippedBeatsClient {
     /// filtered UPDATE (not an upsert) so a beat retired meanwhile cannot come back.
     func updateShippedBeat(_ edited: Beat) async throws {
         guard let id = edited.id else {
-            throw StorageError(.unknown, String(localized: "That beat has no id, so there is no built-in row to update."))
+            throw StorageError(.unknown, String(localized: "That beat has no id, so there is no built-in row to update.", bundle: .strings))
         }
         guard let meta = try await currentRow(id) else { throw Self.notInTheSet() }
         let row = try checkedRow(
@@ -171,10 +171,10 @@ final class ShippedBeatsClient {
                 id: id, ordinal: meta.ordinal, heading: meta.heading, beat: edited,
                 sourcePublishedId: meta.sourcePublishedId, description: meta.description,
             ),
-            refusal: String(localized: "That edit can't be saved — its name or its pattern is outside what the built-in set allows."),
+            refusal: String(localized: "That edit can't be saved — its name or its pattern is outside what the built-in set allows.", bundle: .strings),
         )
         let written = try await client.update(
-            table: Self.table, body: row, filters: [("id", "eq.\(id)")], whileDoing: String(localized: "save that for everyone"),
+            table: Self.table, body: row, filters: [("id", "eq.\(id)")], whileDoing: String(localized: "save that for everyone", bundle: .strings),
         )
         if (written?.asArray() ?? []).isEmpty { throw Self.notInTheSet() }
         try await refetch()
@@ -184,26 +184,26 @@ final class ShippedBeatsClient {
     /// progression that used it keeps working.
     func removeShippedBeat(_ beat: Beat) async throws {
         guard let id = beat.id else {
-            throw StorageError(.unknown, String(localized: "That beat has no id, so there is no built-in row to remove."))
+            throw StorageError(.unknown, String(localized: "That beat has no id, so there is no built-in row to remove.", bundle: .strings))
         }
         guard try await currentRow(id) != nil else { throw Self.notInTheSet() }
         let deleted = try await client.delete(
             table: Self.table, filters: [("id", "eq.\(id)")], returning: true,
-            whileDoing: String(localized: "remove that from the built-in beats"),
+            whileDoing: String(localized: "remove that from the built-in beats", bundle: .strings),
         )
         if (deleted?.asArray() ?? []).isEmpty { throw Self.notInTheSet() }
         try await refetch()
     }
 
     private static func notInTheSet() -> StorageError {
-        StorageError(.notFound, String(localized: "That beat isn't in the built-in set any more, so there was nothing to update."))
+        StorageError(.notFound, String(localized: "That beat isn't in the built-in set any more, so there was nothing to update.", bundle: .strings))
     }
 
     private func currentRow(_ id: String) async throws -> ShippedRowMeta? {
         let body = try await client.select(
             table: Self.table, columns: "ordinal, heading, description, source_published_id",
             filters: [("id", "eq.\(id)")], limit: 1, requireSession: false,
-            whileDoing: String(localized: "load the built-in beats"),
+            whileDoing: String(localized: "load the built-in beats", bundle: .strings),
         )
         guard let row = body?.asArray()?.first,
               let ordinal = wholeNumber(row.element("ordinal")),
@@ -225,7 +225,7 @@ final class ShippedBeatsClient {
     private func currentRows() async throws -> (ids: Set<String>, nextOrdinal: Int) {
         let body = try await client.select(
             table: Self.table, columns: "id, ordinal", requireSession: false,
-            whileDoing: String(localized: "load the built-in beats"),
+            whileDoing: String(localized: "load the built-in beats", bundle: .strings),
         )
         let rows = body?.asArray() ?? []
         let ids = Set(rows.compactMap { $0.element("id")?.asString() }.filter { !$0.isEmpty })
