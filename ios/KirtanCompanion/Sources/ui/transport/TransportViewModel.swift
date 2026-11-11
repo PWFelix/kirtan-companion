@@ -452,6 +452,21 @@ final class TransportViewModel {
         playing = false
     }
 
+    /// Stop a preview AND hand the engine back to the loaded beat at the user's tempo,
+    /// so Home's Play plays what Home shows. For previews of beats that aren't the
+    /// loaded one (the community cards).
+    func endPreview() {
+        // Unconditional, unlike stopPreview: a late "stopped" from the playback
+        // controller can clear the mirror while the preview is still sounding.
+        engine.stop()
+        playing = false
+        if let beat = loadedBeat {
+            engine.setBeat(beat)
+            beatName = beat.name
+        }
+        engine.setBpm(bpm)
+    }
+
     // ── Position, for the playhead ─────────────────────────────────────────
     /// Bar phase in [0,1); 0 while stopped. Read once per frame by the strip.
     func getPhase() -> Double { engine.getPhase() }

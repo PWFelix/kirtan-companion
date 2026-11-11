@@ -30,6 +30,12 @@ struct BrowseView: View {
     @State private var pendingUnpublish: PublishedItem?
     @State private var promoting: PublishedItem?
     @State private var promoteHeading = ""
+    /// The card whose beat is sounding as a preview, if any. Listen before adding:
+    /// nothing is saved or selected, and ending it hands the engine back to Home's beat.
+    @State private var previewingId: String?
+    /// When it started: stopping a playing Home beat to make room reports playing=false
+    /// a moment later, which must not read as "stopped elsewhere".
+    @State private var previewStarted = Date.distantPast
 
     private var auth: AuthViewModel { container.auth }
     private var session: AuthSession? { auth.session }
@@ -57,6 +63,11 @@ struct BrowseView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .top)
+        // Leaving the page, or the sound being stopped elsewhere, ends the preview.
+        .onDisappear { endPreview() }
+        .onChange(of: container.transport.playing) { _, playing in
+            if !playing, previewingId != nil, Date().timeIntervalSince(previewStarted) > 1 { endPreview() }
+        }
         .task(id: loadKey) {
             guard container.cloudConfigured else { return }
             if !query.isEmpty {
@@ -244,6 +255,22 @@ struct BrowseView: View {
             if let preview = previewBeat(item) {
                 BeatStripView(beat: preview, mini: true)
                     .padding(.top, 2)
+                let on = previewingId == item.id
+                Button {
+                    if on {
+                        endPreview()
+                    } else {
+                        container.transport.startPreview(preview, previewBpm: preview.bpm)
+                        previewingId = item.id
+                        previewStarted = Date()
+                    }
+                } label: {
+                    Label(on ? String(localized: "Stop", bundle: .strings) : String(localized: "Preview", bundle: .strings),
+                          systemImage: on ? "stop.fill" : "play.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Palette.clay)
+                }
+                .buttonStyle(.plain)
             }
             stars(item)
         }
@@ -384,6 +411,12 @@ struct BrowseView: View {
             errorMessage = storageErrorMessage(error)
         }
         loading = false
+    }
+
+    private func endPreview() {
+        guard previewingId != nil else { return }
+        previewingId = nil
+        container.transport.endPreview()
     }
 
     private func previewBeat(_ item: PublishedItem) -> Beat? {
