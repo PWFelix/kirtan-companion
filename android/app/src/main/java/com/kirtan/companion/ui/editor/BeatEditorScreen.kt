@@ -170,14 +170,12 @@ internal fun BeatEditorScreen(
     }
 
     fun tapPad(pad: PadSpec) {
-        val touched = pad.write
         draft = draft.tapPad(pad)
-        // Write-sound-advance: the pad sounds what it wrote, unless the preview
-        // loop is already sounding the grid (then the loop says it, once).
+        // Write-sound-advance: the pad sounds what it wrote (rests stay silent),
+        // unless the preview loop is already sounding the grid (then the loop
+        // says it, once).
         if (!previewing) {
-            for ((lane, stroke) in touched) {
-                engine.playStroke(lane, stroke == Stroke.OPEN)
-            }
+            for ((lane, open) in pad.sounds()) engine.playStroke(lane, open)
         }
     }
 

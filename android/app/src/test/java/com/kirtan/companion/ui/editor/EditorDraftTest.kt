@@ -387,4 +387,18 @@ class EditorDraftTest {
         val draft = EditorDraft.from(existing)
         assertEquals("mine", draft.toBeat(existing.id).id)
     }
+
+    @Test
+    fun padsSoundOnlyTheStrokesTheyWriteNeverTheRests() {
+        val pads = padSetFor(EditInstrument.MRDANGA).associateBy { it.key }
+        // Ta writes a bayan REST; it must sound the open dayan alone, not a Khe too.
+        assertEquals(listOf(LaneId.DAYAN to true), pads.getValue("ta").sounds())
+        assertEquals(listOf(LaneId.BAYAN to false), pads.getValue("khe").sounds())
+        assertEquals(
+            setOf(LaneId.DAYAN to false, LaneId.BAYAN to true),
+            pads.getValue("gi").sounds().toSet(),
+        )
+        assertTrue(pads.getValue("rest").sounds().isEmpty())
+        assertTrue(padSetFor(EditInstrument.KARTAL).first { it.rest }.sounds().isEmpty())
+    }
 }

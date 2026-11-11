@@ -154,6 +154,15 @@ fun padSetFor(instrument: EditInstrument): List<PadSpec> = when (instrument) {
     )
 }
 
+/**
+ * The samples a pad sounds when tapped: its non-rest writes, as (lane, open).
+ * A null in [PadSpec.write] means "make this lane a rest" and must stay SILENT;
+ * sounding it as `stroke == OPEN` played every rest as that lane's closed stroke,
+ * so Ta also rang a bayan Khe (the wrong-sample-on-insert bug).
+ */
+fun PadSpec.sounds(): List<Pair<LaneId, Boolean>> =
+    write.mapNotNull { (lane, stroke) -> stroke?.let { lane to (it == Stroke.OPEN) } }
+
 /** What an undo entry restores: the three patterns and where the cursor was. */
 data class DraftSnapshot(val lanes: Map<LaneId, List<Stroke?>>, val cursor: Int)
 
