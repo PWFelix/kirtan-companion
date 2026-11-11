@@ -75,6 +75,8 @@ struct BeatsView: View {
     @State private var segment: Segment = BeatsView.defaultSegment()
     @State private var query = ""
     @State private var sheet: Sheet?
+    /// What Share says for each beat: Share, Already shared, or Share updated version.
+    @State private var shareIndex = ShareIndex(links: ShareIndex.loadLinks())
     @State private var pending: Pending?
     @State private var namePrompt: NamePrompt?
     @State private var nameDraft = ""
@@ -127,6 +129,7 @@ struct BeatsView: View {
                 libraryScreen
             }
         }
+        .task(id: auth.session?.userId) { await reloadShared() }
         .sheet(item: $sheet) { which in
             switch which {
             case .share(let target):
@@ -369,9 +372,9 @@ struct BeatsView: View {
                 }
                 .tint(Palette.danger)
             }
-            if p2pSharing || container.community != nil {
+            if p2pSharing || (container.community != nil && shareIndex.status(beat) != .shared) {
                 Button {
-                    if p2pSharing { sheet = .share(.beat(beat)) } else { publish(.beat(beat), name: beat.name) }
+                    if p2pSharing { sheet = .share(.beat(beat)) } else { shareBeat(beat) }
                 } label: {
                     Label(String(localized: "Share", bundle: .strings), systemImage: "square.and.arrow.up")
                 }
@@ -397,7 +400,17 @@ struct BeatsView: View {
                     Button { publish(.beat(beat), name: beat.name) } label: { Label(String(localized: "Publish to community", bundle: .strings), systemImage: "globe") }
                 }
             } else if container.community != nil {
-                Button { publish(.beat(beat), name: beat.name) } label: { Label(String(localized: "Share…", bundle: .strings), systemImage: "square.and.arrow.up") }
+                // Atomic, and never a silent duplicate: an unchanged shared beat can't be
+                // shared again, and an edited one updates its community copy.
+                switch shareIndex.status(beat) {
+                case .shared:
+                    Button {} label: { Label(String(localized: "Already shared", bundle: .strings), systemImage: "checkmark") }
+                        .disabled(true)
+                case .changed:
+                    Button { shareBeat(beat) } label: { Label(String(localized: "Share updated version", bundle: .strings), systemImage: "square.and.arrow.up") }
+                case .new:
+                    Button { shareBeat(beat) } label: { Label(String(localized: "Share…", bundle: .strings), systemImage: "square.and.arrow.up") }
+                }
             }
             if !library.state.categories.isEmpty, let id = beat.id {
                 Menu {
@@ -445,6 +458,41 @@ struct BeatsView: View {
     /// flipping this brings the old menu entries back.
     private let p2pSharing = false
 
+    /// Re-read the user's published beats; empty when signed out or offline (unknown is
+    /// safest as "not shared": Share stays usable, a duplicate is the worst case).
+    private func reloadShared() async {
+        guard let community = container.community, let me = auth.session?.userId else {
+            shareIndex.mine = []
+            return
+        }
+        shareIndex.mine = (try? await community.myPublishedBeats(authorId: me)) ?? []
+    }
+
+    /// Share one beat: publish it, or update its community copy if it changed since.
+    private func shareBeat(_ beat: Beat) {
+        guard let community = container.community else { return }
+        guard auth.session != nil else {
+            auth.notice = String(localized: "Sign in to rate beats and publish your own.", bundle: .strings)
+            return
+        }
+        switch shareIndex.status(beat) {
+        case .shared:
+            auth.notice = String(localized: "Already shared", bundle: .strings)
+        case .changed(let itemId):
+            Task {
+                do {
+                    _ = try await community.updatePublishedBeat(id: itemId, beat: beat)
+                    auth.notice = String(localized: "Updated “\(beat.name)” in the community library.", bundle: .strings)
+                } catch {
+                    auth.notice = storageErrorMessage(error)
+                }
+                await reloadShared()
+            }
+        case .new:
+            publish(.beat(beat), name: beat.name)
+        }
+    }
+
     private func publish(_ payload: ShareCodec.SharePayload, name: String) {
         guard let community = container.community else { return }
         guard let session = auth.session else {
@@ -453,7 +501,12 @@ struct BeatsView: View {
         }
         Task {
             do {
-                _ = try await community.publish(payload, authorId: session.userId, authorName: session.displayName)
+                let item = try await community.publish(payload, authorId: session.userId, authorName: session.displayName)
+                if case .beat(let beat) = payload, let id = beat.id {
+                    ShareIndex.saveLink(beatId: id, itemId: item.id)
+                    shareIndex.links[id] = item.id
+                }
+                await reloadShared()
                 auth.notice = String(localized: "Published “\(name)” to the community library.", bundle: .strings)
             } catch {
                 auth.notice = storageErrorMessage(error)

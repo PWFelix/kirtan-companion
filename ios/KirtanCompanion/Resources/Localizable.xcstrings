@@ -559,6 +559,16 @@
         }
       }
     },
+    "Already shared" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya compartido"
+          }
+        }
+      }
+    },
     "Already up to date · %lld beats" : {
       "localizations" : {
         "en" : {
@@ -2229,6 +2239,16 @@
         }
       }
     },
+    "Share updated version" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compartir versión actualizada"
+          }
+        }
+      }
+    },
     "Share…" : {
       "localizations" : {
         "es" : {
@@ -2931,6 +2951,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retirar"
+          }
+        }
+      }
+    },
+    "Updated “%@” in the community library." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se actualizó «%@» en la biblioteca de la comunidad."
           }
         }
       }

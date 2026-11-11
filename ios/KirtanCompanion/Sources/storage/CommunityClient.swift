@@ -84,6 +84,29 @@ final class CommunityClient {
         return item
     }
 
+    // Replace the snapshot of a beat the user already published ("Share updated
+    // version"), keeping the item's id, copies and ratings. RLS lets only its author
+    // through. Ids are stripped exactly as `publish` strips them.
+    func updatePublishedBeat(id: String, beat: Beat) async throws -> PublishedItem {
+        let body = JValue.object([
+            JPair(key: "name", value: .str(beat.name)),
+            JPair(key: "payload", value: JValue.object([JPair(key: "beat", value: LibraryJson.encodeBody(beatWithoutId(beat)))])),
+        ])
+        let updated = try await client.update(table: Self.table, body: body, filters: [("id", "eq.\(id)")], one: true, whileDoing: String(localized: "publish that", bundle: .strings))
+        guard let item = itemOf(updated) else {
+            throw StorageError(.unknown, String(localized: "The server didn't return the beat you just published.", bundle: .strings))
+        }
+        return item
+    }
+
+    // The user's published beats, decoded, for ShareIndex.
+    func myPublishedBeats(authorId: String) async throws -> [(id: String, beat: Beat)] {
+        try await myPublished(authorId: authorId).compactMap { item in
+            if case .beat(let beat) = toImportPayload(item) { return (id: item.id, beat: beat) }
+            return nil
+        }
+    }
+
     // Everything the signed-in user has published, so they can unpublish it.
     func myPublished(authorId: String) async throws -> [PublishedItem] {
         let rows = try await client.select(
