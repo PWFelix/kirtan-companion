@@ -275,8 +275,8 @@ final class SupabaseClient {
 
     /// Call a `security definer` RPC — the copy counter's `increment_published_copies`.
     @discardableResult
-    func rpc(function: String, args: JValue, whileDoing: String) async throws -> JValue? {
-        try await send(method: "POST", url: restUrl(config: config, table: "rpc/\(function)", filters: []), body: args.write(), accept: Self.json, prefer: nil, useSessionToken: true, whileDoing: whileDoing)
+    func rpc(function: String, args: JValue, whileDoing: String, requireSession: Bool = true) async throws -> JValue? {
+        try await send(method: "POST", url: restUrl(config: config, table: "rpc/\(function)", filters: []), body: args.write(), accept: Self.json, prefer: nil, useSessionToken: requireSession, whileDoing: whileDoing)
     }
 
     // ── Transport ──────────────────────────────────────────────────────────

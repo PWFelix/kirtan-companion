@@ -528,7 +528,7 @@ struct BeatsView: View {
     private func shareBeat(_ beat: Beat) {
         guard let community = container.community else { return }
         guard auth.session != nil else {
-            auth.notice = String(localized: "Sign in to rate beats and publish your own.", bundle: .strings)
+            auth.notice = String(localized: "Sign in to upvote beats and publish your own.", bundle: .strings)
             return
         }
         switch index.status(beat) {
@@ -584,7 +584,7 @@ struct BeatsView: View {
     private func publish(_ payload: ShareCodec.SharePayload, name: String) {
         guard let community = container.community else { return }
         guard let session = auth.session else {
-            auth.notice = String(localized: "Sign in to rate beats and publish your own.", bundle: .strings)
+            auth.notice = String(localized: "Sign in to upvote beats and publish your own.", bundle: .strings)
             return
         }
         Task {

@@ -1691,6 +1691,16 @@
         }
       }
     },
+    "Most added" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Más añadidos"
+          }
+        }
+      }
+    },
     "Move them" : {
       "localizations" : {
         "es" : {
@@ -1837,6 +1847,16 @@
         }
       }
     },
+    "New" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuevos"
+          }
+        }
+      }
+    },
     "New beat" : {
       "localizations" : {
         "es" : {
@@ -1893,16 +1913,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ya no se comparte"
-          }
-        }
-      }
-    },
-    "No ratings yet" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin valoraciones aún"
           }
         }
       }
@@ -2273,52 +2283,6 @@
         }
       }
     },
-    "Rate %lld of 5" : {
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Rate %lld of 5"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Rate %lld of 5"
-                }
-              }
-            }
-          }
-        },
-        "es" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Valorar con %lld de 5"
-                }
-              },
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Valorar con %lld de 5"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Valorar con %lld de 5"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "Remove %@ for everyone?" : {
       "localizations" : {
         "es" : {
@@ -2569,32 +2533,32 @@
         }
       }
     },
-    "Sign in to rate beats and publish your own." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inicia sesión para valorar ritmos y publicar los tuyos."
-          }
-        }
-      }
-    },
-    "Sign in to rate community beats." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inicia sesión para valorar ritmos de la comunidad."
-          }
-        }
-      }
-    },
     "Sign in to sync & share" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Inicia sesión para sincronizar y compartir"
+          }
+        }
+      }
+    },
+    "Sign in to upvote beats and publish your own." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicia sesión para votar ritmos y publicar los tuyos."
+          }
+        }
+      }
+    },
+    "Sign in to upvote." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicia sesión para votar."
           }
         }
       }
@@ -2685,6 +2649,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Algo salió mal (%1$@). %2$@"
+          }
+        }
+      }
+    },
+    "Sort by" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordenar por"
           }
         }
       }
@@ -2795,6 +2769,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Etiquetas"
+          }
+        }
+      }
+    },
+    "Take back your upvote (%lld votes)" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Take back your upvote (%lld vote)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Take back your upvote (%lld votes)"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Retirar tu voto (%lld voto)"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Retirar tu voto (%lld votos)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Retirar tu voto (%lld votos)"
+                }
+              }
+            }
           }
         }
       }
@@ -3285,6 +3305,16 @@
         }
       }
     },
+    "Top" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destacados"
+          }
+        }
+      }
+    },
     "Tune" : {
       "localizations" : {
         "es" : {
@@ -3351,6 +3381,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Se actualizó «%@»."
+          }
+        }
+      }
+    },
+    "Upvote (%lld votes)" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Upvote (%lld vote)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Upvote (%lld votes)"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Votar (%lld voto)"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Votar (%lld votos)"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Votar (%lld votos)"
+                }
+              }
+            }
           }
         }
       }
@@ -3545,16 +3621,6 @@
         }
       }
     },
-    "load your ratings" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "cargar tus valoraciones"
-          }
-        }
-      }
-    },
     "load your shared beats" : {
       "localizations" : {
         "es" : {
@@ -3655,16 +3721,6 @@
         }
       }
     },
-    "remove that rating" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "quitar esa valoración"
-          }
-        }
-      }
-    },
     "save that for everyone" : {
       "localizations" : {
         "es" : {
@@ -3675,12 +3731,12 @@
         }
       }
     },
-    "save that rating" : {
+    "save your vote" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "guardar esa valoración"
+            "value" : "guardar tu voto"
           }
         }
       }

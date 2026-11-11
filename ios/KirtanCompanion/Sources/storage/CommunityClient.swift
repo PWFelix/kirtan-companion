@@ -21,8 +21,8 @@ final class CommunityClient {
     private static let table = "published_beats"
     // The web app's browse column set — proven against the live project. `payload` carries
     // the snapshot so a card can preview the real pattern without a second request.
-    private static let columns = "id, author_id, author_name, kind, name, payload, copies, rating_sum, rating_count, created_at"
-    private static let ratings = "published_ratings"
+    private static let columns = "id, author_id, author_name, kind, name, payload, copies, created_at"
+    private static let votes = "published_votes"
     private static let anonymousAuthor = "A devotee"
     private static let defaultLimit = 40
 
@@ -35,16 +35,42 @@ final class CommunityClient {
     /// than always matching both, because "everything" makes a common surname drown the
     /// library: searching for a beat called "Dadra" should not return every beat by someone
     /// whose name contains it.
-    enum BrowseScope { case everything, names, authors }
+    enum BrowseScope: String, CaseIterable { case everything, names, authors }
 
-    // The community list, newest first. Reads need no identity — RLS already allows the
-    // world — so this is the one call that does not require a session.
-    func browse(query: String = "", scope: BrowseScope = .everything, limit: Int = CommunityClient.defaultLimit, tag: String? = nil) async throws -> [PublishedItem] {
+    /// How Browse orders the list. Top is votes decayed by age (see `browse_published` in
+    /// supabase/schema.sql), so a beat that's good now can climb past one liked last year.
+    /// Raw values are what the SQL function compares against.
+    enum BrowseSort: String, CaseIterable { case top, new, copies }
+
+    // The community list. Reads need no identity — RLS already allows the world — so this
+    // is the one call that does not require a session. One server function does search, tag
+    // and sort, because Top needs now(), which no plain PostgREST order can express.
+    func browse(query: String = "", scope: BrowseScope = .everything, limit: Int = CommunityClient.defaultLimit, tag: String? = nil, sort: BrowseSort = .top) async throws -> [PublishedItem] {
+        let doing = String(localized: "load the community library", bundle: .strings)
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        do {
+            let rows = try await client.rpc(
+                function: "browse_published",
+                args: JValue.object([
+                    JPair(key: "q", value: trimmed.isEmpty ? .null : .str(trimmed)),
+                    JPair(key: "tag", value: tag.map { .str($0) } ?? .null),
+                    JPair(key: "sort", value: .str(sort.rawValue)),
+                    JPair(key: "lim", value: .int(limit)),
+                    JPair(key: "scope", value: .str(scope.rawValue)),
+                ]),
+                whileDoing: doing, requireSession: false,
+            )
+            return (rows?.asArray() ?? []).compactMap { itemOf($0) }
+        } catch let error as StorageError where error.code != .network && error.code != .unavailable {
+            // Most likely the database hasn't had the votes schema run yet: fall back to the
+            // plain query (no Top, no counts) rather than fail the whole screen.
+            log.warn("[community] browse_published unavailable, falling back", error)
+        }
         let rows = try await client.select(
             table: Self.table, columns: Self.columns,
             filters: browseFilters(query: query, scope: scope) + tagFilter(tag),
-            order: "created_at.desc", limit: limit, requireSession: false,
-            whileDoing: String(localized: "load the community library", bundle: .strings),
+            order: sort == .copies ? "copies.desc" : "created_at.desc", limit: limit, requireSession: false,
+            whileDoing: doing,
         )
         return (rows?.asArray() ?? []).compactMap { itemOf($0) }
     }
@@ -158,48 +184,39 @@ final class CommunityClient {
         }
     }
 
-    /// Set or clear the signed-in user's rating on an item. Upsert on (item_id, user_id): one
-    /// rating per person per item. Nil CLEARS — tapping your own star again takes it back,
-    /// and clearing is a delete rather than a zero, which would drag the average down. The
-    /// parent row's counters are kept by a database trigger.
-    func rate(itemId: String, userId: String, stars: Int?) async throws {
-        guard let stars else {
+    /// Upvote an item, or take the vote back. The primary key (item_id, user_id) is the
+    /// one-vote rule, so voting twice is a harmless upsert and taking it back is a delete.
+    /// `vote_count` on the item follows by trigger, so simultaneous votes can't lose a count.
+    func vote(itemId: String, userId: String, on: Bool) async throws {
+        let doing = String(localized: "save your vote", bundle: .strings)
+        guard on else {
             _ = try await client.delete(
-                table: Self.ratings,
+                table: Self.votes,
                 filters: [("item_id", "eq.\(itemId)"), ("user_id", "eq.\(userId)")],
-                whileDoing: String(localized: "remove that rating", bundle: .strings),
+                whileDoing: doing,
             )
             return
         }
-        precondition((1...5).contains(stars), "a rating is 1 to 5 stars")
         _ = try await client.upsert(
-            table: Self.ratings,
+            table: Self.votes,
             body: JValue.object([
                 JPair(key: "item_id", value: .str(itemId)),
                 JPair(key: "user_id", value: .str(userId)),
-                JPair(key: "stars", value: .int(stars)),
             ]),
             onConflict: "item_id,user_id",
-            whileDoing: String(localized: "save that rating", bundle: .strings),
+            whileDoing: doing,
         )
     }
 
-    /// The signed-in user's own stars per item, so their stars show what they chose rather
-    /// than the community average. One query for the whole page.
-    func myRatings(userId: String, itemIds: [String]) async throws -> [String: Int] {
-        guard !itemIds.isEmpty else { return [:] }
+    /// Which of `itemIds` the signed-in user has upvoted. One query for the whole page.
+    func myVotes(userId: String, itemIds: [String]) async throws -> Set<String> {
+        guard !itemIds.isEmpty else { return [] }
         let rows = try await client.select(
-            table: Self.ratings, columns: "item_id,stars",
+            table: Self.votes, columns: "item_id",
             filters: [("user_id", "eq.\(userId)"), ("item_id", "in.(\(itemIds.joined(separator: ",")))")],
-            whileDoing: String(localized: "load your ratings", bundle: .strings),
+            whileDoing: String(localized: "load the community library", bundle: .strings),
         )
-        var out: [String: Int] = [:]
-        for row in rows?.asArray() ?? [] {
-            guard let id = row.element("item_id")?.asString(),
-                  let stars = row.element("stars")?.asNumber() else { continue }
-            out[id] = Int(stars)
-        }
-        return out
+        return Set((rows?.asArray() ?? []).compactMap { $0.element("item_id")?.asString() })
     }
 
     /// A published row as the payload LibraryRepository.importShared consumes. Nil when the
@@ -249,8 +266,7 @@ final class CommunityClient {
             name: row?.element("name")?.asString() ?? "",
             payload: row?.element("payload") ?? JValue.object([]),
             copies: row?.element("copies")?.asNumber().map { Int($0) } ?? 0,
-            ratingSum: row?.element("rating_sum")?.asNumber().map { Int($0) } ?? 0,
-            ratingCount: row?.element("rating_count")?.asNumber().map { Int($0) } ?? 0,
+            voteCount: row?.element("vote_count")?.asNumber().map { Int($0) },
             createdAt: parseTimestamp(row?.element("created_at")?.asString()),
         )
     }
@@ -277,15 +293,10 @@ struct PublishedItem: Identifiable {
     /// The snapshot: `{ beat }` or `{ name, beats }`, in LibraryJson's shape.
     let payload: JValue
     let copies: Int
-    /// Sum of all stars, maintained by a database trigger.
-    var ratingSum: Int = 0
-    /// How many people rated it; zero means "nobody yet", not "zero stars".
-    var ratingCount: Int = 0
+    /// Upvotes, kept by a database trigger. Nil before the votes schema exists.
+    var voteCount: Int? = nil
     /// Epoch seconds, or nil when the server's timestamp could not be read.
     let createdAt: Int?
-
-    /// The community's average, or nil when nobody has rated it yet.
-    var averageStars: Double? { ratingCount > 0 ? Double(ratingSum) / Double(ratingCount) : nil }
 }
 
 // The PostgREST filters for a community search. Pure so the wiring is testable: EVERYTHING

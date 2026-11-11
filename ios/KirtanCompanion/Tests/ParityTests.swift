@@ -124,15 +124,13 @@ final class ParityTests: XCTestCase {
         XCTAssertEqual(ShareLinks.forCode("abc"), "kirtan://beat?c=abc", "no web base configured in tests")
     }
 
-    // ── Ratings ───────────────────────────────────────────────────────────
+    // ── Community browse ──────────────────────────────────────────────────
 
-    func testAverageIsNilUntilSomeoneRates() {
-        var item = PublishedItem(id: "1", authorId: nil, authorName: nil, kind: .beat, name: "x",
-                                 payload: .null, copies: 0, createdAt: nil)
-        XCTAssertNil(item.averageStars)
-        item.ratingSum = 9
-        item.ratingCount = 2
-        XCTAssertEqual(item.averageStars, 4.5)
+    func testBrowseWireIdsMatchTheSqlFunction() {
+        // browse_published compares these strings; a renamed case would silently fall
+        // through to newest-first.
+        XCTAssertEqual(CommunityClient.BrowseSort.allCases.map(\.rawValue), ["top", "new", "copies"])
+        XCTAssertEqual(CommunityClient.BrowseScope.allCases.map(\.rawValue), ["everything", "names", "authors"])
     }
 }
 

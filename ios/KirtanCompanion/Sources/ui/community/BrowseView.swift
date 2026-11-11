@@ -21,9 +21,10 @@ struct BrowseView: View {
     /// Show only beats the author tagged with this.
     @State private var tag: String?
     @State private var items: [PublishedItem] = []
-    /// The signed-in user's own stars per item, so their row shows what THEY chose while
-    /// the number beside it is the community's average. Empty when signed out.
-    @State private var myRatings: [String: Int] = [:]
+    /// Item ids the signed-in user has upvoted. Empty when signed out.
+    @State private var myVotes: Set<String> = []
+    /// Browse order; Top (votes decayed by age) by default.
+    @State private var sort: CommunityClient.BrowseSort = .top
     @State private var loading = false
     @State private var errorMessage: String?
     /// Ids an Add is in flight for: guards a double tap that lands before the library
@@ -42,7 +43,7 @@ struct BrowseView: View {
     private var auth: AuthViewModel { container.auth }
     private var session: AuthSession? { auth.session }
     /// Re-keys the loader when the query, the scope or the session changes.
-    private var loadKey: String { "\(query)~\(scope)~\(tag ?? "-")~\(session?.userId ?? "-")" }
+    private var loadKey: String { "\(query)~\(scope)~\(sort)~\(tag ?? "-")~\(session?.userId ?? "-")" }
 
     /// Community item ids the library already holds a copy of.
     private var inLibrary: Set<String> {
@@ -58,6 +59,13 @@ struct BrowseView: View {
                     Text(String(localized: "Everything", bundle: .strings)).tag(CommunityClient.BrowseScope.everything)
                     Text(String(localized: "Names", bundle: .strings)).tag(CommunityClient.BrowseScope.names)
                     Text(String(localized: "Authors", bundle: .strings)).tag(CommunityClient.BrowseScope.authors)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                Picker(String(localized: "Sort by", bundle: .strings), selection: $sort) {
+                    Text(String(localized: "Top", bundle: .strings)).tag(CommunityClient.BrowseSort.top)
+                    Text(String(localized: "New", bundle: .strings)).tag(CommunityClient.BrowseSort.new)
+                    Text(String(localized: "Most added", bundle: .strings)).tag(CommunityClient.BrowseSort.copies)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 12)
@@ -131,7 +139,7 @@ struct BrowseView: View {
             // Browsing and copying work signed out; only rating and publishing need an
             // account, so the gate is an invitation rather than a wall.
             HStack(spacing: 10) {
-                Text(String(localized: "Sign in to rate beats and publish your own.", bundle: .strings))
+                Text(String(localized: "Sign in to upvote beats and publish your own.", bundle: .strings))
                     .font(.footnote)
                     .foregroundStyle(Palette.syahiSoft)
                 Spacer(minLength: 4)
@@ -284,39 +292,38 @@ struct BrowseView: View {
                 }
                 .buttonStyle(.plain)
             }
-            stars(item)
+            voteButton(item)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    /// Five stars plus the community's average. Tappable only when signed in: the stars
-    /// show YOUR rating, and tapping the one you already chose clears it.
-    private func stars(_ item: PublishedItem) -> some View {
-        let mine = myRatings[item.id] ?? 0
-        return HStack(spacing: 2) {
-            ForEach(1...5, id: \.self) { n in
-                Button {
-                    Task { await rate(item, n) }
-                } label: {
-                    Image(systemName: n <= mine ? "star.fill" : "star")
-                        .font(.footnote)
-                        .foregroundStyle(n <= mine ? Palette.strap : Palette.faint)
-                        .frame(width: 26, height: 26)
+    /// The upvote pill: arrow plus count, clay once you've voted; tapping again takes it
+    /// back. Signed out it still shows the count, disabled. Hidden when the database
+    /// predates votes (no count to show).
+    @ViewBuilder
+    private func voteButton(_ item: PublishedItem) -> some View {
+        if let count = item.voteCount {
+            let voted = myVotes.contains(item.id)
+            Button {
+                Task { await toggleVote(item) }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: voted ? "arrow.up.circle.fill" : "arrow.up.circle")
+                    Text("\(count)").monospacedDigit()
                 }
-                .buttonStyle(.plain)
-                .disabled(session == nil)
-                .accessibilityLabel(String(localized: "Rate \(n) of 5", bundle: .strings))
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(voted ? Palette.clay : Palette.syahiSoft)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 32)
+                .overlay(Capsule().stroke(voted ? Palette.clay : Palette.faint, lineWidth: 1))
             }
-            if let average = item.averageStars {
-                Text(String(format: "%.1f · %d", average, item.ratingCount))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(Palette.syahiSoft)
-                    .padding(.leading, 4)
-            } else {
-                Text(String(localized: "No ratings yet", bundle: .strings)).font(.caption).foregroundStyle(Palette.faint).padding(.leading, 4)
-            }
+            .buttonStyle(.plain)
+            .disabled(session == nil)
+            .accessibilityLabel(voted
+                ? String(localized: "Take back your upvote (\(count) votes)", bundle: .strings)
+                : String(localized: "Upvote (\(count) votes)", bundle: .strings))
         }
     }
 
@@ -365,19 +372,25 @@ struct BrowseView: View {
         Task { await community.incrementCopies(item.id) }
     }
 
-    /// Optimistic: the stars move now and the list reloads, because the average lives on
-    /// the parent row and only the server knows the new total.
-    private func rate(_ item: PublishedItem, _ stars: Int) async {
+    /// Optimistic: the arrow and count move now and go back if the write fails. No reload,
+    /// so the list doesn't re-sort under your finger.
+    private func toggleVote(_ item: PublishedItem) async {
         guard let community = container.community, let me = session else {
-            auth.notice = String(localized: "Sign in to rate community beats.", bundle: .strings)
+            auth.notice = String(localized: "Sign in to upvote.", bundle: .strings)
             return
         }
-        let clearing = myRatings[item.id] == stars
+        let on = !myVotes.contains(item.id)
+        func apply(_ yes: Bool) {
+            if yes { myVotes.insert(item.id) } else { myVotes.remove(item.id) }
+            if let i = items.firstIndex(where: { $0.id == item.id }), let c = items[i].voteCount {
+                items[i].voteCount = max(0, c + (yes ? 1 : -1))
+            }
+        }
+        apply(on)
         do {
-            try await community.rate(itemId: item.id, userId: me.userId, stars: clearing ? nil : stars)
-            myRatings[item.id] = clearing ? nil : stars
-            await load()
+            try await community.vote(itemId: item.id, userId: me.userId, on: on)
         } catch {
+            apply(!on)
             auth.notice = storageErrorMessage(error)
         }
     }
@@ -415,12 +428,12 @@ struct BrowseView: View {
         loading = true
         errorMessage = nil
         do {
-            let loaded = try await community.browse(query: query, scope: scope, tag: tag)
+            let loaded = try await community.browse(query: query, scope: scope, tag: tag, sort: sort)
             items = loaded
             if let me = session?.userId {
-                myRatings = (try? await community.myRatings(userId: me, itemIds: loaded.map(\.id))) ?? [:]
+                myVotes = (try? await community.myVotes(userId: me, itemIds: loaded.map(\.id))) ?? []
             } else {
-                myRatings = [:]
+                myVotes = []
             }
         } catch {
             items = []
