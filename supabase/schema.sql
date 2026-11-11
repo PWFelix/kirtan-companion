@@ -382,6 +382,7 @@ update public.published_beats p
  where vote_count is distinct from (select count(*) from public.published_votes v where v.item_id = p.id);
 
 -- Community browse in one call: search, tag and sort.
+--   scope  what q matches: 'names' (default), 'authors', or 'everything'.
 --   sort 'top'    votes decayed by age, Hacker News style:
 --                 vote_count / (hours + 2)^1.5. A beat that's good NOW
 --                 can climb past one that was liked last year. Ties
@@ -392,12 +393,14 @@ update public.published_beats p
 -- PostgREST order can express. security invoker, so RLS applies as usual.
 create or replace function public.browse_published(
   q text default null, tag text default null, sort text default 'top',
-  lim integer default 40, kind_filter text default null
+  lim integer default 40, kind_filter text default null, scope text default 'names'
 )
 returns setof public.published_beats
 language sql stable security invoker set search_path = public as $$
   select * from public.published_beats p
-   where (q is null or q = '' or p.name ilike '%' || q || '%')
+   where (q is null or q = ''
+          or (scope in ('names', 'everything') and p.name ilike '%' || q || '%')
+          or (scope in ('authors', 'everything') and p.author_name ilike '%' || q || '%'))
      and (tag is null or p.payload->'beat'->'tags' @> to_jsonb(array[tag]))
      and (kind_filter is null or p.kind = kind_filter)
    order by
@@ -408,7 +411,7 @@ language sql stable security invoker set search_path = public as $$
      p.created_at desc
    limit least(greatest(lim, 1), 200)
 $$;
-grant execute on function public.browse_published(text, text, text, integer, text) to anon, authenticated;
+grant execute on function public.browse_published(text, text, text, integer, text, text) to anon, authenticated;
 
 -- The gate on `shipped_beats`. SECURITY DEFINER so it answers for a caller who
 -- cannot read `maintainers` at all — which is everyone except the maintainers
