@@ -66,6 +66,8 @@
     <string name="community_not_configured">La biblioteca de la comunidad está en la nube, y esta versión no tiene nube configurada, así que no hay nada que explorar.</string>
     <string name="community_not_rated">sin valoraciones aún</string>
     <string name="community_nothing_added">No se añadió nada.</string>
+    <string name="community_preview">Escuchar</string>
+    <string name="community_preview_stop">Detener</string>
     <string name="community_published">Se publicó «%1$s» en la biblioteca de la comunidad.</string>
     <string name="community_removed">Se quitó «%1$s» de la biblioteca de la comunidad.</string>
     <string name="community_scope_all">Todo</string>

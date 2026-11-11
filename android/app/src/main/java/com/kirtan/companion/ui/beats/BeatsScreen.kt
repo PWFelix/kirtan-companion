@@ -236,6 +236,8 @@ internal fun BeatsScreen(
 
             BeatsPage.Community -> CommunityScreen(
                 vm = communityVm,
+                transport = transport,
+                selectedBeat = beat,
                 modifier = Modifier.fillMaxWidth().weight(1f),
             )
 

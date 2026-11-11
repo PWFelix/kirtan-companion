@@ -54,6 +54,7 @@ import com.kirtan.companion.ui.strip.BeatStrip
 import com.kirtan.companion.ui.theme.KirtanTheme
 import com.kirtan.companion.ui.theme.color
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.kirtan.companion.R
 import com.kirtan.companion.Strings
@@ -67,7 +68,13 @@ import com.kirtan.companion.Strings
  * that need a session, and their buttons say so when there isn't one.
  */
 @Composable
-internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifier) {
+internal fun CommunityScreen(
+    vm: CommunityViewModel,
+    transport: com.kirtan.companion.ui.transport.TransportViewModel,
+    /** The beat Home has loaded; put back into the engine when a preview ends. */
+    selectedBeat: com.kirtan.companion.data.model.Beat?,
+    modifier: Modifier = Modifier,
+) {
     val dimens = KirtanTheme.dimens
     val items by vm.items.collectAsState()
     val loading by vm.loading.collectAsState()
@@ -81,6 +88,34 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
     var notice by remember { mutableStateOf<String?>(null) }
     /** The card whose beat is about to become a built-in, while its sheet is open. */
     var promoteTarget by remember { mutableStateOf<PublishedItem?>(null) }
+
+    // ── Preview ────────────────────────────────────────────────────────────
+    // Listen before adding: the card's Preview plays its (first) beat through the
+    // transport's preview path, the one the editor uses, without saving or
+    // selecting anything. Ending it — Stop, another card's Preview, or leaving
+    // this page — hands the engine back to Home's beat, so Play there still
+    // plays what it shows.
+    var previewingId by remember { mutableStateOf<String?>(null) }
+    // True once startPreview has returned. Starting over a playing Home beat
+    // briefly reports playing=false; that must not count as "stopped elsewhere".
+    var previewLive by remember { mutableStateOf(false) }
+    val previewScope = androidx.compose.runtime.rememberCoroutineScope()
+    val transportState by transport.state.collectAsState()
+    fun endPreview() {
+        if (previewingId == null) return
+        previewingId = null
+        previewLive = false
+        transport.stopPreview()
+        selectedBeat?.let { transport.loadBeat(it) }
+    }
+    // Something else stopped the sound (the notification, another screen):
+    // drop the "Stop" label so the card doesn't lie.
+    LaunchedEffect(transportState.playing) {
+        if (!transportState.playing && previewLive) endPreview()
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { endPreview() }
+    }
 
     // One debounced effect drives every load, including the first: typing or
     // switching scope re-queries after a pause rather than per keystroke, which
@@ -204,6 +239,21 @@ internal fun CommunityScreen(vm: CommunityViewModel, modifier: Modifier = Modifi
                 onUnpublish = { vm.unpublish(item) { notice = it } },
                 onPromote = { promoteTarget = item },
                 onRate = { stars -> vm.rate(item, stars) { notice = it } },
+                previewing = previewingId == item.id,
+                onPreview = preview?.firstOrNull()?.let { beat ->
+                    {
+                        if (previewingId == item.id) {
+                            endPreview()
+                        } else {
+                            previewingId = item.id
+                            previewLive = false
+                            previewScope.launch {
+                                transport.startPreview(beat, beat.bpm)
+                                previewLive = previewingId == item.id
+                            }
+                        }
+                    }
+                },
             )
         }
     }
@@ -233,6 +283,9 @@ private fun CommunityCard(
     onUnpublish: () -> Unit,
     onPromote: () -> Unit,
     onRate: (Int) -> Unit,
+    previewing: Boolean = false,
+    /** Null when the snapshot has no playable beat. */
+    onPreview: (() -> Unit)? = null,
 ) {
     val dimens = KirtanTheme.dimens
     val shape = RoundedCornerShape(dimens.radiusSectionCard)
@@ -289,6 +342,16 @@ private fun CommunityCard(
         beats?.firstOrNull()?.let { beat -> BeatStrip(beat = beat, mini = true) }
 
         Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
+            if (onPreview != null) {
+                SecondaryButton(
+                    label = stringResource(if (previewing) R.string.community_preview_stop else R.string.community_preview),
+                    icon = if (previewing) com.kirtan.companion.ui.icons.KcIcons.Pause else com.kirtan.companion.ui.icons.KcIcons.Play,
+                    modifier = Modifier.weight(1f),
+                    minHeight = 44.dp,
+                    sidePadding = dimens.space3,
+                    onClick = onPreview,
+                )
+            }
             // Disabled AND relabelled once a copy exists: a greyed-out "Add" with
             // no reason looks broken. Deleting the copy brings Add back (#11).
             SecondaryButton(

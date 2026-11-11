@@ -72,6 +72,8 @@
     <string name="community_not_configured">The community library lives in the cloud, and this build has no cloud configured, so there is nothing to browse.</string>
     <string name="community_not_rated">not rated yet</string>
     <string name="community_nothing_added">Nothing was added.</string>
+    <string name="community_preview">Preview</string>
+    <string name="community_preview_stop">Stop</string>
     <string name="community_published">Published “%1$s” to the community library.</string>
     <string name="community_removed">Removed “%1$s” from the community library.</string>
     <string name="community_scope_all">Everything</string>
