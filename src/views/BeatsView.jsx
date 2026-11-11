@@ -13,12 +13,13 @@ import * as sh from "../ui/styles.js";
 import { t, noteLabel, groupLabel, beatDescription } from "../i18n/index.js";
 import {
   InfoIcon, StartIcon, ShareIcon, TrashIcon, GlobeIcon, CheckIcon, CheckDot, RadioDot,
-  ChevronRightIcon, SearchIcon, BackIcon, PlayIcon, StopIcon,
+  ChevronRightIcon, SearchIcon, BackIcon, PlayIcon, StopIcon, UpvoteIcon,
 } from "../ui/icons.jsx";
 import { encodeBeat, encodeCategory, decodeShare, codeFromInput, shareUrl } from "../data/shareCodec.js";
 import {
   browse as browseCommunity, publish as publishCommunity,
   incrementCopies, toImportPayload, myPublishedBeats, updatePublishedBeat,
+  SORTS, myVotes, vote,
 } from "../storage/communityClient.js";
 import { shareStatus, canShare, loadLinks, saveLink } from "../data/shareStatus.js";
 import { isCommunity } from "../data/communityTracking.js";
@@ -136,6 +137,8 @@ function BeatsView({
   const [communityLoading, setCommunityLoading] = useState(false);
   const [communityError, setCommunityError] = useState("");
   const [communityQuery, setCommunityQuery] = useState("");
+  const [browseSort, setBrowseSort] = useState("top");
+  const [voted, setVoted] = useState(() => new Set());   // item ids you've upvoted
   const [copiedId, setCopiedId] = useState(null);       // "Added" flash on a card
   // Publish-from-share state: null | "publishing" | "done" | an error string.
   const [publishState, setPublishState] = useState(null);
@@ -152,13 +155,36 @@ function BeatsView({
       if (cancelled) return;
       setCommunityLoading(true);
       setCommunityError("");
-      browseCommunity({ query: communityQuery, tag: browseTag })
-        .then((rows) => { if (!cancelled) setCommunity(rows); })
+      browseCommunity({ query: communityQuery, tag: browseTag, sort: browseSort })
+        .then(async (rows) => {
+          if (cancelled) return;
+          setCommunity(rows);
+          // Which of these you've upvoted; failing that, the arrows just start empty.
+          const mine = await myVotes(auth.user.id, rows.map((r) => r.id)).catch(() => new Set());
+          if (!cancelled) setVoted(mine);
+        })
         .catch((err) => { if (!cancelled) setCommunityError(err.message || t("browse.loadFailed")); })
         .finally(() => { if (!cancelled) setCommunityLoading(false); });
     }, communityQuery ? 300 : 0);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [page.name, signedIn, communityQuery, browseTag]);
+  }, [page.name, signedIn, communityQuery, browseTag, browseSort]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Upvote / take back. Optimistic: arrow and count move at once and go back
+  // if the write fails. The order isn't re-sorted under the user's finger.
+  async function toggleVote(row) {
+    const on = !voted.has(row.id);
+    const apply = (yes) => {
+      setVoted((set) => { const next = new Set(set); if (yes) next.add(row.id); else next.delete(row.id); return next; });
+      setCommunity((rows) => rows.map((r) => (r.id === row.id ? { ...r, vote_count: Math.max(0, (r.vote_count ?? 0) + (yes ? 1 : -1)) } : r)));
+    };
+    apply(on);
+    try {
+      await vote(row.id, auth.user.id, on);
+    } catch (err) {
+      apply(!on);
+      setCommunityError(err.message || t("browse.voteFailed"));
+    }
+  }
 
   // Copy a community item into the library (an import), then best-effort bump
   // its copy counter. The card flashes "Added" briefly.
@@ -564,6 +590,14 @@ function BeatsView({
               {rowTags ? ` · ${rowTags}` : ""}
             </span>
           </div>
+          {row.vote_count != null && (
+            <button onClick={() => toggleVote(row)} aria-pressed={voted.has(row.id)}
+              aria-label={t(voted.has(row.id) ? "browse.unvoteNamed" : "browse.upvoteNamed", { name: row.name, n: row.vote_count })}
+              style={{ ...st.voteBtn, ...(voted.has(row.id) ? st.voteBtnOn : null) }}>
+              <UpvoteIcon filled={voted.has(row.id)} />
+              <span>{row.vote_count}</span>
+            </button>
+          )}
           <button onClick={() => copyCommunity(row)} disabled={added || inLibrary}
             aria-label={t("browse.addNamed", { name: row.name })}
             style={{ ...st.addChip, ...(added || inLibrary ? st.addChipDone : null) }}>
@@ -616,6 +650,14 @@ function BeatsView({
               {communityQuery && (
                 <button onClick={() => setCommunityQuery("")} aria-label={t("beats.clearSearch")} style={st.searchClear}>×</button>
               )}
+            </div>
+            <div style={{ ...sh.catTabs, flexShrink: 0 }} role="group" aria-label={t("browse.sortLabel")}>
+              {SORTS.map((s) => (
+                <button key={s} onClick={() => setBrowseSort(s)} aria-pressed={browseSort === s}
+                  style={{ ...sh.catTab, ...(browseSort === s ? sh.catTabActive : null) }}>
+                  {t(`browse.sort.${s}`)}
+                </button>
+              ))}
             </div>
             <TagFilter value={browseTag} onChange={setBrowseTag} />
             {communityLoading && <p style={sh.emptyHint}>{t("common.loading")}</p>}
@@ -1140,6 +1182,8 @@ const st = {
   badge: { alignSelf: "flex-start", marginTop: 4, padding: "2px 8px", borderRadius: 999, background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700 },
   badgeMuted: { background: "transparent", color: "var(--syahi-soft)", border: "var(--rule-hairline)" },
   tagsBtn: { alignSelf: "flex-start", marginTop: "var(--space-2)", minHeight: 40, padding: 0, border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", textAlign: "left" },
+  voteBtn: { flexShrink: 0, minHeight: 40, minWidth: 52, padding: "0 10px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, fontVariantNumeric: "tabular-nums", cursor: "pointer" },
+  voteBtnOn: { color: "var(--clay)", borderColor: "var(--clay)" },
   addChipDone: { background: "transparent", color: "var(--syahi-soft)", border: "var(--rule-hairline)", cursor: "default" },
   publishRow: { display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-4)" },
 

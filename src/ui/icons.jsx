@@ -191,6 +191,16 @@ export function ShareIcon() {
   );
 }
 
+// Upvote arrow on Community cards; filled once you've voted.
+export function UpvoteIcon({ filled }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor"
+      strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 4 4.5 12.5H9V20h6v-7.5h4.5Z" />
+    </svg>
+  );
+}
+
 // Bin, for the library rows' swipe-to-delete.
 export function TrashIcon() {
   return (

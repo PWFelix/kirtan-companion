@@ -59,7 +59,7 @@ export function TagFilter({ value, onChange, available = ALL_TAG_IDS }) {
   const tags = knownTags(available);
   if (tags.length === 0) return null;
   return (
-    <div style={sh.catTabs} role="group" aria-label={t("tags.filter")}>
+    <div style={{ ...sh.catTabs, flexShrink: 0 }} role="group" aria-label={t("tags.filter")}>
       <button onClick={() => onChange(null)} aria-pressed={!value}
         style={{ ...sh.catTab, ...(!value ? sh.catTabActive : null) }}>{t("tags.all")}</button>
       {tags.map((tag) => (
