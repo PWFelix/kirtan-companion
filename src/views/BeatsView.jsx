@@ -23,6 +23,11 @@ import {
 
 // Whether the platform has a native share sheet (iOS/Android do, most
 // desktop browsers don't). Checked once — it can't change mid-session.
+// Peer-to-peer sharing (links, codes, the native share sheet) is soft-retired:
+// "Share" now publishes to the community. Imports of codes and links still work.
+// Flipping this brings the link/code sheet back; it also comes back on its own
+// when there's no community backend, so Share never opens an empty sheet.
+const P2P_SHARING = false;
 const CAN_NATIVE_SHARE = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
 // Sortable row wrapper (dnd-kit). MODULE-LEVEL so React keeps its identity
@@ -175,6 +180,7 @@ function BeatsView({
   }
   // Opening the share sheet starts with a clean publish state — reset here
   // rather than in an effect so no state is set synchronously on render.
+  const p2p = P2P_SHARING || !auth?.configured;
   const openShare = (target) => { setShareTarget(target); setPublishState(null); };
 
   // The category the "category" page is showing, resolved to the live object
@@ -838,13 +844,14 @@ function BeatsView({
               <button onClick={closeShare} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
             </div>
             <p style={sh.emptyHint}>
-              {shareTarget.kind === "beat"
+              {!p2p ? t("share.communityHint")
+                : shareTarget.kind === "beat"
                 ? t("share.beatHint")
                 : t("share.listHint", { beats: t("count.beats", { n: shareTarget.beats.length }) })}
             </p>
-            <input ref={linkInputRef} type="text" readOnly value={shareLink}
+            {p2p && <input ref={linkInputRef} type="text" readOnly value={shareLink}
               onFocus={(e) => e.target.select()} aria-label={t("share.link")}
-              style={{ ...st.catNameInput, marginTop: "var(--space-4)", width: "100%" }} />
+              style={{ ...st.catNameInput, marginTop: "var(--space-4)", width: "100%" }} />}
 
             {/* Publish to the community library — only when the backend is set
                 up. Signed out, it routes to sign-in first. */}
@@ -853,10 +860,11 @@ function BeatsView({
                 <button onClick={handlePublish} disabled={publishState === "publishing" || publishState === "done"}
                   style={{ ...st.sheetStartBtn, ...st.iconLabel, flex: "1 0 100%",
                     opacity: publishState === "publishing" ? 0.6 : 1 }}>
-                  <GlobeIcon size={18} />
+                  {p2p ? <GlobeIcon size={18} /> : <ShareIcon />}
                   {publishState === "publishing" ? t("share.publishing")
                     : publishState === "done" ? t("share.published")
-                    : signedIn ? t("share.publish") : t("share.signInToPublish")}
+                    : !signedIn ? t(p2p ? "share.signInToPublish" : "share.signInToShare")
+                    : p2p ? t("share.publish") : t("share.action")}
                 </button>
                 {typeof publishState === "string" && publishState !== "publishing" && publishState !== "done" && (
                   <p style={st.codeError} role="alert">{publishState}</p>
@@ -867,7 +875,7 @@ function BeatsView({
               </div>
             )}
 
-            <div style={st.shareActions}>
+            {p2p && <div style={st.shareActions}>
               {/* Native share takes its own row (flexBasis 100%) so the two
                   copy buttons get half a sheet each rather than a third. */}
               {CAN_NATIVE_SHARE && (
@@ -881,7 +889,7 @@ function BeatsView({
               <button onClick={() => copyText(shareCode, "code")} style={{ ...st.sheetEditBtn, ...st.iconLabel }}>
                 {copied === "code" ? <><CheckIcon />{t("share.copied")}</> : t("share.copyCode")}
               </button>
-            </div>
+            </div>}
           </div>
         </div>
       )}

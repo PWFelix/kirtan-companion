@@ -248,6 +248,7 @@ export default {
 
   "share.action": "Compartir",
   "share.beatHint": "Quien abra este enlace recibe una copia del ritmo. No se sube nada: el ritmo completo viaja dentro del propio enlace.",
+  "share.communityHint": "Comparte una copia en la biblioteca de la comunidad, donde cualquiera puede encontrarla en Explorar.",
   "share.copied": "Copiado",
   "share.copyCode": "Copiar código",
   "share.copyLink": "Copiar enlace",
@@ -261,6 +262,7 @@ export default {
   "share.publishedHint": "Ahora cualquiera puede encontrarlo en Explorar.",
   "share.publishing": "Publicando…",
   "share.signInToPublish": "Inicia sesión para publicar",
+  "share.signInToShare": "Inicia sesión para compartir",
   "share.title": "Compartir",
 
   "splash.begin": "Comenzar",

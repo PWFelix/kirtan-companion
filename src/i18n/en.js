@@ -249,6 +249,7 @@ export default {
 
   "share.action": "Share",
   "share.beatHint": "Anyone who opens this link gets a copy of the beat. Nothing is uploaded — the whole beat travels inside the link itself.",
+  "share.communityHint": "Shares a copy to the community library, where anyone can find it under Browse.",
   "share.copied": "Copied",
   "share.copyCode": "Copy code",
   "share.copyLink": "Copy link",
@@ -262,6 +263,7 @@ export default {
   "share.publishedHint": "Anyone can now find this under Browse.",
   "share.publishing": "Publishing…",
   "share.signInToPublish": "Sign in to publish",
+  "share.signInToShare": "Sign in to share",
   "share.title": "Share",
 
   "splash.begin": "Begin",
