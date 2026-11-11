@@ -1,5 +1,6 @@
 package com.kirtan.companion.storage
 
+import com.kirtan.companion.data.Names
 import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.ShippedBeats
 import com.kirtan.companion.data.model.Beat
@@ -718,10 +719,12 @@ class LibraryRepository(
  * produce three beats all called "My Beat (2)".
  */
 internal fun uniqueName(wanted: String, taken: MutableSet<String>): String {
-    var name = wanted
+    var name = Names.clampName(wanted)
     var suffix = 2
     while (name in taken) {
-        name = "$wanted ($suffix)"
+        // The suffix has to fit inside the limit too, so the base gives way.
+        val tail = " ($suffix)"
+        name = Names.clampName(wanted, Names.MAX_NAME_LEN - tail.length) + tail
         suffix++
     }
     taken.add(name)

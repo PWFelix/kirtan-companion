@@ -328,7 +328,8 @@ data class EditorDraft(
 
         return Beat(
             id = id,
-            name = name.trim().ifEmpty { Strings.get(R.string.editor_default_name) },
+            name = com.kirtan.companion.data.Names.clampName(name.trim())
+                .ifEmpty { Strings.get(R.string.editor_default_name) },
             note = "Custom",
             bpm = bpm,
             steps = steps,

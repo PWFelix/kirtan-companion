@@ -241,7 +241,8 @@ internal fun BeatEditorScreen(
             }
             BasicTextField(
                 value = draft.name,
-                onValueChange = { draft = draft.setName(it) },
+                // Typing stops at the limit rather than failing later on save.
+                onValueChange = { draft = draft.setName(com.kirtan.companion.data.Names.clampName(it)) },
                 singleLine = true,
                 cursorBrush = SolidColor(PaletteToken.CLAY.color),
                 textStyle = TextStyle(
@@ -594,7 +595,7 @@ private fun ZoomZone(
     }
 }
 
-/** Filled circle = open, ring = closed, faint dot = rest — as on the main strip. */
+/** Filled circle = open, X = closed, faint dot = rest — as on the main strip. */
 @Composable
 internal fun StrokeDot(value: Stroke?, color: Color, size: androidx.compose.ui.unit.Dp) {
     when (value) {
@@ -602,8 +603,10 @@ internal fun StrokeDot(value: Stroke?, color: Color, size: androidx.compose.ui.u
             Modifier.size(size).background(color, CircleShape)
         )
 
-        Stroke.CLOSED -> Box(
-            Modifier.size(size).border(2.5.dp, color, CircleShape)
+        Stroke.CLOSED -> com.kirtan.companion.ui.strip.ClosedMark(
+            color = color,
+            modifier = Modifier.size(size),
+            width = 2.2.dp,
         )
 
         null -> Box(

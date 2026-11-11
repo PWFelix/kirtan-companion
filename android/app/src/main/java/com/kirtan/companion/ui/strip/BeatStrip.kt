@@ -409,10 +409,10 @@ private fun Cell(
                         .background(markColor, CircleShape)
                 )
 
-                Stroke.CLOSED -> Box(
-                    Modifier
-                        .size(markSize)
-                        .border(if (mini) 2.dp else 3.5.dp, markColor, CircleShape)
+                Stroke.CLOSED -> ClosedMark(
+                    color = markColor,
+                    modifier = Modifier.size(markSize),
+                    width = if (mini) 1.8.dp else 3.dp,
                 )
 
                 // A rest is a small dot in the rule colour: present, so the grid
@@ -518,5 +518,28 @@ private fun Playhead(
                 .fillMaxHeight()
                 .background(PaletteToken.SYAHI.color)
         )
+    }
+}
+
+/**
+ * The closed stroke (te, khe): an X. Clearer than a ring beside the open
+ * stroke's filled disc — the two read as different marks, not as "full" and
+ * "empty". Round caps, inset by half the line so the caps stay in the box.
+ * Shared by the strip, the editor and the Learn highway's language.
+ */
+@Composable
+internal fun ClosedMark(
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+    width: androidx.compose.ui.unit.Dp = 3.dp,
+) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val w = width.toPx()
+        val inset = w / 2f + size.minDimension * 0.08f
+        val a = inset
+        val b = size.minDimension - inset
+        val cap = androidx.compose.ui.graphics.StrokeCap.Round
+        drawLine(color, androidx.compose.ui.geometry.Offset(a, a), androidx.compose.ui.geometry.Offset(b, b), w, cap)
+        drawLine(color, androidx.compose.ui.geometry.Offset(b, a), androidx.compose.ui.geometry.Offset(a, b), w, cap)
     }
 }

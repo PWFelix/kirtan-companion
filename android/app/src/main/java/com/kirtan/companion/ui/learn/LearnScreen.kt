@@ -322,10 +322,16 @@ private fun HighwayCanvas(
     }
 }
 
-/** Open = a filled disc, closed = a ring: the same language as the beat strip. */
+/** Open = a filled disc, closed = an X: the same language as the beat strip. */
 private fun DrawScope.drawNote(stroke: Stroke, color: Color, center: Offset, r: Float) {
     when (stroke) {
         Stroke.OPEN -> drawCircle(color, radius = r, center = center)
-        Stroke.CLOSED -> drawCircle(color, radius = r - 2.dp.toPx(), center = center, style = DrawStroke(width = 4.dp.toPx()))
+        Stroke.CLOSED -> {
+            val d = (r - 2.dp.toPx()) * 0.75f
+            val w = 4.dp.toPx()
+            val cap = androidx.compose.ui.graphics.StrokeCap.Round
+            drawLine(color, Offset(center.x - d, center.y - d), Offset(center.x + d, center.y + d), w, cap)
+            drawLine(color, Offset(center.x + d, center.y - d), Offset(center.x - d, center.y + d), w, cap)
+        }
     }
 }

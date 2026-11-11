@@ -92,6 +92,22 @@ class LibraryRepositoryTest {
     }
 
     @Test
+    fun `names are capped at 255 and the suffix fits inside the cap`() {
+        val long = "a".repeat(300)
+        assertEquals(255, uniqueName(long, mutableSetOf()).length)
+        val taken = mutableSetOf("a".repeat(255))
+        val second = uniqueName(long, taken)
+        assertEquals(255, second.length)
+        assertTrue(second.endsWith(" (2)"))
+    }
+
+    @Test
+    fun `clamping never splits an emoji`() {
+        val name = "a".repeat(254) + "\uD83E\uDD41" // 🥁 straddles the limit
+        assertEquals("a".repeat(254), com.kirtan.companion.data.Names.clampName(name))
+    }
+
+    @Test
     fun `a free name is left alone`() {
         assertEquals("My Beat", uniqueName("My Beat", mutableSetOf("Other")))
     }
