@@ -1,6 +1,7 @@
 package com.kirtan.companion.storage
 
 import com.kirtan.companion.data.ShareCodec
+import com.kirtan.companion.data.model.Beat
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -150,6 +151,25 @@ class CommunityClient(
         }
         val created = client.insert(TABLE, row, one = true, whileDoing = Strings.get(R.string.doing_publish))
         return itemOf(created) ?: throw StorageError(
+            StorageErrorCode.UNKNOWN,
+            Strings.get(R.string.err_publish_no_echo),
+        )
+    }
+
+    /**
+     * Replace the snapshot of a beat the user already published ("Share updated
+     * version"), keeping the item's id, copies and ratings. RLS lets only its
+     * author through. Ids are stripped exactly as [publish] strips them.
+     */
+    suspend fun updatePublishedBeat(id: String, beat: Beat): PublishedItem {
+        val body = buildJsonObject {
+            put("name", beat.name)
+            put("payload", buildJsonObject {
+                put("beat", LibraryJson.encodeBody(beat.copy(id = null, sourceItemId = null)))
+            })
+        }
+        val updated = client.update(TABLE, body, listOf("id" to "eq.$id"), one = true, whileDoing = Strings.get(R.string.doing_publish))
+        return itemOf(updated) ?: throw StorageError(
             StorageErrorCode.UNKNOWN,
             Strings.get(R.string.err_publish_no_echo),
         )

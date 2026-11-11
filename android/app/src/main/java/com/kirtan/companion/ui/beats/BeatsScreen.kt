@@ -142,6 +142,7 @@ internal fun BeatsScreen(
     val isMaintainer by library.isMaintainer.collectAsState()
     val transportState by transport.state.collectAsState()
     val communityVm: CommunityViewModel = viewModel(factory = CommunityViewModel.Factory)
+    val shareIndex by communityVm.shareIndex.collectAsState()
     var page by remember { mutableStateOf<BeatsPage>(BeatsPage.Landing) }
     var search by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf<Beat?>(null) }
@@ -354,6 +355,7 @@ internal fun BeatsScreen(
                 detail = null
                 communityVm.publishBeat(target) { message -> importResult = message }
             },
+            shareStatus = shareIndex.status(target),
         )
     }
 
@@ -683,7 +685,9 @@ private fun CategoryPage(
         // Sharing a progression is what turns it into something a friend can
         // actually play. The built-in set is excluded: everyone already has it,
         // and its link would be enormous for nothing.
-        if (categoryId != BUILTIN_CATEGORY && beats.isNotEmpty()) {
+        // Not on "Your beats": sharing a whole library at once was too easy to
+        // tap by accident. Sharing is per beat there (atomic), per list elsewhere.
+        if (categoryId != BUILTIN_CATEGORY && categoryId != CUSTOM_CATEGORY && beats.isNotEmpty()) {
             if (P2P_SHARING) item(key = "share-list") {
                 SecondaryButton(
                     label = stringResource(R.string.share_list),
@@ -843,6 +847,9 @@ private fun BeatDetailSheet(
     onRemoveShipped: () -> Unit,
     onShare: () -> Unit,
     onPublish: () -> Unit,
+    /** Whether this beat is already in the community library; see [ShareIndex]. */
+    shareStatus: com.kirtan.companion.ui.community.ShareStatus =
+        com.kirtan.companion.ui.community.ShareStatus.New,
 ) {
     val dimens = KirtanTheme.dimens
     com.kirtan.companion.ui.components.KcSheet(title = beat.name, onDismiss = onDismiss) {
@@ -898,9 +905,18 @@ private fun BeatDetailSheet(
                     onClick = onShare,
                 )
             }
+            // Atomic, and never a silent duplicate: an unchanged shared beat
+            // can't be shared again, and an edited one updates its community copy.
             com.kirtan.companion.ui.components.SecondaryButton(
-                label = stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.common_share),
-                icon = if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
+                label = when (shareStatus) {
+                    com.kirtan.companion.ui.community.ShareStatus.Shared -> stringResource(R.string.share_already_shared)
+                    is com.kirtan.companion.ui.community.ShareStatus.Changed -> stringResource(R.string.share_update)
+                    com.kirtan.companion.ui.community.ShareStatus.New ->
+                        stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.common_share)
+                },
+                icon = if (shareStatus == com.kirtan.companion.ui.community.ShareStatus.Shared) KcIcons.Check
+                    else if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
+                enabled = shareStatus != com.kirtan.companion.ui.community.ShareStatus.Shared,
                 onClick = onPublish,
             )
             if (!beat.isBuiltIn && beat.id != null) {

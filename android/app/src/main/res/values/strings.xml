@@ -280,6 +280,7 @@
     <string name="settings_sound">Sound</string>
     <string name="settings_ui_size">Interface size</string>
     <string name="settings_ui_size_hint">Scales the whole app — strip, controls, sheets and type together. Compact fits an extra row on a small phone; larger reads from across a room on a tablet.</string>
+    <string name="share_already_shared">Already shared</string>
     <string name="share_beat">Share beat</string>
     <string name="share_beat_note">The whole beat travels inside the link. Nothing is uploaded.</string>
     <string name="share_code_copied">Code copied</string>
@@ -294,6 +295,8 @@
     <string name="share_more">Share…</string>
     <string name="share_no_web_base">No web origin is configured, so this link opens the Android app rather than the site. Set SHARE_WEB_BASE at build time to share a link anyone can open in a browser.</string>
     <string name="share_title">Share %1$s</string>
+    <string name="share_update">Share updated version</string>
+    <string name="share_updated">Updated “%1$s” in the community library.</string>
     <string name="shipped_check">Check for beat updates</string>
     <string name="shipped_checking">Checking…</string>
     <string name="shipped_checking_server">Checking the server…</string>

@@ -111,6 +111,42 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
             else -> null
         }
 
+    // ── Share status ───────────────────────────────────────────────────────
+    // What Share says for each of the user's beats; see [ShareIndex].
+    private val links = app.getSharedPreferences(LINKS_PREFS, android.content.Context.MODE_PRIVATE)
+    private val _shareIndex = MutableStateFlow(
+        ShareIndex(links = links.all.mapNotNull { (k, v) -> (v as? String)?.let { k to it } }.toMap()),
+    )
+    val shareIndex: StateFlow<ShareIndex> = _shareIndex.asStateFlow()
+
+    init {
+        viewModelScope.launch { session.collect { reloadMine() } }
+    }
+
+    /** Re-read the user's published beats; empty when signed out or offline. */
+    private suspend fun reloadMine() {
+        val client = community
+        val me = session.value?.userId
+        val mine = if (client == null || me == null) emptyList() else try {
+            client.myPublished(me).mapNotNull { item ->
+                (client.toImportPayload(item) as? ShareCodec.SharePayload.BeatPayload)?.let { item.id to it.beat }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Unknown is safest as "not shared": Share stays usable, and a
+            // duplicate is the worst case, as before this existed.
+            emptyList()
+        }
+        _shareIndex.value = _shareIndex.value.copy(mine = mine)
+    }
+
+    private fun link(beatId: String?, itemId: String) {
+        if (beatId == null) return
+        links.edit().putString(beatId, itemId).apply()
+        _shareIndex.value = _shareIndex.value.copy(links = _shareIndex.value.links + (beatId to itemId))
+    }
+
     private var lastQuery = ""
 
     fun refresh(query: String = "") {
@@ -258,7 +294,40 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Publish one of your beats. Requires a session; the caller gates the button. */
     fun publishBeat(beat: Beat, onDone: (String?) -> Unit) {
-        publish(ShareCodec.SharePayload.BeatPayload(beat), beat.name, onDone)
+        val client = community ?: return
+        val current = session.value
+        if (current == null) {
+            onDone(Strings.get(R.string.community_sign_in_to_publish))
+            return
+        }
+        when (val status = _shareIndex.value.status(beat)) {
+            ShareStatus.Shared -> onDone(Strings.get(R.string.share_already_shared))
+            ShareStatus.New -> viewModelScope.launch {
+                try {
+                    val item = client.publish(ShareCodec.SharePayload.BeatPayload(beat), current.userId, current.displayName)
+                    link(beat.id, item.id)
+                    reloadMine()
+                    refresh(lastQuery)
+                    onDone(Strings.get(R.string.community_published, beat.name))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    onDone(storageErrorMessage(e))
+                }
+            }
+            is ShareStatus.Changed -> viewModelScope.launch {
+                try {
+                    client.updatePublishedBeat(status.itemId, beat)
+                    reloadMine()
+                    refresh(lastQuery)
+                    onDone(Strings.get(R.string.share_updated, beat.name))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    onDone(storageErrorMessage(e))
+                }
+            }
+        }
     }
 
     /** Publish a whole progression as one snapshot. */
@@ -292,6 +361,9 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
          * screen's heading loop never renders.
          */
         internal const val DEFAULT_HEADING = "Community"
+
+        /** Beat id → published item id, for "Share updated version". */
+        private const val LINKS_PREFS = "community_share_links"
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer { CommunityViewModel(this[APPLICATION_KEY]!!) }

@@ -274,6 +274,7 @@
     <string name="settings_sound">Sonido</string>
     <string name="settings_ui_size">Tamaño de la interfaz</string>
     <string name="settings_ui_size_hint">Escala toda la app: tira, controles, paneles y texto a la vez. El modo compacto deja sitio para una fila más en un teléfono pequeño; más grande se lee desde el otro lado de la sala en una tableta.</string>
+    <string name="share_already_shared">Ya compartido</string>
     <string name="share_beat">Compartir ritmo</string>
     <string name="share_beat_note">El ritmo completo viaja dentro del enlace. No se sube nada.</string>
     <string name="share_code_copied">Código copiado</string>
@@ -288,6 +289,8 @@
     <string name="share_more">Compartir…</string>
     <string name="share_no_web_base">No hay un origen web configurado, así que este enlace abre la app de Android en vez del sitio. Define SHARE_WEB_BASE al compilar para compartir un enlace que cualquiera pueda abrir en un navegador.</string>
     <string name="share_title">Compartir %1$s</string>
+    <string name="share_update">Compartir versión actualizada</string>
+    <string name="share_updated">Se actualizó «%1$s» en la biblioteca de la comunidad.</string>
     <string name="shipped_check">Buscar actualizaciones de ritmos</string>
     <string name="shipped_checking">Comprobando…</string>
     <string name="shipped_checking_server">Consultando el servidor…</string>
