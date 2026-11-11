@@ -81,6 +81,7 @@ internal fun CommunityScreen(
     val error by vm.error.collectAsState()
     val session by vm.session.collectAsState()
     val scope by vm.scope.collectAsState()
+    val tag by vm.tag.collectAsState()
     val myRatings by vm.myRatings.collectAsState()
     val isMaintainer by vm.isMaintainer.collectAsState()
     val inLibrary by vm.inLibrary.collectAsState()
@@ -120,7 +121,7 @@ internal fun CommunityScreen(
     // One debounced effect drives every load, including the first: typing or
     // switching scope re-queries after a pause rather than per keystroke, which
     // matters because each query is a network round trip.
-    LaunchedEffect(query, scope) {
+    LaunchedEffect(query, scope, tag) {
         delay(300)
         vm.refresh(query)
     }
@@ -177,6 +178,14 @@ internal fun CommunityScreen(
                 onClick = { vm.setScope(CommunityClient.BrowseScope.AUTHORS) },
             )
         }
+
+        // Every vocabulary tag: the server filters, so what's on this page
+        // can't tell us which tags exist out there.
+        com.kirtan.companion.ui.components.TagFilterRow(
+            tags = com.kirtan.companion.data.TagVocabulary.groups.flatMap { g -> g.tags.map { it.id } },
+            selected = tag,
+            onSelect = { vm.setTag(it) },
+        )
 
         notice?.let { message ->
             Text(
@@ -317,6 +326,20 @@ private fun CommunityCard(
             color = PaletteToken.SYAHI_SOFT.color,
             fontSize = 12.sp,
         )
+        // The author's tags, read straight off the snapshot.
+        val tags = (item.payload["beat"] as? kotlinx.serialization.json.JsonObject)?.get("tags")
+            .let { it as? kotlinx.serialization.json.JsonArray }
+            ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.orEmpty()
+        val known = com.kirtan.companion.data.TagVocabulary.known(tags)
+        if (known.isNotEmpty()) {
+            Text(
+                text = known.joinToString(" · ") { Strings.get(it.label) },
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
 
         Row(
             verticalAlignment = Alignment.CenterVertically,

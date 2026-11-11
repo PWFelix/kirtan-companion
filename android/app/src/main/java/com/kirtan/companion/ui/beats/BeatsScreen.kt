@@ -42,6 +42,8 @@ import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.storage.BUILTIN_CATEGORY
 import com.kirtan.companion.storage.CUSTOM_CATEGORY
+import com.kirtan.companion.storage.COMMUNITY_CATEGORY
+import com.kirtan.companion.storage.CommunityTracking
 import com.kirtan.companion.storage.LibraryRepository
 import com.kirtan.companion.storage.ShippedSource
 import com.kirtan.companion.storage.ShippedStatus
@@ -143,6 +145,8 @@ internal fun BeatsScreen(
     val transportState by transport.state.collectAsState()
     val communityVm: CommunityViewModel = viewModel(factory = CommunityViewModel.Factory)
     val shareIndex by communityVm.shareIndex.collectAsState()
+    // Read so the screen recomposes when the originals arrive (update badges).
+    val originals by library.communityOriginals.collectAsState()
     var page by remember { mutableStateOf<BeatsPage>(BeatsPage.Landing) }
     var search by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf<Beat?>(null) }
@@ -151,6 +155,7 @@ internal fun BeatsScreen(
     var importPreview by remember { mutableStateOf<ShareCodec.SharePayload?>(null) }
     var importResult by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<Beat?>(null) }
+    var tagTarget by remember { mutableStateOf<Beat?>(null) }
 
     // A deep-linked payload joins the same confirm-then-write path as a pasted
     // one, so an inbound link can never land in the library unreviewed.
@@ -177,6 +182,10 @@ internal fun BeatsScreen(
         }
     }
 
+    val privateTags by library.privateTags.collectAsState()
+    val rowInfo = remember(originals, privateTags) { RowInfo(library::communityStatus, privateTags) }
+
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowInfo provides rowInfo) {
     ScreenFrame(modifier = modifier) {
         // The sub-header: a back button on drilled-in pages, a spacer on the
         // landing so the title stays centred in both.
@@ -260,7 +269,7 @@ internal fun BeatsScreen(
                 // for updates replaces the built-ins WITHOUT touching `state`, so
                 // without it this `remember` would keep serving the set that was
                 // on screen when the page opened.
-                beats = remember(p.id, state, builtIns) { library.categoryBeats(p.id) },
+                listBeats = remember(p.id, state, builtIns) { library.categoryBeats(p.id) },
                 library = library,
                 shipped = shipped,
                 canCheckForUpdates = library.canCheckForUpdates,
@@ -288,6 +297,7 @@ internal fun BeatsScreen(
             weight = FontWeight.ExtraBold,
             onClick = { onStart() },
         )
+    }
     }
 
     pendingDelete?.let { target ->
@@ -356,7 +366,41 @@ internal fun BeatsScreen(
                 communityVm.publishBeat(target) { message -> importResult = message }
             },
             shareStatus = shareIndex.status(target),
+            communityStatus = remember(target, originals) { library.communityStatus(target) },
+            tagRow = {
+                // The author's tags are part of the beat (edit them in the editor);
+                // "My tags" are this user's alone and work on any beat.
+                if (target.tags.isNotEmpty()) {
+                    com.kirtan.companion.ui.components.TagLine(stringResource(R.string.tags_title), target.tags, onEdit = null)
+                }
+                if (target.id != null) {
+                    com.kirtan.companion.ui.components.TagLine(
+                        stringResource(R.string.tags_mine),
+                        privateTags[target.id].orEmpty(),
+                        onEdit = { tagTarget = target; detail = null },
+                    )
+                }
+            },
+            onUpdate = {
+                library.updateFromCommunity(target) { ok ->
+                    importResult = if (ok) Strings.get(R.string.community_updated, target.name) else Strings.get(R.string.community_update_failed)
+                }
+                detail = null
+            },
         )
+    }
+
+    tagTarget?.let { target ->
+        val id = target.id
+        if (id != null) {
+            com.kirtan.companion.ui.components.TagPickerSheet(
+                title = stringResource(R.string.tags_mine),
+                hint = stringResource(R.string.tags_private_hint),
+                selected = privateTags[id].orEmpty(),
+                onDismiss = { tagTarget = null },
+                onDone = { library.setPrivateTags(id, it); tagTarget = null },
+            )
+        }
     }
 
     shareTarget?.let { target ->
@@ -426,18 +470,28 @@ private fun LandingPage(
         item {
             SectionCard(
                 title = stringResource(R.string.cat_custom),
-                meta = if (state.customBeats.isEmpty()) {
-                    stringResource(R.string.beats_nothing_saved)
-                } else {
-                    pluralStringResource(R.plurals.beats_saved_count, state.customBeats.size, state.customBeats.size)
+                meta = state.customBeats.count { !it.isCommunity }.let { own ->
+                    if (own == 0) stringResource(R.string.beats_nothing_saved)
+                    else pluralStringResource(R.plurals.beats_saved_count, own, own)
                 },
                 onClick = { onOpenCategory(CUSTOM_CATEGORY) },
             )
         }
 
+        val community = state.customBeats.filter { it.isCommunity }
+        if (community.isNotEmpty()) item {
+            val updates = community.count { library.communityStatus(it) is CommunityTracking.Status.UpdateAvailable }
+            SectionCard(
+                title = stringResource(R.string.cat_community),
+                meta = pluralStringResource(R.plurals.beat_count, community.size, community.size) +
+                    (if (updates > 0) " · " + pluralStringResource(R.plurals.community_updates, updates, updates) else ""),
+                onClick = { onOpenCategory(COMMUNITY_CATEGORY) },
+            )
+        }
+
         item {
             SectionCard(
-                title = stringResource(R.string.community_title),
+                title = stringResource(R.string.community_browse),
                 meta = stringResource(R.string.community_meta),
                 onClick = onOpenCommunity,
             )
@@ -540,9 +594,15 @@ private fun SearchCard(
             query.isBlank() -> Hint(stringResource(R.string.search_hint))
 
             else -> {
-                val matches = remember(query, allBeats) {
+                val rowInfo = LocalRowInfo.current
+                val matches = remember(query, allBeats, rowInfo) {
                     val needle = query.trim().lowercase()
-                    allBeats.filter { it.name.lowercase().contains(needle) }
+                    // A tag's label matches too ("keherwa" finds every Keherwa beat),
+                    // the author's tags and the user's private ones alike.
+                    fun tagHit(beat: Beat) = com.kirtan.companion.data.TagVocabulary
+                        .known(beat.tags + rowInfo?.privateTags?.get(beat.id).orEmpty())
+                        .any { Strings.get(it.label).lowercase().contains(needle) }
+                    allBeats.filter { it.name.lowercase().contains(needle) || tagHit(it) }
                 }
                 if (matches.isEmpty()) {
                     Hint(stringResource(R.string.search_none, query))
@@ -653,7 +713,7 @@ private fun CategoryPage(
     modifier: Modifier = Modifier,
     categoryId: String,
     categoryName: String,
-    beats: List<Beat>,
+    listBeats: List<Beat>,
     library: LibraryViewModel,
     shipped: ShippedStatus,
     canCheckForUpdates: Boolean,
@@ -667,6 +727,14 @@ private fun CategoryPage(
     val dimens = KirtanTheme.dimens
     // One open row at a time: opening another closes the last.
     var openRow by remember(categoryId) { mutableStateOf<String?>(null) }
+
+    // Tag filter: the author's tags and the user's private ones count alike.
+    // Only tags some beat on this page carries are offered.
+    val privateTags by library.privateTags.collectAsState()
+    var tagFilter by remember(categoryId) { mutableStateOf<String?>(null) }
+    fun tagsOf(beat: Beat) = beat.tags + privateTags[beat.id].orEmpty()
+    val pageTags = listBeats.flatMap { tagsOf(it) }.toSet()
+    val beats = tagFilter?.takeIf { it in pageTags }?.let { tag -> listBeats.filter { tag in tagsOf(it) } } ?: listBeats
 
     @Composable
     fun SwipeBeat(beat: Beat) = SwipeBeatRow(
@@ -687,12 +755,12 @@ private fun CategoryPage(
         // and its link would be enormous for nothing.
         // Not on "Your beats": sharing a whole library at once was too easy to
         // tap by accident. Sharing is per beat there (atomic), per list elsewhere.
-        if (categoryId != BUILTIN_CATEGORY && categoryId != CUSTOM_CATEGORY && beats.isNotEmpty()) {
+        if (categoryId != BUILTIN_CATEGORY && categoryId != CUSTOM_CATEGORY && categoryId != COMMUNITY_CATEGORY && listBeats.isNotEmpty()) {
             if (P2P_SHARING) item(key = "share-list") {
                 SecondaryButton(
                     label = stringResource(R.string.share_list),
                     icon = KcIcons.Share,
-                    onClick = { onShareList(categoryName, beats) },
+                    onClick = { onShareList(categoryName, listBeats) },
                 )
             }
             // Publishing uploads a SNAPSHOT: editing the private copy later never
@@ -702,9 +770,13 @@ private fun CategoryPage(
                 SecondaryButton(
                     label = stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.share_list),
                     icon = if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
-                    onClick = { onPublishList(categoryName, beats) },
+                    onClick = { onPublishList(categoryName, listBeats) },
                 )
             }
+        }
+
+        if (pageTags.isNotEmpty()) item(key = "tag-filter") {
+            com.kirtan.companion.ui.components.TagFilterRow(tags = pageTags, selected = tagFilter, onSelect = { tagFilter = it })
         }
 
         if (categoryId == BUILTIN_CATEGORY) {
@@ -774,7 +846,10 @@ private fun SwipeBeatRow(
 ) {
     val key = "beat-${beat.id}"
     val actions = buildList {
-        add(SwipeAction(Strings.get(R.string.common_share), KcIcons.Share, SwipeColors.shareBg, SwipeColors.shareFg) { onShareBeat(beat) })
+        // Someone else's beat can't be shared; it has Delete alone.
+        if (!beat.isCommunity) {
+            add(SwipeAction(Strings.get(R.string.common_share), KcIcons.Share, SwipeColors.shareBg, SwipeColors.shareFg) { onShareBeat(beat) })
+        }
         // Built-ins can't be deleted, only customised; theirs is Share alone.
         if (!beat.isBuiltIn && beat.id != null) {
             add(SwipeAction(Strings.get(R.string.common_delete), KcIcons.Trash, SwipeColors.deleteBg, SwipeColors.deleteFg) { onDeleteBeat(beat) })
@@ -830,7 +905,48 @@ private fun BeatRow(beat: Beat, onClick: () -> Unit) {
                 fontSize = 12.sp,
             )
         }
+        RowBadges(beat)
         BeatStrip(beat = beat, mini = true)
+    }
+}
+
+/**
+ * What the rows need to know beyond the beat: its community standing and the
+ * user's private tags. Provided once by [BeatsScreen] rather than threaded
+ * through every list that draws a row.
+ */
+internal class RowInfo(
+    val status: (Beat) -> CommunityTracking.Status,
+    val privateTags: Map<String, List<String>>,
+)
+
+internal val LocalRowInfo = androidx.compose.runtime.staticCompositionLocalOf<RowInfo?> { null }
+
+/** "Update available" / "No longer shared", then the beat's tags, on one line. */
+@Composable
+private fun RowBadges(beat: Beat) {
+    val info = LocalRowInfo.current ?: return
+    val status = if (beat.isCommunity) info.status(beat) else CommunityTracking.Status.Current
+    val tags = com.kirtan.companion.data.TagVocabulary.known((beat.tags + info.privateTags[beat.id].orEmpty()).toSet())
+    val flag = when (status) {
+        is CommunityTracking.Status.UpdateAvailable -> stringResource(R.string.community_badge_update)
+        CommunityTracking.Status.Gone -> stringResource(R.string.community_badge_gone)
+        else -> null
+    }
+    if (flag == null && tags.isEmpty()) return
+    Row(horizontalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+        flag?.let {
+            Text(text = it, color = PaletteToken.CLAY.color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+        if (tags.isNotEmpty()) {
+            Text(
+                text = tags.joinToString(" · ") { Strings.get(it.label) },
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -850,6 +966,10 @@ private fun BeatDetailSheet(
     /** Whether this beat is already in the community library; see [ShareIndex]. */
     shareStatus: com.kirtan.companion.ui.community.ShareStatus =
         com.kirtan.companion.ui.community.ShareStatus.New,
+    /** For a community beat: how it stands against its original. */
+    communityStatus: CommunityTracking.Status = CommunityTracking.Status.Current,
+    onUpdate: () -> Unit = {},
+    tagRow: @Composable () -> Unit = {},
 ) {
     val dimens = KirtanTheme.dimens
     com.kirtan.companion.ui.components.KcSheet(title = beat.name, onDismiss = onDismiss) {
@@ -861,6 +981,8 @@ private fun BeatDetailSheet(
                 fontWeight = FontWeight.Medium,
             )
             BeatStrip(beat = beat)
+            tagRow()
+            if (beat.isCommunity) CommunityNote(communityStatus, onUpdate)
             beat.description?.let { description ->
                 Text(
                     text = description,
@@ -871,7 +993,11 @@ private fun BeatDetailSheet(
             }
             PrimaryButton(label = stringResource(R.string.beats_play_this), icon = KcIcons.Play, onClick = onPlay)
             com.kirtan.companion.ui.components.SecondaryButton(
-                label = if (beat.isBuiltIn) stringResource(R.string.common_customize) else stringResource(R.string.common_edit),
+                label = when {
+                    beat.isBuiltIn -> stringResource(R.string.common_customize)
+                    beat.isCommunity -> stringResource(R.string.community_edit_copy)
+                    else -> stringResource(R.string.common_edit)
+                },
                 icon = KcIcons.Pencil,
                 onClick = onEdit,
             )
@@ -907,18 +1033,21 @@ private fun BeatDetailSheet(
             }
             // Atomic, and never a silent duplicate: an unchanged shared beat
             // can't be shared again, and an edited one updates its community copy.
-            com.kirtan.companion.ui.components.SecondaryButton(
-                label = when (shareStatus) {
-                    com.kirtan.companion.ui.community.ShareStatus.Shared -> stringResource(R.string.share_already_shared)
-                    is com.kirtan.companion.ui.community.ShareStatus.Changed -> stringResource(R.string.share_update)
-                    com.kirtan.companion.ui.community.ShareStatus.New ->
-                        stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.common_share)
-                },
-                icon = if (shareStatus == com.kirtan.companion.ui.community.ShareStatus.Shared) KcIcons.Check
-                    else if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
-                enabled = shareStatus != com.kirtan.companion.ui.community.ShareStatus.Shared,
-                onClick = onPublish,
-            )
+            // Someone else's beat has no Share at all; see ShareStatus.NotYours.
+            if (shareStatus != com.kirtan.companion.ui.community.ShareStatus.NotYours) {
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = when (shareStatus) {
+                        com.kirtan.companion.ui.community.ShareStatus.Shared -> stringResource(R.string.share_already_shared)
+                        com.kirtan.companion.ui.community.ShareStatus.UnchangedCopy -> stringResource(R.string.share_edit_to_share)
+                        is com.kirtan.companion.ui.community.ShareStatus.Changed -> stringResource(R.string.share_update)
+                        else -> stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.common_share)
+                    },
+                    icon = if (shareStatus == com.kirtan.companion.ui.community.ShareStatus.Shared) KcIcons.Check
+                        else if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
+                    enabled = shareStatus.canShare,
+                    onClick = onPublish,
+                )
+            }
             if (!beat.isBuiltIn && beat.id != null) {
                 com.kirtan.companion.ui.components.SecondaryButton(
                     label = stringResource(R.string.common_delete),
@@ -929,6 +1058,29 @@ private fun BeatDetailSheet(
                 )
             }
         }
+    }
+}
+
+/**
+ * Where a community beat stands: a line saying it follows the original, plus
+ * the Update button when the author has changed it, or a note when they have
+ * unpublished it (the user keeps their copy either way).
+ */
+@Composable
+private fun CommunityNote(status: CommunityTracking.Status, onUpdate: () -> Unit) {
+    val line = when (status) {
+        CommunityTracking.Status.Gone -> stringResource(R.string.community_gone)
+        is CommunityTracking.Status.UpdateAvailable -> stringResource(R.string.community_update_available)
+        else -> stringResource(R.string.community_follows)
+    }
+    Text(
+        text = line,
+        color = if (status is CommunityTracking.Status.UpdateAvailable) PaletteToken.CLAY.color else PaletteToken.SYAHI_SOFT.color,
+        fontSize = 13.4.sp,
+        lineHeight = 19.sp,
+    )
+    if (status is CommunityTracking.Status.UpdateAvailable) {
+        PrimaryButton(label = stringResource(R.string.community_update), icon = KcIcons.Check, onClick = onUpdate)
     }
 }
 

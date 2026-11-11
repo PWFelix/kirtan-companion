@@ -18,6 +18,18 @@ sealed interface ShareStatus {
 
     /** Shared before, edited since: Share updates [itemId] in place. */
     data class Changed(val itemId: String) : ShareStatus
+
+    /** Added from the community: someone else's beat, never re-shared. */
+    data object NotYours : ShareStatus
+
+    /**
+     * A copy of a community beat that is musically still the original (renamed
+     * or retagged at most). Sharable once the music actually changes.
+     */
+    data object UnchangedCopy : ShareStatus
+
+    /** True when Share may publish or update. */
+    val canShare: Boolean get() = this is New || this is Changed
 }
 
 /**
@@ -35,8 +47,12 @@ data class ShareIndex(
     val mine: List<Pair<String, Beat>> = emptyList(),
     /** Local beat id → the community item it was published as. */
     val links: Map<String, String> = emptyMap(),
+    /** The originals of the library's community beats and copies, when loaded. */
+    val originals: Map<String, List<Beat>>? = null,
 ) {
     fun status(beat: Beat): ShareStatus {
+        if (beat.isCommunity) return ShareStatus.NotYours
+        if (com.kirtan.companion.storage.CommunityTracking.isUnchangedCopy(beat, originals)) return ShareStatus.UnchangedCopy
         val print = fingerprint(beat)
         val linkedId = beat.id?.let { links[it] }
         val linked = linkedId?.let { id -> mine.firstOrNull { it.first == id } }
@@ -53,6 +69,6 @@ data class ShareIndex(
          * doesn't carry (built-in flags, ids) can't make a match look like a change.
          */
         fun fingerprint(beat: Beat): JsonObject =
-            LibraryJson.encodeBody(beat.copy(id = null, sourceItemId = null))
+            LibraryJson.encodeBody(beat.copy(id = null, sourceItemId = null, sourceIndex = null, forkedFrom = null))
     }
 }

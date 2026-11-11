@@ -231,7 +231,8 @@ class LibraryRepository(
         val current = _state.value
         when (categoryId) {
             BUILTIN_CATEGORY -> return builtIns.value
-            CUSTOM_CATEGORY -> return current.customBeats
+            CUSTOM_CATEGORY -> return current.customBeats.filter { !it.isCommunity }
+            COMMUNITY_CATEGORY -> return current.customBeats.filter { it.isCommunity }
         }
         val everything = builtIns.value + current.customBeats
         val category = current.categories.firstOrNull { it.id == categoryId } ?: return everything
@@ -242,6 +243,7 @@ class LibraryRepository(
     fun categoryName(categoryId: String): String = when (categoryId) {
         BUILTIN_CATEGORY -> Strings.get(R.string.cat_builtin)
         CUSTOM_CATEGORY -> Strings.get(R.string.cat_custom)
+        COMMUNITY_CATEGORY -> Strings.get(R.string.cat_community)
         else -> _state.value.categories.firstOrNull { it.id == categoryId }?.name ?: Strings.get(R.string.tab_beats)
     }
 
@@ -276,12 +278,15 @@ class LibraryRepository(
         // The editor builds a fresh Beat and knows nothing of where it came from;
         // carry the community origin over so an edited copy still counts as "in
         // your library" (issue #11).
-        val origin = newBeat.sourceItemId
-            ?: current.customBeats.firstOrNull { id != null && it.id == id }?.sourceItemId
+        val existing = current.customBeats.firstOrNull { id != null && it.id == id }
+        val origin = newBeat.sourceItemId ?: existing?.sourceItemId
         val fields = newBeat.copy(
             id = null,
             name = uniqueName(newBeat.name, taken),
             sourceItemId = origin,
+            sourceIndex = newBeat.sourceIndex ?: existing?.sourceIndex,
+            // An edited copy of a community beat keeps its credit across edits.
+            forkedFrom = newBeat.forkedFrom ?: existing?.forkedFrom,
         )
 
         try {
@@ -308,6 +313,26 @@ class LibraryRepository(
             log.warn("[library] save failed", e)
             _state.update { it.copy(error = storageErrorMessage(e)) }
             null
+        }
+    }
+
+    /**
+     * Overwrite one stored beat EXACTLY (same id, no renaming, no carried fields).
+     * For the community bookkeeping: applying an original's update, and the
+     * one-time migration of old imports. Returns false when the write failed.
+     */
+    suspend fun replaceBeat(beat: Beat): Boolean = writeMutex.withLock {
+        val id = beat.id ?: return@withLock false
+        if (_state.value.customBeats.none { it.id == id }) return@withLock false
+        try {
+            val saved = provider.value.updateBeat(id, beat.copy(id = null))
+            _state.update { st -> st.copy(customBeats = st.customBeats.map { if (it.id == id) saved else it }) }
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            log.warn("[library] replace failed", e)
+            false
         }
     }
 
@@ -390,11 +415,15 @@ class LibraryRepository(
             val takenBeatNames = LinkedHashSet(
                 (builtIns.value + _state.value.customBeats).map { it.name },
             )
-            val drafts = incoming.map { beat ->
+            val fromList = payload is ShareCodec.SharePayload.CategoryPayload
+            val drafts = incoming.mapIndexed { index, beat ->
                 beat.copy(
                     id = null,
                     name = uniqueName(beat.name, takenBeatNames),
                     sourceItemId = sourceItemId,
+                    // Which of the list's beats this is, so it can follow that one.
+                    sourceIndex = if (sourceItemId != null && fromList) index else null,
+                    forkedFrom = null,
                 )
             }
 

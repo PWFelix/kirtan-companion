@@ -296,7 +296,8 @@ internal fun KirtanApp(
                         engine = transport.engine,
                         transport = transport,
                         initialBeat = editorInitial,
-                        savesAsCopy = editorInitial?.isBuiltIn == true && !editorForEveryone,
+                        // Built-ins and community beats are read-only: editing makes a copy.
+                        savesAsCopy = editorInitial?.readOnly == true && !editorForEveryone,
                         onSave = { beat, callback ->
                             // Routed, not decided: a shipped save is confirmed by a
                             // sheet first, so the editor's callback is held until the

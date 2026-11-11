@@ -119,6 +119,13 @@ internal const val BUILTIN_CATEGORY = "builtin"
 /** The "everything you have made" pseudo-category. Never stored as a row. */
 internal const val CUSTOM_CATEGORY = "custom"
 
+/**
+ * The "beats added from the community" pseudo-category. Never stored as a row:
+ * it is every beat with [com.kirtan.companion.data.model.Beat.isCommunity], which
+ * "Your beats" ([CUSTOM_CATEGORY]) leaves out.
+ */
+internal const val COMMUNITY_CATEGORY = "community"
+
 /** What a new category needs: a name, and the progression it starts holding. */
 data class CategoryDraft(
     val name: String,

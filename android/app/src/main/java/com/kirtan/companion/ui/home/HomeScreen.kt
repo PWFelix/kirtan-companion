@@ -339,7 +339,7 @@ private fun BeatSwitcherRow(
         )
         HairlineIconButton(
             icon = KcIcons.Pencil,
-            contentDescription = if (beat.isBuiltIn) stringResource(R.string.home_customize_beat) else stringResource(R.string.home_edit_beat),
+            contentDescription = if (beat.readOnly) stringResource(R.string.home_customize_beat) else stringResource(R.string.home_edit_beat),
             onClick = onEdit,
         )
     }
@@ -832,11 +832,12 @@ internal fun BeatPickerSheet(
     val libraryState by library.state.collectAsState()
     var tab by remember { mutableStateOf(activeCategoryId) }
 
-    val tabs = remember(libraryState.categories) {
+    val tabs = remember(libraryState.categories, libraryState.customBeats) {
         listOf(
             com.kirtan.companion.storage.BUILTIN_CATEGORY,
             com.kirtan.companion.storage.CUSTOM_CATEGORY,
-        ) + libraryState.categories.map { it.id }
+        ) + (if (libraryState.customBeats.any { it.isCommunity }) listOf(com.kirtan.companion.storage.COMMUNITY_CATEGORY) else emptyList()) +
+            libraryState.categories.map { it.id }
     }
 
     KcSheet(title = stringResource(R.string.home_choose_beat), onDismiss = onDismiss) {

@@ -120,7 +120,31 @@ data class Beat(
      * (issue #11). Every beat copied from a list carries the LIST's id.
      */
     val sourceItemId: String? = null,
+    /**
+     * The author's tags, ids from [com.kirtan.companion.data.TagVocabulary].
+     * Published with the beat. The user's PRIVATE tags are not here: they are kept
+     * per beat id on the device ([com.kirtan.companion.storage.PrivateTags]), so
+     * they work on built-in and community beats too and are never published.
+     */
+    val tags: List<String> = emptyList(),
+    /**
+     * For a beat that came from a community PLAYLIST: its position in that list,
+     * so it can be matched to the original for updates. Null for a single beat.
+     */
+    val sourceIndex: Int? = null,
+    /**
+     * The community item an EDITED COPY was made from, for credit and to stop a
+     * copy being re-shared until it actually differs from the original.
+     * Exclusive with [sourceItemId]: a beat either follows the original or is yours.
+     */
+    val forkedFrom: String? = null,
 ) {
+    /**
+     * A community beat the user added: read-only, follows the original, can't be
+     * shared. Editing one makes a copy in Your beats.
+     */
+    val isCommunity: Boolean get() = sourceItemId != null
+
     /**
      * True when this beat is one of the built-ins rather than user-made.
      *
@@ -134,7 +158,7 @@ data class Beat(
      * True when the user may not overwrite it. Built-in beats are read-only;
      * editing one forks it (see BeatEditor's open path in App).
      */
-    val readOnly: Boolean get() = isBuiltIn
+    val readOnly: Boolean get() = isBuiltIn || isCommunity
 
     /** A lane's pattern, or null when the beat has no row for that lane. */
     fun pattern(lane: LaneId): List<Stroke?>? = lanePatterns[lane]

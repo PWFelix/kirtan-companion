@@ -88,6 +88,11 @@ class AppContainer(private val appContext: Context) {
     /** The on-device library. The default provider; the cloud swaps in over it. */
     val localBeats: BeatsProvider by lazy { LocalBeatsProvider(store) }
 
+    /** The user's private tags, per beat id, on this device. */
+    val privateTags: com.kirtan.companion.storage.PrivateTags by lazy {
+        com.kirtan.companion.storage.PrivateTags(appContext)
+    }
+
     /**
      * The cloud client, or null when `SUPABASE_URL` is blank.
      *
@@ -137,6 +142,11 @@ class AppContainer(private val appContext: Context) {
      * UI disagreeing.
      */
     val library: LibraryRepository by lazy { LibraryRepository(scope, localBeats) }
+
+    /** Community beats in the library, kept in step with their originals. */
+    val communityLibrary: com.kirtan.companion.storage.CommunityLibrary by lazy {
+        com.kirtan.companion.storage.CommunityLibrary(appContext, scope, library, community)
+    }
 
     /**
      * The device library captured at the moment of a FRESH sign-in, waiting for

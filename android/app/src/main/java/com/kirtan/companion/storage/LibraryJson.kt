@@ -83,6 +83,10 @@ internal object LibraryJson {
     private const val KEY_DESCRIPTION = "description"
     private const val KEY_GROUP = "group"
     private const val KEY_SOURCE_ITEM_ID = "sourceItemId"
+    private const val KEY_TAGS = "tags"
+    private const val KEY_SOURCE_INDEX = "sourceIndex"
+    private const val KEY_FORKED_FROM = "forkedFrom"
+    private const val MAX_TAGS = 16
     private const val KEY_BEAT_IDS = "beatIds"
 
     // ── Encoding ───────────────────────────────────────────────────────────
@@ -119,6 +123,11 @@ internal object LibraryJson {
         beat.description?.let { put(KEY_DESCRIPTION, it) }
         beat.group?.let { put(KEY_GROUP, it) }
         beat.sourceItemId?.let { put(KEY_SOURCE_ITEM_ID, it) }
+        // Omitted when empty/absent, so an untagged beat's body is unchanged and
+        // older apps read it exactly as before.
+        if (beat.tags.isNotEmpty()) put(KEY_TAGS, buildJsonArray { beat.tags.forEach { add(it) } })
+        beat.sourceIndex?.let { put(KEY_SOURCE_INDEX, it) }
+        beat.forkedFrom?.let { put(KEY_FORKED_FROM, it) }
         for (lane in LaneId.ORDERED) {
             val cells = beat.pattern(lane) ?: continue
             put(lane.wireId, encodePattern(cells))
@@ -281,6 +290,14 @@ internal object LibraryJson {
             lanePatterns = lanes,
             group = obj.stringField(KEY_GROUP),
             sourceItemId = obj.stringField(KEY_SOURCE_ITEM_ID),
+            // Tolerant: unknown ids are kept (the vocabulary can grow on another
+            // device first); junk entries and absurd counts are dropped, not fatal.
+            tags = (obj[KEY_TAGS] as? JsonArray)
+                ?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.takeIf { t -> t.length in 1..40 } }
+                ?.distinct()?.take(MAX_TAGS)
+                .orEmpty(),
+            sourceIndex = obj.intField(KEY_SOURCE_INDEX)?.takeIf { it >= 0 },
+            forkedFrom = obj.stringField(KEY_FORKED_FROM),
         )
     }
 

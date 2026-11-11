@@ -123,6 +123,9 @@ internal fun BeatEditorScreen(
     val scope = rememberCoroutineScope()
 
     var draft by remember { mutableStateOf(EditorDraft.from(initialBeat)) }
+    // The author's tags. A copy starts with the original's, as a suggestion.
+    var tags by remember { mutableStateOf(initialBeat?.tags.orEmpty()) }
+    var tagsOpen by remember { mutableStateOf(false) }
     var previewing by remember { mutableStateOf(false) }
     var feelOpen by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -191,7 +194,17 @@ internal fun BeatEditorScreen(
         }
         saveError = null
         saving = true
-        onSave(draft.toBeat(initialBeat?.id)) { saved ->
+        // A copy goes out WITHOUT the original's id: a community beat is in the
+        // library, so passing its id would overwrite it in place.
+        val built = draft.toBeat(if (savesAsCopy) null else initialBeat?.id)
+        onSave(
+            built.copy(
+                tags = tags,
+                // Credit for an edited copy of a community beat (and what stops it
+                // being re-shared until the music actually differs).
+                forkedFrom = if (savesAsCopy) initialBeat?.sourceItemId else null,
+            ),
+        ) { saved ->
             saving = false
             // Stay OPEN on failure: unmounting is how a draft is discarded, so
             // closing on a failed write would throw the user's work away and
@@ -261,6 +274,20 @@ internal fun BeatEditorScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(dimens.space4),
         ) {
+            com.kirtan.companion.ui.components.TagLine(
+                label = stringResource(R.string.tags_title),
+                tags = tags,
+                onEdit = { tagsOpen = true },
+            )
+            if (tagsOpen) {
+                com.kirtan.companion.ui.components.TagPickerSheet(
+                    title = stringResource(R.string.tags_title),
+                    hint = stringResource(R.string.tags_author_hint),
+                    selected = tags,
+                    onDismiss = { tagsOpen = false },
+                    onDone = { tags = it; tagsOpen = false },
+                )
+            }
             OverviewZone(
                 draft = draft,
                 step = step,
@@ -303,7 +330,9 @@ internal fun BeatEditorScreen(
         Spacer(Modifier.height(dimens.space3))
         if (savesAsCopy) {
             Text(
-                text = stringResource(R.string.editor_builtin_copy_note),
+                text = stringResource(
+                    if (initialBeat?.isCommunity == true) R.string.editor_community_copy_note else R.string.editor_builtin_copy_note,
+                ),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = dimens.space2),

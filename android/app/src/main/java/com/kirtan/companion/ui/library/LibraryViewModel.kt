@@ -147,6 +147,26 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         _selectedBeat.value = list[next]
     }
 
+    // ── Community beats and tags ──
+
+    /** The originals of the library's community beats; null until loaded. */
+    val communityOriginals: StateFlow<Map<String, List<Beat>>?> = container.communityLibrary.originals
+
+    fun communityStatus(beat: Beat): com.kirtan.companion.storage.CommunityTracking.Status =
+        container.communityLibrary.status(beat)
+
+    /** Bring a community beat up to its author's current version. */
+    fun updateFromCommunity(beat: Beat, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch { onDone(container.communityLibrary.update(beat)) }
+    }
+
+    fun refreshCommunity() = container.communityLibrary.refreshNow()
+
+    /** The user's private tags, beat id → tag ids. */
+    val privateTags: StateFlow<Map<String, List<String>>> = container.privateTags.tags
+
+    fun setPrivateTags(beatId: String, tags: List<String>) = container.privateTags.set(beatId, tags)
+
     fun saveBeat(beat: Beat, onSaved: (Beat?) -> Unit) {
         viewModelScope.launch { onSaved(repository.saveBeat(beat)) }
     }

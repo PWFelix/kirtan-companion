@@ -54,6 +54,7 @@ class CommunityClient(
             "id, author_id, author_name, kind, name, payload, copies, " +
                 "rating_sum, rating_count, created_at"
         const val ANONYMOUS_AUTHOR = "A devotee"
+        const val ORIGINALS_BATCH = 50
         const val DEFAULT_LIMIT = 40
     }
 
@@ -82,11 +83,12 @@ class CommunityClient(
         query: String = "",
         scope: BrowseScope = BrowseScope.EVERYTHING,
         limit: Int = DEFAULT_LIMIT,
+        tag: String? = null,
     ): List<PublishedItem> {
         val rows = client.select(
             table = TABLE,
             columns = COLUMNS,
-            filters = browseFilters(query, scope),
+            filters = browseFilters(query, scope) + tagFilter(tag),
             order = "created_at.desc",
             limit = limit,
             requireSession = false,
@@ -123,7 +125,7 @@ class CommunityClient(
                 // sourceItemId is cleared: publishing a copy makes a NEW item,
                 // and the old item's id would make other people's cards wrong.
                 body = buildJsonObject {
-                    put("beat", LibraryJson.encodeBody(payload.beat.copy(id = null, sourceItemId = null)))
+                    put("beat", LibraryJson.encodeBody(publishable(payload.beat)))
                 }
             }
             is ShareCodec.SharePayload.CategoryPayload -> {
@@ -132,7 +134,7 @@ class CommunityClient(
                 body = buildJsonObject {
                     put("name", payload.name)
                     put("beats", buildJsonArray {
-                        payload.beats.forEach { add(LibraryJson.encodeBody(it.copy(id = null, sourceItemId = null))) }
+                        payload.beats.forEach { add(LibraryJson.encodeBody(publishable(it))) }
                     })
                 }
             }
@@ -157,6 +159,14 @@ class CommunityClient(
     }
 
     /**
+     * The beat as it goes to the community: no local id, and none of the fields
+     * that only mean something in the author's own library (where it came from,
+     * what it was copied from). Tags stay — they are the author's.
+     */
+    fun publishable(beat: Beat): Beat =
+        beat.copy(id = null, sourceItemId = null, sourceIndex = null, forkedFrom = null)
+
+    /**
      * Replace the snapshot of a beat the user already published ("Share updated
      * version"), keeping the item's id, copies and ratings. RLS lets only its
      * author through. Ids are stripped exactly as [publish] strips them.
@@ -165,7 +175,7 @@ class CommunityClient(
         val body = buildJsonObject {
             put("name", beat.name)
             put("payload", buildJsonObject {
-                put("beat", LibraryJson.encodeBody(beat.copy(id = null, sourceItemId = null)))
+                put("beat", LibraryJson.encodeBody(publishable(beat)))
             })
         }
         val updated = client.update(TABLE, body, listOf("id" to "eq.$id"), one = true, whileDoing = Strings.get(R.string.doing_publish))
@@ -185,6 +195,32 @@ class CommunityClient(
             whileDoing = Strings.get(R.string.doing_load_shared),
         )
         return rowsOf(rows).mapNotNull { itemOf(it) }
+    }
+
+    /**
+     * The current originals of the community beats in the library: item id → its
+     * beats (one for a beat, the list's beats for a playlist). An id absent from
+     * the result was unpublished. Ids go in batches to keep URLs short.
+     */
+    suspend fun originals(itemIds: Collection<String>): Map<String, List<Beat>> {
+        val out = LinkedHashMap<String, List<Beat>>()
+        for (batch in itemIds.distinct().chunked(ORIGINALS_BATCH)) {
+            val rows = client.select(
+                table = TABLE,
+                columns = COLUMNS,
+                filters = listOf("id" to "in.(${batch.joinToString(",")})"),
+                requireSession = false,
+                whileDoing = Strings.get(R.string.doing_load_community),
+            )
+            for (item in rowsOf(rows).mapNotNull { itemOf(it) }) {
+                out[item.id] = when (val p = toImportPayload(item)) {
+                    is ShareCodec.SharePayload.BeatPayload -> listOf(p.beat)
+                    is ShareCodec.SharePayload.CategoryPayload -> p.beats
+                    else -> continue
+                }
+            }
+        }
+        return out
     }
 
     /** Remove a published item. RLS lets only its author through. */
@@ -390,6 +426,13 @@ private fun rowsOf(body: JsonElement?): List<JsonElement> = (body as? JsonArray)
  * client-side, and an empty query means "no filters" rather than a filter that
  * matches nothing.
  */
+/**
+ * Only beats carrying [tag] — a JSON containment test on the snapshot's tags.
+ * Playlists have no single tag set, so a tag filter shows beats only.
+ */
+internal fun tagFilter(tag: String?): List<Pair<String, String>> =
+    if (tag.isNullOrBlank()) emptyList() else listOf("payload->beat->tags" to "cs.[\"$tag\"]")
+
 internal fun browseFilters(
     query: String,
     scope: CommunityClient.BrowseScope,

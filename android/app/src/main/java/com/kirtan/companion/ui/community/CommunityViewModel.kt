@@ -65,6 +65,14 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
         _scope.value = scope
     }
 
+    /** Show only beats with this tag, or null for everything. */
+    private val _tag = MutableStateFlow<String?>(null)
+    val tag: StateFlow<String?> = _tag.asStateFlow()
+
+    fun setTag(tag: String?) {
+        _tag.value = tag
+    }
+
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
@@ -121,6 +129,11 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { session.collect { reloadMine() } }
+        viewModelScope.launch {
+            container.communityLibrary.originals.collect { originals ->
+                _shareIndex.value = _shareIndex.value.copy(originals = originals)
+            }
+        }
     }
 
     /** Re-read the user's published beats; empty when signed out or offline. */
@@ -156,7 +169,7 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
         _error.value = null
         viewModelScope.launch {
             try {
-                val loaded = client.browse(query, _scope.value)
+                val loaded = client.browse(query, _scope.value, tag = _tag.value)
                 _items.value = loaded
                 // One extra query for the whole page, only when signed in: the
                 // stars need to show the user's own choice, not the average.
@@ -302,6 +315,8 @@ class CommunityViewModel(app: Application) : AndroidViewModel(app) {
         }
         when (val status = _shareIndex.value.status(beat)) {
             ShareStatus.Shared -> onDone(Strings.get(R.string.share_already_shared))
+            ShareStatus.NotYours -> onDone(Strings.get(R.string.share_not_yours))
+            ShareStatus.UnchangedCopy -> onDone(Strings.get(R.string.share_unchanged_copy))
             ShareStatus.New -> viewModelScope.launch {
                 try {
                     val item = client.publish(ShareCodec.SharePayload.BeatPayload(beat), current.userId, current.displayName)
