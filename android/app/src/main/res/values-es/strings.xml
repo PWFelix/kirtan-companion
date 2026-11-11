@@ -72,7 +72,6 @@
     <string name="community_meta">Explora y publica ritmos compartidos</string>
     <string name="community_no_match">Nada en la biblioteca de la comunidad coincide con «%1$s».</string>
     <string name="community_not_configured">La biblioteca de la comunidad está en la nube, y esta versión no tiene nube configurada, así que no hay nada que explorar.</string>
-    <string name="community_not_rated">sin valoraciones aún</string>
     <string name="community_nothing_added">No se añadió nada.</string>
     <string name="community_preview">Escuchar</string>
     <string name="community_preview_stop">Detener</string>
@@ -83,7 +82,10 @@
     <string name="community_scope_names">Nombres</string>
     <string name="community_search">Buscar en la biblioteca de la comunidad</string>
     <string name="community_sign_in_to_publish">Inicia sesión para publicar en la biblioteca de la comunidad.</string>
-    <string name="community_sign_in_to_rate">Inicia sesión para valorar ritmos de la comunidad.</string>
+    <string name="community_sign_in_to_vote">Inicia sesión para votar.</string>
+    <string name="community_sort_copies">Más añadidos</string>
+    <string name="community_sort_new">Nuevos</string>
+    <string name="community_sort_top">Destacados</string>
     <string name="community_title">Comunidad</string>
     <string name="community_unpublish">Retirar</string>
     <string name="community_unreadable">No se pudo leer ese elemento: puede que se haya publicado con una versión más nueva de la app.</string>
@@ -97,7 +99,6 @@
     <string name="doing_finish_sign_in">terminar de iniciar sesión</string>
     <string name="doing_load_builtin">cargar los ritmos incluidos</string>
     <string name="doing_load_community">cargar la biblioteca de la comunidad</string>
-    <string name="doing_load_ratings">cargar tus valoraciones</string>
     <string name="doing_load_shared">cargar tus ritmos compartidos</string>
     <string name="doing_one_of_your_beats">uno de tus ritmos</string>
     <string name="doing_one_of_your_playlists">una de tus listas</string>
@@ -105,9 +106,8 @@
     <string name="doing_publish">publicar eso</string>
     <string name="doing_refresh_sign_in">renovar tu sesión</string>
     <string name="doing_remove_builtin">quitar eso de los ritmos incluidos</string>
-    <string name="doing_remove_rating">quitar esa valoración</string>
     <string name="doing_save_for_everyone">guardar eso para todos</string>
-    <string name="doing_save_rating">guardar esa valoración</string>
+    <string name="doing_save_vote">guardar tu voto</string>
     <string name="doing_sign_in">iniciar sesión</string>
     <string name="doing_sign_out">cerrar sesión</string>
     <string name="doing_that_beat">ese ritmo</string>
@@ -412,10 +412,20 @@
         <item quantity="many">%1$d copias</item>
         <item quantity="other">%1$d copias</item>
     </plurals>
+    <plurals name="community_unvote">
+        <item quantity="one">Retirar tu voto (%1$d voto)</item>
+        <item quantity="many">Retirar tu voto (%1$d votos)</item>
+        <item quantity="other">Retirar tu voto (%1$d votos)</item>
+    </plurals>
     <plurals name="community_updates">
         <item quantity="one">%1$d actualización</item>
         <item quantity="many">%1$d actualizaciones</item>
         <item quantity="other">%1$d actualizaciones</item>
+    </plurals>
+    <plurals name="community_upvote">
+        <item quantity="one">Votar (%1$d voto)</item>
+        <item quantity="many">Votar (%1$d votos)</item>
+        <item quantity="other">Votar (%1$d votos)</item>
     </plurals>
     <plurals name="import_add_list_q">
         <item quantity="one">¿Añadir %1$d ritmo y la lista «%2$s»?</item>
@@ -446,16 +456,6 @@
         <item quantity="one">%1$d tiempo</item>
         <item quantity="many">%1$d tiempos</item>
         <item quantity="other">%1$d tiempos</item>
-    </plurals>
-    <plurals name="rate_remove">
-        <item quantity="one">Quitar tu valoración de %1$d estrella</item>
-        <item quantity="many">Quitar tu valoración de %1$d estrellas</item>
-        <item quantity="other">Quitar tu valoración de %1$d estrellas</item>
-    </plurals>
-    <plurals name="rate_stars">
-        <item quantity="one">Valorar con %1$d estrella</item>
-        <item quantity="many">Valorar con %1$d estrellas</item>
-        <item quantity="other">Valorar con %1$d estrellas</item>
     </plurals>
     <plurals name="share_list_note">
         <item quantity="one">El %1$d ritmo de esta lista viaja dentro del enlace. No se sube nada.</item>

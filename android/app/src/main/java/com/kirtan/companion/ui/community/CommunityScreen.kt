@@ -23,8 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -37,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,7 +83,8 @@ internal fun CommunityScreen(
     val session by vm.session.collectAsState()
     val scope by vm.scope.collectAsState()
     val tag by vm.tag.collectAsState()
-    val myRatings by vm.myRatings.collectAsState()
+    val myVotes by vm.myVotes.collectAsState()
+    val sort by vm.sort.collectAsState()
     val isMaintainer by vm.isMaintainer.collectAsState()
     val inLibrary by vm.inLibrary.collectAsState()
     var query by remember { mutableStateOf("") }
@@ -121,7 +123,7 @@ internal fun CommunityScreen(
     // One debounced effect drives every load, including the first: typing or
     // switching scope re-queries after a pause rather than per keystroke, which
     // matters because each query is a network round trip.
-    LaunchedEffect(query, scope, tag) {
+    LaunchedEffect(query, scope, tag, sort) {
         delay(300)
         vm.refresh(query)
     }
@@ -177,6 +179,23 @@ internal fun CommunityScreen(
                 selected = scope == CommunityClient.BrowseScope.AUTHORS,
                 onClick = { vm.setScope(CommunityClient.BrowseScope.AUTHORS) },
             )
+        }
+
+        // Order: Top (votes, decayed by age), New, Most added.
+        Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
+            CommunityClient.BrowseSort.entries.forEach { option ->
+                ScopeChip(
+                    label = stringResource(
+                        when (option) {
+                            CommunityClient.BrowseSort.TOP -> R.string.community_sort_top
+                            CommunityClient.BrowseSort.NEW -> R.string.community_sort_new
+                            CommunityClient.BrowseSort.COPIES -> R.string.community_sort_copies
+                        },
+                    ),
+                    selected = sort == option,
+                    onClick = { vm.setSort(option) },
+                )
+            }
         }
 
         // Every vocabulary tag: the server filters, so what's on this page
@@ -236,7 +255,7 @@ internal fun CommunityScreen(
                 beats = preview,
                 mine = session?.userId != null && session?.userId == item.authorId,
                 signedIn = session != null,
-                myStars = myRatings[item.id],
+                voted = item.id in myVotes,
                 inLibrary = item.id in inLibrary,
                 // Gated on the flag AND on the snapshot decoding to a single beat:
                 // a button that opens a sheet and then says "only a single beat can
@@ -247,7 +266,7 @@ internal fun CommunityScreen(
                 onAdd = { vm.add(item) { notice = it } },
                 onUnpublish = { vm.unpublish(item) { notice = it } },
                 onPromote = { promoteTarget = item },
-                onRate = { stars -> vm.rate(item, stars) { notice = it } },
+                onVote = { vm.toggleVote(item) { notice = it } },
                 previewing = previewingId == item.id,
                 onPreview = preview?.firstOrNull()?.let { beat ->
                     {
@@ -285,13 +304,13 @@ private fun CommunityCard(
     beats: List<com.kirtan.companion.data.model.Beat>?,
     mine: Boolean,
     signedIn: Boolean,
-    myStars: Int?,
+    voted: Boolean,
     inLibrary: Boolean,
     canPromote: Boolean,
     onAdd: () -> Unit,
     onUnpublish: () -> Unit,
     onPromote: () -> Unit,
-    onRate: (Int) -> Unit,
+    onVote: () -> Unit,
     previewing: Boolean = false,
     /** Null when the snapshot has no playable beat. */
     onPreview: (() -> Unit)? = null,
@@ -341,25 +360,10 @@ private fun CommunityCard(
             )
         }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(dimens.space2),
-        ) {
-            // "not rated yet" rather than "0 stars": zero ratings is absence of
-            // opinion, and showing 0.0 would read as a verdict.
-            val average = item.averageStars
-            Text(
-                text = if (average == null) {
-                    stringResource(R.string.community_not_rated)
-                } else {
-                    "%.1f ★ (%d)".format(average, item.ratingCount)
-                },
-                color = PaletteToken.SYAHI_SOFT.color,
-                fontSize = 12.sp,
-            )
-            if (signedIn) {
-                StarRow(selected = myStars, onRate = onRate)
-            }
+        // Upvotes: the count for everyone, tappable when signed in. Hidden when
+        // the database predates votes (no count to show).
+        item.voteCount?.let { count ->
+            VoteButton(count = count, voted = voted, enabled = signedIn, onClick = onVote)
         }
 
         beats?.firstOrNull()?.let { beat -> BeatStrip(beat = beat, mini = true) }
@@ -453,34 +457,37 @@ private fun ScopeChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * Five tappable stars showing the signed-in user's own rating.
- *
- * Tapping the star you already chose CLEARS it: the natural "take it back", and
- * the server stores the absence as a deleted row rather than a zero, so the
- * community average is never dragged down by a withdrawn opinion.
+ * The upvote pill: arrow plus count. Filled clay once you've voted; tapping
+ * again takes the vote back. Signed out it still shows the count, untappable.
  */
 @Composable
-private fun StarRow(selected: Int?, onRate: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        for (star in 1..5) {
-            val filled = selected != null && star <= selected
-            Icon(
-                imageVector = if (filled) Icons.Rounded.Star else Icons.Rounded.StarBorder,
-                contentDescription = if (selected == star) {
-                    Strings.plural(R.plurals.rate_remove, star, star)
-                } else {
-                    Strings.plural(R.plurals.rate_stars, star, star)
-                },
-                tint = if (filled) PaletteToken.CLAY.color else KirtanTheme.colors.rule,
-                modifier = Modifier
-                    .size(22.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { onRate(star) },
-                    ),
-            )
-        }
+private fun VoteButton(count: Long, voted: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val dimens = KirtanTheme.dimens
+    val shape = RoundedCornerShape(dimens.radiusPill)
+    val tint = if (voted) PaletteToken.CLAY.color else PaletteToken.SYAHI_SOFT.color
+    val description = if (voted) {
+        Strings.plural(R.plurals.community_unvote, count.toInt(), count)
+    } else {
+        Strings.plural(R.plurals.community_upvote, count.toInt(), count)
+    }
+    Row(
+        modifier = Modifier
+            .heightIn(min = 40.dp)
+            .clip(shape)
+            .border(BorderStroke(dimens.hairline, if (voted) PaletteToken.CLAY.color else KirtanTheme.colors.rule), shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = description }
+            .padding(horizontal = dimens.space3),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.ArrowUpward,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(text = count.toString(), color = tint, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 

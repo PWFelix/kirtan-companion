@@ -78,7 +78,6 @@
     <string name="community_meta">Browse and publish shared beats</string>
     <string name="community_no_match">Nothing in the community library matches “%1$s”.</string>
     <string name="community_not_configured">The community library lives in the cloud, and this build has no cloud configured, so there is nothing to browse.</string>
-    <string name="community_not_rated">not rated yet</string>
     <string name="community_nothing_added">Nothing was added.</string>
     <string name="community_preview">Preview</string>
     <string name="community_preview_stop">Stop</string>
@@ -89,7 +88,10 @@
     <string name="community_scope_names">Names</string>
     <string name="community_search">Search the community library</string>
     <string name="community_sign_in_to_publish">Sign in to publish to the community library.</string>
-    <string name="community_sign_in_to_rate">Sign in to rate community beats.</string>
+    <string name="community_sign_in_to_vote">Sign in to upvote.</string>
+    <string name="community_sort_copies">Most added</string>
+    <string name="community_sort_new">New</string>
+    <string name="community_sort_top">Top</string>
     <string name="community_title">Community</string>
     <string name="community_unpublish">Unpublish</string>
     <string name="community_unreadable">That item couldn\'t be read — it may have been published by a newer version of the app.</string>
@@ -103,7 +105,6 @@
     <string name="doing_finish_sign_in">finish signing in</string>
     <string name="doing_load_builtin">loading the built-in beats</string>
     <string name="doing_load_community">load the community library</string>
-    <string name="doing_load_ratings">load your ratings</string>
     <string name="doing_load_shared">load your shared beats</string>
     <string name="doing_one_of_your_beats">one of your beats</string>
     <string name="doing_one_of_your_playlists">one of your playlists</string>
@@ -111,9 +112,8 @@
     <string name="doing_publish">publish that</string>
     <string name="doing_refresh_sign_in">refresh your sign-in</string>
     <string name="doing_remove_builtin">remove that from the built-in beats</string>
-    <string name="doing_remove_rating">remove that rating</string>
     <string name="doing_save_for_everyone">save that for everyone</string>
-    <string name="doing_save_rating">save that rating</string>
+    <string name="doing_save_vote">save your vote</string>
     <string name="doing_sign_in">sign in</string>
     <string name="doing_sign_out">sign out</string>
     <string name="doing_that_beat">that beat</string>
@@ -413,9 +413,17 @@
         <item quantity="one">%1$d copy</item>
         <item quantity="other">%1$d copies</item>
     </plurals>
+    <plurals name="community_unvote">
+        <item quantity="one">Take back your upvote (%1$d vote)</item>
+        <item quantity="other">Take back your upvote (%1$d votes)</item>
+    </plurals>
     <plurals name="community_updates">
         <item quantity="one">%1$d update</item>
         <item quantity="other">%1$d updates</item>
+    </plurals>
+    <plurals name="community_upvote">
+        <item quantity="one">Upvote (%1$d vote)</item>
+        <item quantity="other">Upvote (%1$d votes)</item>
     </plurals>
     <plurals name="import_add_list_q">
         <item quantity="one">Add %1$d beat and the list “%2$s”?</item>
@@ -440,14 +448,6 @@
     <plurals name="note_beat_count">
         <item quantity="one">%1$d beat</item>
         <item quantity="other">%1$d beats</item>
-    </plurals>
-    <plurals name="rate_remove">
-        <item quantity="one">Remove your %1$d-star rating</item>
-        <item quantity="other">Remove your %1$d-star rating</item>
-    </plurals>
-    <plurals name="rate_stars">
-        <item quantity="one">Rate %1$d star</item>
-        <item quantity="other">Rate %1$d stars</item>
     </plurals>
     <plurals name="share_list_note">
         <item quantity="one">All %1$d beat in this list travels inside the link. Nothing is uploaded.</item>

@@ -10,7 +10,9 @@
 --    beats             a user's PRIVATE custom beats
 --    playlists         a user's PRIVATE kirtan progressions
 --    published_beats   the PUBLIC community library (world-readable snapshots)
---    published_ratings one person's stars on one published item
+--    published_ratings one person's stars on one published item (retired —
+--                      kept for older app versions; see published_votes)
+--    published_votes   one person's upvote on one published item
 --    maintainers       who may change the built-in beat set
 --    shipped_beats     the CANONICAL built-in beat set, served to every client
 --
@@ -90,6 +92,8 @@ create table if not exists public.published_beats (
 -- own idempotent step.
 alter table public.published_beats add column if not exists rating_sum integer not null default 0;
 alter table public.published_beats add column if not exists rating_count integer not null default 0;
+-- Denormalised from `published_votes` by a trigger, as the ratings were.
+alter table public.published_beats add column if not exists vote_count integer not null default 0;
 create index if not exists published_created_idx on public.published_beats(created_at desc);
 -- Full-text index on the name so Browse can search a growing library cheaply.
 create index if not exists published_name_idx
@@ -109,6 +113,19 @@ create table if not exists public.published_ratings (
   unique (item_id, user_id)
 );
 create index if not exists published_ratings_item_idx on public.published_ratings(item_id);
+
+
+-- ── published_votes ─────────────────────────────────────────────────────
+-- One person's upvote on one published item. Upvotes replaced the 5-star
+-- ratings: one tap is a signal people actually give, and a single count is
+-- something the list can rank by. The primary key IS the one-vote rule; taking
+-- a vote back is a DELETE.
+create table if not exists public.published_votes (
+  item_id    uuid not null references public.published_beats(id) on delete cascade,
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (item_id, user_id)
+);
 
 
 -- ── maintainers ─────────────────────────────────────────────────────────
@@ -205,6 +222,16 @@ create policy "ratings are world-readable" on public.published_ratings
 
 drop policy if exists "ratings are own-only" on public.published_ratings;
 create policy "ratings are own-only" on public.published_ratings
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- published_votes: the counts are public, so votes are readable; only the voter
+-- may cast or take back their own.
+alter table public.published_votes enable row level security;
+drop policy if exists "votes are world-readable" on public.published_votes;
+create policy "votes are world-readable" on public.published_votes
+  for select using (true);
+drop policy if exists "votes are own-only" on public.published_votes;
+create policy "votes are own-only" on public.published_votes
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- maintainers: readable by the person themselves, and by NOBODY else. The rule
@@ -323,6 +350,68 @@ drop trigger if exists published_ratings_recount on public.published_ratings;
 create trigger published_ratings_recount
   after insert or update or delete on public.published_ratings
   for each row execute function public.recount_published_ratings();
+
+-- `vote_count` follows `published_votes`, for the same reasons as the ratings
+-- trigger above (no lost counts, no client that forgets).
+create or replace function public.recount_published_votes()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'DELETE' then
+    update public.published_beats set vote_count = vote_count - 1 where id = old.item_id;
+    return old;
+  else
+    update public.published_beats set vote_count = vote_count + 1 where id = new.item_id;
+    return new;
+  end if;
+end;
+$$;
+
+drop trigger if exists published_votes_recount on public.published_votes;
+create trigger published_votes_recount
+  after insert or delete on public.published_votes
+  for each row execute function public.recount_published_votes();
+
+-- Stars become votes: anyone who rated an item has upvoted it (a low star was
+-- still someone who cared enough to tap). Idempotent — re-running adds nothing —
+-- and the count is then recomputed from the rows, so it can't drift.
+insert into public.published_votes (item_id, user_id, created_at)
+  select item_id, user_id, created_at from public.published_ratings
+  on conflict do nothing;
+update public.published_beats p
+   set vote_count = (select count(*) from public.published_votes v where v.item_id = p.id)
+ where vote_count is distinct from (select count(*) from public.published_votes v where v.item_id = p.id);
+
+-- Community browse in one call: search, tag and sort.
+--   scope  what q matches: 'names' (default), 'authors', or 'everything'.
+--   sort 'top'    votes decayed by age, Hacker News style:
+--                 vote_count / (hours + 2)^1.5. A beat that's good NOW
+--                 can climb past one that was liked last year. Ties
+--                 (all those zeros) fall back to newest.
+--   sort 'new'    newest first.
+--   sort 'copies' most added to libraries.
+-- A function because 'top' depends on now(), which no stored column or
+-- PostgREST order can express. security invoker, so RLS applies as usual.
+create or replace function public.browse_published(
+  q text default null, tag text default null, sort text default 'top',
+  lim integer default 40, kind_filter text default null, scope text default 'names'
+)
+returns setof public.published_beats
+language sql stable security invoker set search_path = public as $$
+  select * from public.published_beats p
+   where (q is null or q = ''
+          or (scope in ('names', 'everything') and p.name ilike '%' || q || '%')
+          or (scope in ('authors', 'everything') and p.author_name ilike '%' || q || '%'))
+     and (tag is null or p.payload->'beat'->'tags' @> to_jsonb(array[tag]))
+     and (kind_filter is null or p.kind = kind_filter)
+   order by
+     case when sort = 'top' then
+       p.vote_count / power(extract(epoch from (now() - p.created_at)) / 3600.0 + 2, 1.5)
+     end desc nulls last,
+     case when sort = 'copies' then p.copies end desc nulls last,
+     p.created_at desc
+   limit least(greatest(lim, 1), 200)
+$$;
+grant execute on function public.browse_published(text, text, text, integer, text, text) to anon, authenticated;
 
 -- The gate on `shipped_beats`. SECURITY DEFINER so it answers for a caller who
 -- cannot read `maintainers` at all — which is everyone except the maintainers

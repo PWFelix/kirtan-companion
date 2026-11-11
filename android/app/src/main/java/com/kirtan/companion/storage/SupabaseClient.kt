@@ -409,13 +409,18 @@ class SupabaseClient private constructor(
     )
 
     /** Call a `security definer` RPC — the copy counter's `increment_published_copies`. */
-    suspend fun rpc(function: String, args: JsonObject, whileDoing: String): JsonElement? = send(
+    suspend fun rpc(
+        function: String,
+        args: JsonObject,
+        whileDoing: String,
+        requireSession: Boolean = true,
+    ): JsonElement? = send(
         method = HttpMethod.Post,
         url = restUrl(config, "rpc/$function", emptyList(), null, null),
         body = args.toString(),
         accept = JSON,
         prefer = null,
-        useSessionToken = true,
+        useSessionToken = requireSession,
         whileDoing = whileDoing,
     )
 

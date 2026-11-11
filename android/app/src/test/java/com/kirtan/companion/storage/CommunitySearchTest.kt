@@ -1,12 +1,10 @@
 package com.kirtan.companion.storage
 
-import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * The community search filter wiring and the rating average.
+ * The community search filter wiring and the browse function's wire ids.
  *
  * Both are pure, so they are tested without a network or a client. The filter
  * shape matters because PostgREST's `or=(…)` syntax is easy to get subtly wrong
@@ -56,27 +54,13 @@ class CommunitySearchTest {
     }
 
     @Test
-    fun `the average is null until somebody rates`() {
-        val unrated = item(ratingSum = 0, ratingCount = 0)
-        assertNull(unrated.averageStars)
-
-        // Zero sum WITH a count is a real one-star-and-up average of zero only
-        // if someone rated zero, which the check constraint forbids — so a zero
-        // sum with a count can only mean the data is odd, and we still divide.
-        val rated = item(ratingSum = 9, ratingCount = 2)
-        assertEquals(4.5, rated.averageStars!!, 0.0)
+    fun `sort and scope wire ids match browse_published in schema sql`() {
+        // The function compares these strings; a renamed enum would silently
+        // fall through to "newest first".
+        assertEquals(listOf("top", "new", "copies"), CommunityClient.BrowseSort.entries.map { it.wireId })
+        assertEquals(
+            listOf("everything", "names", "authors"),
+            CommunityClient.BrowseScope.entries.map { it.wireId },
+        )
     }
-
-    private fun item(ratingSum: Long, ratingCount: Long) = PublishedItem(
-        id = "x",
-        authorId = null,
-        authorName = null,
-        kind = PublishedKind.BEAT,
-        name = "n",
-        payload = JsonObject(emptyMap()),
-        copies = 0,
-        ratingSum = ratingSum,
-        ratingCount = ratingCount,
-        createdAt = null,
-    )
 }

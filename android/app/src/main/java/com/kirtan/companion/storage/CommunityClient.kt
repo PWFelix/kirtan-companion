@@ -49,10 +49,9 @@ class CommunityClient(
 
     private companion object {
         const val TABLE = "published_beats"
-        const val RATINGS = "published_ratings"
+        const val VOTES = "published_votes"
         const val COLUMNS =
-            "id, author_id, author_name, kind, name, payload, copies, " +
-                "rating_sum, rating_count, created_at"
+            "id, author_id, author_name, kind, name, payload, copies, created_at"
         const val ANONYMOUS_AUTHOR = "A devotee"
         const val ORIGINALS_BATCH = 50
         const val DEFAULT_LIMIT = 40
@@ -66,10 +65,17 @@ class CommunityClient(
      * for a beat called "Dadra" should not return every beat by someone whose
      * name contains it.
      */
-    enum class BrowseScope { EVERYTHING, NAMES, AUTHORS }
+    enum class BrowseScope(val wireId: String) { EVERYTHING("everything"), NAMES("names"), AUTHORS("authors") }
 
     /**
-     * The community list, newest first.
+     * How Browse orders the list. TOP is votes decayed by age — see
+     * `browse_published` in supabase/schema.sql — so a beat that's good now can
+     * climb past one liked last year.
+     */
+    enum class BrowseSort(val wireId: String) { TOP("top"), NEW("new"), COPIES("copies") }
+
+    /**
+     * The community list, in [sort] order.
      *
      * Reads need no identity — RLS already allows the world — so this is the one
      * call that does not require a session. A signed-out user can browse; copying
@@ -84,12 +90,38 @@ class CommunityClient(
         scope: BrowseScope = BrowseScope.EVERYTHING,
         limit: Int = DEFAULT_LIMIT,
         tag: String? = null,
+        sort: BrowseSort = BrowseSort.TOP,
     ): List<PublishedItem> {
+        // One server-side function does search, tag and sort (TOP needs now(),
+        // which no plain PostgREST order can express).
+        try {
+            val rows = client.rpc(
+                function = "browse_published",
+                args = buildJsonObject {
+                    put("q", query.trim().ifEmpty { null })
+                    put("tag", tag)
+                    put("sort", sort.wireId)
+                    put("lim", limit)
+                    put("scope", scope.wireId)
+                },
+                whileDoing = Strings.get(R.string.doing_load_community),
+                requireSession = false,
+            )
+            return rowsOf(rows).mapNotNull { itemOf(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: StorageError) {
+            // Offline or signed-out problems are real: say so. Anything else most
+            // likely means the database hasn't had the votes schema run yet, so
+            // fall back to the plain query (no TOP, no counts) rather than fail.
+            if (e.code == StorageErrorCode.NETWORK || e.code == StorageErrorCode.UNAVAILABLE) throw e
+            log.warn("[community] browse_published unavailable, falling back", e)
+        }
         val rows = client.select(
             table = TABLE,
             columns = COLUMNS,
             filters = browseFilters(query, scope) + tagFilter(tag),
-            order = "created_at.desc",
+            order = if (sort == BrowseSort.COPIES) "copies.desc" else "created_at.desc",
             limit = limit,
             requireSession = false,
             whileDoing = Strings.get(R.string.doing_load_community),
@@ -251,61 +283,45 @@ class CommunityClient(
     }
 
     /**
-     * Set or clear the signed-in user's rating on an item.
+     * Upvote an item, or take the vote back.
      *
-     * Upsert on `(item_id, user_id)`: one rating per person per item, changed by
-     * tapping a different star. Null CLEARS — tapping your own star again is the
-     * natural "take it back", and the unique constraint makes clearing a delete
-     * rather than a zero, which would otherwise drag the average down forever.
-     *
-     * The counters on the parent row are maintained by a database trigger, so
-     * nothing here has to remember to update them — and two people rating at
-     * once cannot lose a count to a read-modify-write race.
+     * The primary key `(item_id, user_id)` is the one-vote rule, so voting twice
+     * is a no-op upsert and taking it back is a delete. `vote_count` on the item
+     * follows by trigger: two people voting at once can't lose a count.
      */
-    suspend fun rate(itemId: String, userId: String, stars: Int?) {
-        if (stars == null) {
+    suspend fun vote(itemId: String, userId: String, on: Boolean) {
+        if (!on) {
             client.delete(
-                RATINGS,
+                VOTES,
                 listOf("item_id" to "eq.$itemId", "user_id" to "eq.$userId"),
-                Strings.get(R.string.doing_remove_rating),
+                Strings.get(R.string.doing_save_vote),
             )
             return
         }
-        require(stars in 1..5) { "a rating is 1 to 5 stars, got $stars" }
         client.upsert(
-            table = RATINGS,
+            table = VOTES,
             body = buildJsonObject {
                 put("item_id", itemId)
                 put("user_id", userId)
-                put("stars", stars)
             },
             onConflict = "item_id,user_id",
-            whileDoing = Strings.get(R.string.doing_save_rating),
+            whileDoing = Strings.get(R.string.doing_save_vote),
         )
     }
 
-    /**
-     * The signed-in user's own stars per item, so their stars show what they
-     * chose rather than the community's average. One query for the whole page.
-     */
-    suspend fun myRatings(userId: String, itemIds: List<String>): Map<String, Int> {
-        if (itemIds.isEmpty()) return emptyMap()
+    /** Which of [itemIds] the signed-in user has upvoted. One query for the page. */
+    suspend fun myVotes(userId: String, itemIds: List<String>): Set<String> {
+        if (itemIds.isEmpty()) return emptySet()
         val rows = client.select(
-            table = RATINGS,
-            columns = "item_id,stars",
+            table = VOTES,
+            columns = "item_id",
             filters = listOf(
                 "user_id" to "eq.$userId",
                 "item_id" to "in.(${itemIds.joinToString(",")})",
             ),
-            whileDoing = Strings.get(R.string.doing_load_ratings),
+            whileDoing = Strings.get(R.string.doing_load_community),
         )
-        return rowsOf(rows).mapNotNull { row ->
-            val obj = row as? JsonObject ?: return@mapNotNull null
-            val id = obj["item_id"]?.stringContent() ?: return@mapNotNull null
-            val stars = (obj["stars"] as? JsonPrimitive)?.longOrNull?.toInt()
-                ?: return@mapNotNull null
-            id to stars
-        }.toMap()
+        return rowsOf(rows).mapNotNull { (it as? JsonObject)?.get("item_id")?.stringContent() }.toSet()
     }
 
     /**
@@ -352,8 +368,7 @@ class CommunityClient(
             name = obj["name"]?.stringContent().orEmpty(),
             payload = obj["payload"] as? JsonObject ?: JsonObject(emptyMap()),
             copies = (obj["copies"] as? JsonPrimitive)?.longOrNull ?: 0L,
-            ratingSum = (obj["rating_sum"] as? JsonPrimitive)?.longOrNull ?: 0L,
-            ratingCount = (obj["rating_count"] as? JsonPrimitive)?.longOrNull ?: 0L,
+            voteCount = (obj["vote_count"] as? JsonPrimitive)?.longOrNull,
             createdAt = parseTimestamp(obj["created_at"]?.stringContent()),
         )
     }
@@ -388,17 +403,11 @@ data class PublishedItem(
     /** The snapshot: `{ beat }` or `{ name, beats }`, in [LibraryJson]'s shape. */
     val payload: JsonObject,
     val copies: Long,
-    /** Sum of all stars, maintained by a database trigger. */
-    val ratingSum: Long = 0,
-    /** How many people rated it; zero means "nobody yet", not "zero stars". */
-    val ratingCount: Long = 0,
+    /** Upvotes, kept by a database trigger. Null before the votes schema exists. */
+    val voteCount: Long? = null,
     /** Epoch millis, or null when the server's timestamp could not be read. */
     val createdAt: Long?,
-) {
-    /** The community's average, or null when nobody has rated it yet. */
-    val averageStars: Double?
-        get() = if (ratingCount > 0) ratingSum.toDouble() / ratingCount else null
-}
+)
 
 /**
  * A Postgres `timestamptz` as epoch millis.
