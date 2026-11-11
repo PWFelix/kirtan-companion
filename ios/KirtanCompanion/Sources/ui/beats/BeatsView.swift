@@ -192,6 +192,10 @@ struct BeatsView: View {
         }
         .alert(namePromptTitle, isPresented: Binding(get: { namePrompt != nil }, set: { if !$0 { namePrompt = nil } })) {
             TextField(String(localized: "List name", bundle: .strings), text: $nameDraft)
+                .onChange(of: nameDraft) { _, value in
+                    let clamped = Names.clamp(value)
+                    if clamped != value { nameDraft = clamped }
+                }
             Button(String(localized: "Cancel", bundle: .strings), role: .cancel) { namePrompt = nil }
             Button(namePrompt == .newList ? String(localized: "Create", bundle: .strings) : String(localized: "Rename", bundle: .strings)) { commitName() }
         }
@@ -636,7 +640,7 @@ struct BeatsView: View {
     }
 
     private func commitName() {
-        let name = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = Names.clamp(nameDraft.trimmingCharacters(in: .whitespacesAndNewlines))
         let prompt = namePrompt
         namePrompt = nil
         guard !name.isEmpty else { return }

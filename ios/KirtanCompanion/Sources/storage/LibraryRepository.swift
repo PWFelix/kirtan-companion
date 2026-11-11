@@ -569,10 +569,12 @@ struct MigrationResult {
 /// without it, importing a playlist of three beats all called "My Beat" would produce three
 /// beats all called "My Beat (2)".
 func uniqueName(_ wanted: String, _ taken: inout Set<String>) -> String {
-    var name = wanted
+    var name = Names.clamp(wanted)
     var suffix = 2
     while taken.contains(name) {
-        name = "\(wanted) (\(suffix))"
+        // The suffix has to fit inside the limit too, so the base gives way.
+        let tail = " (\(suffix))"
+        name = Names.clamp(wanted, max: Names.maxLength - tail.utf16.count) + tail
         suffix += 1
     }
     taken.insert(name)

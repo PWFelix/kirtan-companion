@@ -132,6 +132,25 @@ final class ParityTests: XCTestCase {
         XCTAssertEqual(CommunityClient.BrowseSort.allCases.map(\.rawValue), ["top", "new", "copies"])
         XCTAssertEqual(CommunityClient.BrowseScope.allCases.map(\.rawValue), ["everything", "names", "authors"])
     }
+
+    // ── Names ─────────────────────────────────────────────────────────────
+
+    func testNamesAreCappedAndTheSuffixFitsInside() {
+        var none = Set<String>()
+        XCTAssertEqual(uniqueName(String(repeating: "a", count: 300), &none).utf16.count, 255)
+        var taken: Set<String> = [String(repeating: "a", count: 255)]
+        let second = uniqueName(String(repeating: "a", count: 300), &taken)
+        XCTAssertEqual(second.utf16.count, 255)
+        XCTAssertTrue(second.hasSuffix(" (2)"))
+    }
+
+    func testClampingNeverSplitsAnEmoji() {
+        XCTAssertEqual(Names.clamp(String(repeating: "a", count: 254) + "🥁"), String(repeating: "a", count: 254))
+    }
+
+    func testClosedStrokeIsDrawnAsACross() {
+        XCTAssertEqual(strokeVisual(.closed).shape, .cross)
+    }
 }
 
 /// A provider that keeps everything in memory, so repository tests touch no file.

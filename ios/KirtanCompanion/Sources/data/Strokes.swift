@@ -7,7 +7,7 @@
 
 /// Shapes the strip and editor can draw.
 enum StrokeShape {
-    case circle, square, diamond, triangle, ring, rest
+    case circle, square, diamond, triangle, ring, cross, rest
 }
 
 struct StrokeVisual {
@@ -18,7 +18,9 @@ struct StrokeVisual {
 
 private let STROKES: [Stroke: StrokeVisual] = [
     .open:   StrokeVisual(shape: .circle, color: .clay,  label: "open"),
-    .closed: StrokeVisual(shape: .square, color: .strap, label: "closed"),
+    // Closed (te, khe) is an X: it reads as a different mark from the open disc,
+    // where a square or ring read as a variation of it. Same on web and Android.
+    .closed: StrokeVisual(shape: .cross, color: .strap, label: "closed"),
     // Ready for when these sounds are added:
     // .duggi:  StrokeVisual(shape: .diamond,  color: .duggi, label: "duggi"),
     // .nak:    StrokeVisual(shape: .triangle, color: .nak,   label: "nak"),

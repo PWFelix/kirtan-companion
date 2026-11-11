@@ -166,6 +166,11 @@ struct BeatEditorView: View {
         TextField(String(localized: "Name", bundle: .strings), text: $name)
             .textFieldStyle(.roundedBorder)
             .font(.body)
+            // Typing stops at the limit rather than failing later on save.
+            .onChange(of: name) { _, value in
+                let clamped = Names.clamp(value)
+                if clamped != value { name = clamped }
+            }
     }
 
     private var meterRow: some View {
@@ -290,7 +295,7 @@ struct BeatEditorView: View {
     private var pads: some View {
         HStack(spacing: 10) {
             padButton(.open, String(localized: "Open", bundle: .strings), symbol: "circle.fill")
-            padButton(.closed, String(localized: "Closed", bundle: .strings), symbol: "square.fill")
+            padButton(.closed, String(localized: "Closed", bundle: .strings), symbol: "xmark")
             padButton(nil, String(localized: "Rest", bundle: .strings), symbol: "circle.dotted")
             Spacer()
             Button {
@@ -379,7 +384,7 @@ struct BeatEditorView: View {
         let seed = mode.seed
         var beat = Beat(
             id: keepsIdentity ? seed?.id : nil,
-            name: name.trimmingCharacters(in: .whitespaces) == "" ? String(localized: "New beat", bundle: .strings) : name,
+            name: name.trimmingCharacters(in: .whitespaces) == "" ? String(localized: "New beat", bundle: .strings) : Names.clamp(name),
             note: keepsIdentity ? (seed?.note ?? "") : "",
             bpm: bpm,
             steps: steps,
@@ -516,7 +521,8 @@ private struct EditorCell: View {
         case .open:
             Circle().fill(Palette.lane(lane)).frame(width: d, height: d)
         case .closed:
-            RoundedRectangle(cornerRadius: size * 0.1).fill(Palette.strap).frame(width: d, height: d)
+            CrossMark().stroke(Palette.strap, style: StrokeStyle(lineWidth: max(2, d * 0.18), lineCap: .round))
+                .frame(width: d, height: d)
         }
     }
 }

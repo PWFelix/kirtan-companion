@@ -104,6 +104,9 @@ struct BeatStripView: View {
         switch shape {
         case .ring:
             ctx.stroke(Path(ellipseIn: rect), with: .color(color), lineWidth: max(1.5, rect.width * 0.16))
+        case .cross:
+            ctx.stroke(CrossMark().path(in: rect), with: .color(color),
+                       style: StrokeStyle(lineWidth: max(1.5, rect.width * 0.17), lineCap: .round))
         case .rest:
             break // nothing for a rest
         default:
@@ -132,9 +135,24 @@ struct BeatStripView: View {
             p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
             p.closeSubpath()
             return p
+        case .cross:
+            return CrossMark().path(in: rect)
         case .ring, .rest:
             return Path(ellipseIn: rect)
         }
+    }
+}
+
+/// The closed-stroke X: two diagonals, inset so round caps stay inside the box.
+/// A Shape so the strip (Canvas), the editor cells and Learn draw the same mark.
+struct CrossMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let inset = min(rect.width, rect.height) * 0.14
+        let r = rect.insetBy(dx: inset, dy: inset)
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+        p.move(to: CGPoint(x: r.maxX, y: r.minY)); p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
+        return p
     }
 }
 

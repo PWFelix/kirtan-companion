@@ -190,7 +190,10 @@ private struct HighwayCanvas: View {
             let c = CGPoint(x: cx, y: y)
             switch note.column.stroke {
             case .open: ctx.fill(circle(c, noteR), with: .color(color.opacity(alpha)))
-            case .closed: ctx.stroke(circle(c, noteR - 2), with: .color(color.opacity(alpha)), lineWidth: 4)
+            case .closed:
+                let d = (noteR - 2) * 0.75 / 0.72 // CrossMark insets 14% each side
+                ctx.stroke(CrossMark().path(in: CGRect(x: c.x - d, y: c.y - d, width: d * 2, height: d * 2)),
+                           with: .color(color.opacity(alpha)), style: StrokeStyle(lineWidth: 4, lineCap: .round))
             }
         }
 
