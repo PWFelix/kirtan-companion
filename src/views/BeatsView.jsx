@@ -18,8 +18,9 @@ import {
 import { encodeBeat, encodeCategory, decodeShare, codeFromInput, shareUrl } from "../data/shareCodec.js";
 import {
   browse as browseCommunity, publish as publishCommunity,
-  incrementCopies, toImportPayload,
+  incrementCopies, toImportPayload, myPublishedBeats, updatePublishedBeat,
 } from "../storage/communityClient.js";
+import { shareStatus, loadLinks, saveLink } from "../data/shareStatus.js";
 
 // Whether the platform has a native share sheet (iOS/Android do, most
 // desktop browsers don't). Checked once — it can't change mid-session.
@@ -167,12 +168,38 @@ function BeatsView({
     }
   }
 
+  // ── Share status: "Already shared" / "Share updated version" ──
+  // The user's published beats plus this device's beat→item record; see
+  // data/shareStatus.js. Sharing is atomic and never a silent duplicate.
+  const userId = signedIn ? auth.user.id : null;
+  const [myShared, setMyShared] = useState([]);
+  const [shareLinks, setShareLinks] = useState(loadLinks);
+  const [sharedTick, setSharedTick] = useState(0);
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    // Unknown is safest as "not shared": Share stays usable.
+    myPublishedBeats(userId).then((rows) => { if (!cancelled) setMyShared(rows); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId, sharedTick]);
+  const targetStatus = shareTarget?.kind === "beat" && userId
+    ? shareStatus(shareTarget.beat, myShared, shareLinks) : "new";
+
   // Publish whatever the share sheet is showing to the community library.
   async function handlePublish() {
     if (!signedIn) { onRequestAuth?.(); return; }
+    if (targetStatus === "shared") return;
     setPublishState("publishing");
     try {
-      await publishCommunity(shareTarget, { authorId: auth.user.id, authorName: auth.displayName });
+      if (targetStatus.changed) {
+        await updatePublishedBeat(targetStatus.changed, shareTarget.beat);
+      } else {
+        const created = await publishCommunity(shareTarget, { authorId: auth.user.id, authorName: auth.displayName });
+        if (shareTarget.kind === "beat" && shareTarget.beat.id && created?.id) {
+          setShareLinks(saveLink(shareTarget.beat.id, created.id));
+        }
+      }
+      setSharedTick((n) => n + 1);
       setPublishState("done");
     } catch (err) {
       setPublishState(err.message || t("share.publishFailed"));
@@ -857,13 +884,16 @@ function BeatsView({
                 up. Signed out, it routes to sign-in first. */}
             {auth?.configured && (
               <div style={st.publishRow}>
-                <button onClick={handlePublish} disabled={publishState === "publishing" || publishState === "done"}
+                <button onClick={handlePublish}
+                  disabled={publishState === "publishing" || publishState === "done" || (publishState == null && targetStatus === "shared")}
                   style={{ ...st.sheetStartBtn, ...st.iconLabel, flex: "1 0 100%",
                     opacity: publishState === "publishing" ? 0.6 : 1 }}>
                   {p2p ? <GlobeIcon size={18} /> : <ShareIcon />}
                   {publishState === "publishing" ? t("share.publishing")
                     : publishState === "done" ? t("share.published")
                     : !signedIn ? t(p2p ? "share.signInToPublish" : "share.signInToShare")
+                    : targetStatus === "shared" ? t("share.alreadyShared")
+                    : targetStatus.changed ? t("share.update")
                     : p2p ? t("share.publish") : t("share.action")}
                 </button>
                 {typeof publishState === "string" && publishState !== "publishing" && publishState !== "done" && (

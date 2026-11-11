@@ -248,6 +248,7 @@ export default {
   "settings.title": "Settings",
 
   "share.action": "Share",
+  "share.alreadyShared": "Already shared",
   "share.beatHint": "Anyone who opens this link gets a copy of the beat. Nothing is uploaded — the whole beat travels inside the link itself.",
   "share.communityHint": "Shares a copy to the community library, where anyone can find it under Browse.",
   "share.copied": "Copied",
@@ -264,6 +265,7 @@ export default {
   "share.publishing": "Publishing…",
   "share.signInToPublish": "Sign in to publish",
   "share.signInToShare": "Sign in to share",
+  "share.update": "Share updated version",
   "share.title": "Share",
 
   "splash.begin": "Begin",

@@ -108,6 +108,29 @@ export async function myPublished(authorId) {
   return (await run(build, "act.loadShared")) ?? [];
 }
 
+/** The user's published BEATS with their snapshots, for the Share status. */
+export async function myPublishedBeats(authorId) {
+  const build = () => supabase
+    .from("published_beats")
+    .select("id, payload")
+    .eq("author_id", authorId)
+    .eq("kind", "beat");
+  const rows = (await run(build, "act.loadShared")) ?? [];
+  return rows.filter((r) => r.payload?.beat).map((r) => ({ id: r.id, beat: r.payload.beat }));
+}
+
+/**
+ * Replace the snapshot of a beat the user already published ("Share updated
+ * version"), keeping the item's id, copies and ratings. RLS lets only its
+ * author through.
+ */
+export async function updatePublishedBeat(id, beat) {
+  await run(
+    () => supabase.from("published_beats").update({ name: beat.name, payload: { beat } }).eq("id", id),
+    "act.publish",
+  );
+}
+
 /** Remove a published item. RLS lets only its author through. */
 export async function unpublish(id) {
   await run(() => supabase.from("published_beats").delete().eq("id", id), "act.unpublish");
