@@ -5,6 +5,8 @@ import { useBeatLibrary } from "./hooks/useBeatLibrary.js";
 import { useLandscape } from "./hooks/useLandscape.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useCloudMigration } from "./hooks/useCloudMigration.js";
+import { useCommunityLibrary } from "./hooks/useCommunityLibrary.js";
+import { isCommunity } from "./data/communityTracking.js";
 import { beatsProvider } from "./storage/index.js";
 import { createSupabaseProvider } from "./storage/supabaseProvider.js";
 import BeatEditor from "./BeatEditor.jsx";
@@ -58,6 +60,8 @@ function App() {
   // Offers to move this device's guest beats into a freshly signed-in, empty
   // account. Self-contained: it watches auth + library and drives its own sheet.
   const migration = useCloudMigration({ auth, library });
+  // Community beats following their originals (status, Update, migration).
+  const community = useCommunityLibrary(library);
 
   // The sign-in sheet. App owns it because auth spans every screen, not just
   // Beats. Rendering is gated on being signed OUT (below), so a session
@@ -129,7 +133,17 @@ function App() {
   // original never sees.
   function openEditBeat(target = beat, returnTo = null) {
     transport.stop();
-    const seed = library.isCustomBeat(target.id)
+    // A community beat is someone else's and read-only: editing makes the
+    // user's own copy, which remembers its original (Share uses that).
+    const seed = isCommunity(target)
+      ? {
+          ...target,
+          id: null,
+          sourceItemId: undefined,
+          sourceIndex: undefined,
+          forkedFrom: target.sourceItemId,
+        }
+      : library.isCustomBeat(target.id)
       ? target
       : {
           ...target,
@@ -170,8 +184,8 @@ function App() {
   // takes it, then the engine and main view move to what just arrived. The
   // result goes back to the caller so the library screen can land the user
   // in the tab the beats went into (the ids only exist after the mint).
-  async function handleImportShare(payload) {
-    const result = await library.importShared(payload);
+  async function handleImportShare(payload, sourceItemId = null) {
+    const result = await library.importShared(payload, sourceItemId);
     if (result.beats.length) selectBeat(result.beats[0], result.catId ?? "custom");
     setPendingShare(null);
     return result;
@@ -219,6 +233,7 @@ function App() {
       <>
         <BeatsView
           library={library}
+          community={community}
           beat={beat}
           beatId={beatId}
           ready={transport.ready}

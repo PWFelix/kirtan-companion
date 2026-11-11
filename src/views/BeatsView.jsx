@@ -20,7 +20,10 @@ import {
   browse as browseCommunity, publish as publishCommunity,
   incrementCopies, toImportPayload, myPublishedBeats, updatePublishedBeat,
 } from "../storage/communityClient.js";
-import { shareStatus, loadLinks, saveLink } from "../data/shareStatus.js";
+import { shareStatus, canShare, loadLinks, saveLink } from "../data/shareStatus.js";
+import { isCommunity } from "../data/communityTracking.js";
+import { tagLine } from "../data/tags.js";
+import { TagPicker, TagFilter } from "../ui/TagPicker.jsx";
 
 // Whether the platform has a native share sheet (iOS/Android do, most
 // desktop browsers don't). Checked once — it can't change mid-session.
@@ -74,18 +77,37 @@ function SortableRow({ id, children }) {
 function BeatsView({
   library, beat, beatId, ready, onPreview, onEndPreview,
   onSelect, onStart, onStartBeat, onEdit, onNewBeat, onDeleteBeat,
-  pendingShare, onImportShare, onDismissShare, auth, onRequestAuth, nav,
+  pendingShare, onImportShare, onDismissShare, auth, onRequestAuth, nav, community: tracking,
 }) {
   const {
-    allBeats, customBeats, isCustomBeat, categories, categoryBeats, catName,
+    allBeats, isCustomBeat, categories, categoryBeats, catName,
     createCategory, deleteCategory, toggleBeatInCategory, reorderCategory,
-    error, dismissError,
+    error, dismissError, privateTags, setPrivateTags,
   } = library;
+  async function updateFromOriginal(b) {
+    setUpdating(b.id);
+    await tracking?.update(b);
+    setUpdating(null);
+    setDetailBeat((cur) => (cur?.id === b.id ? null : cur));
+  }
 
   // Which page of the Beats screen is showing. "landing" is the section list;
   // "browse" is the paste/community page; "category" drills into one library
   // (id is "builtin" | "custom" | a user category id).
   const [page, setPage] = useState({ name: "landing" });
+  // Author tags plus the user's private ones — what filters and search see.
+  const tagsOf = (b) => [...new Set([...(b.tags ?? []), ...(privateTags[b.id] ?? [])])];
+  // Library-page tag filter, remembered per page so it doesn't follow you to another list.
+  const [tagFilterState, setTagFilterState] = useState({ page: null, tag: null });
+  const [browseTag, setBrowseTag] = useState(null);           // Community browse
+  const [privateTagsFor, setPrivateTagsFor] = useState(null); // beat whose private tags are being edited
+  const [updating, setUpdating] = useState(null);             // beat id mid-Update
+  const pageKey = () => (page.name === "category" ? page.id : page.name);
+  const tagFilter = tagFilterState.page === pageKey() ? tagFilterState.tag : null;
+  const setTagFilter = (tag) => setTagFilterState({ page: pageKey(), tag });
+  const filterByTag = (beats) => (tagFilter ? beats.filter((b) => tagsOf(b).includes(tagFilter)) : beats);
+  // The tags actually in use on a page, so the filter row never offers an empty result.
+  const tagsInUse = (beats) => [...new Set(beats.flatMap(tagsOf))];
   const [search, setSearch] = useState("");                 // library search box
   const [detailBeat, setDetailBeat] = useState(null);       // beat shown in the info sheet
   // Which row is swiped open ("context:id"); one at a time, as on the apps.
@@ -130,13 +152,13 @@ function BeatsView({
       if (cancelled) return;
       setCommunityLoading(true);
       setCommunityError("");
-      browseCommunity({ query: communityQuery })
+      browseCommunity({ query: communityQuery, tag: browseTag })
         .then((rows) => { if (!cancelled) setCommunity(rows); })
         .catch((err) => { if (!cancelled) setCommunityError(err.message || t("browse.loadFailed")); })
         .finally(() => { if (!cancelled) setCommunityLoading(false); });
     }, communityQuery ? 300 : 0);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [page.name, signedIn, communityQuery]);
+  }, [page.name, signedIn, communityQuery, browseTag]);
 
   // Copy a community item into the library (an import), then best-effort bump
   // its copy counter. The card flashes "Added" briefly.
@@ -160,7 +182,8 @@ function BeatsView({
   useEffect(() => () => { if (previewIdRef.current) endPreviewRef.current?.(); }, []);
 
   async function copyCommunity(row) {
-    const result = await onImportShare(toImportPayload(row));
+    // The item id goes with it: the copy follows its original from now on.
+    const result = await onImportShare(toImportPayload(row), row.id);
     if (result?.beats?.length) {
       incrementCopies(row.id);
       setCopiedId(row.id);
@@ -183,12 +206,12 @@ function BeatsView({
     return () => { cancelled = true; };
   }, [userId, sharedTick]);
   const targetStatus = shareTarget?.kind === "beat" && userId
-    ? shareStatus(shareTarget.beat, myShared, shareLinks) : "new";
+    ? shareStatus(shareTarget.beat, myShared, shareLinks, tracking?.originals) : "new";
 
   // Publish whatever the share sheet is showing to the community library.
   async function handlePublish() {
     if (!signedIn) { onRequestAuth?.(); return; }
-    if (targetStatus === "shared") return;
+    if (!canShare(targetStatus)) return;
     setPublishState("publishing");
     try {
       if (targetStatus.changed) {
@@ -230,7 +253,7 @@ function BeatsView({
   // everything else (the hub, Browse, the two fixed libraries) returns to the
   // landing.
   const back = () => {
-    if (page.name === "category" && page.id !== "builtin" && page.id !== "custom") {
+    if (page.name === "category" && !["builtin", "custom", "community"].includes(page.id)) {
       setPage({ name: "playlists" });
     } else {
       goLanding();
@@ -336,7 +359,9 @@ function BeatsView({
   const rowBody = (b, context, drag = {}) => {
     const sel = b.id === beatId;
     const inUserCat = categories.some(c => c.id === context);
-    const deletable = context === "custom" && isCustomBeat(b.id);
+    const deletable = (context === "custom" || context === "community") && isCustomBeat(b.id);
+    const status = isCommunity(b) ? tracking?.statusOf(b) : null;
+    const tagText = tagLine(tagsOf(b));
     const { setNodeRef, style, listeners, isDragging } = drag;
     return (
       <div ref={setNodeRef} {...listeners}
@@ -350,7 +375,9 @@ function BeatsView({
         <div style={sh.beatRowTop}>
           <div style={st.beatRowSelect}>
             <span style={sh.beatRowName}>{b.name}</span>
-            <span style={sh.beatRowMeta}>{noteLabel(b.note)} · {t("beat.cells", { n: b.steps })}</span>
+            <span style={sh.beatRowMeta}>{noteLabel(b.note)} · {t("beat.cells", { n: b.steps })}{tagText ? ` · ${tagText}` : ""}</span>
+            {status?.kind === "update" && <span style={st.badge}>{t("community.updateAvailable")}</span>}
+            {status?.kind === "gone" && <span style={{ ...st.badge, ...st.badgeMuted }}>{t("community.gone")}</span>}
           </div>
           {inUserCat && (
             <button onPointerDown={stopPD} onClick={(e) => {
@@ -387,7 +414,8 @@ function BeatsView({
   // be deleted). Delete still goes through the confirm sheet.
   const swipeable = (b, context, body) => {
     const key = `${context}:${b.id}`;
-    const actions = [{
+    // Community beats are someone else's: no Share.
+    const actions = isCommunity(b) ? [] : [{
       label: t("share.action"), icon: <ShareIcon />, background: "var(--strap)", color: "var(--on-clay)",
       onClick: () => openShare({ kind: "beat", beat: b }),
     }];
@@ -431,7 +459,9 @@ function BeatsView({
   };
 
   const q = search.trim().toLowerCase();
-  const results = q ? allBeats.filter(b => b.name.toLowerCase().includes(q)) : [];
+  // Search matches names and tag names (author and private).
+  const results = q ? allBeats.filter(b =>
+    b.name.toLowerCase().includes(q) || tagLine(tagsOf(b)).toLowerCase().includes(q)) : [];
 
   function renderLanding() {
     return (
@@ -489,6 +519,7 @@ function BeatsView({
         </button>
 
         {categoryCard("custom", t("beats.customDesc"))}
+        {categoryBeats("community").length > 0 && categoryCard("community", t("community.desc"))}
       </>
     );
   }
@@ -517,6 +548,8 @@ function BeatsView({
   // Add button that imports it into the user's own library.
   function communityCard(row) {
     const added = copiedId === row.id;
+    const inLibrary = allBeats.some((b) => b.sourceItemId === row.id);
+    const rowTags = row.kind === "beat" ? tagLine(row.payload?.beat?.tags) : "";
     const count = row.kind === "playlist" ? row.payload?.beats?.length ?? 0 : 0;
     const previewBeat = row.kind === "beat" ? row.payload?.beat : row.payload?.beats?.[0];
     const previewing = previewId === row.id;
@@ -528,12 +561,13 @@ function BeatsView({
             <span style={sh.beatRowMeta}>
               {row.kind === "beat" ? t("browse.kindBeat") : t("browse.kindPlaylist", { beats: t("count.beats", { n: count }) })} · {t("browse.by", { name: row.author_name })}
               {row.copies ? ` · ${t("count.copies", { n: row.copies })}` : ""}
+              {rowTags ? ` · ${rowTags}` : ""}
             </span>
           </div>
-          <button onClick={() => copyCommunity(row)} disabled={added}
+          <button onClick={() => copyCommunity(row)} disabled={added || inLibrary}
             aria-label={t("browse.addNamed", { name: row.name })}
-            style={{ ...st.addChip, ...(added ? st.addChipDone : null) }}>
-            {added ? t("browse.added") : t("browse.add")}
+            style={{ ...st.addChip, ...(added || inLibrary ? st.addChipDone : null) }}>
+            {added ? t("browse.added") : inLibrary ? t("browse.inLibrary") : t("browse.add")}
           </button>
         </div>
         {row.kind === "beat" && row.payload?.beat && <BeatStrip beat={row.payload.beat} mini />}
@@ -583,6 +617,7 @@ function BeatsView({
                 <button onClick={() => setCommunityQuery("")} aria-label={t("beats.clearSearch")} style={st.searchClear}>×</button>
               )}
             </div>
+            <TagFilter value={browseTag} onChange={setBrowseTag} />
             {communityLoading && <p style={sh.emptyHint}>{t("common.loading")}</p>}
             {communityError && <p style={st.codeError} role="alert">{communityError}</p>}
             {!communityLoading && !communityError && community.length === 0 && (
@@ -627,12 +662,16 @@ function BeatsView({
       return (
         <>
           <p style={sh.emptyHint}>{t("beats.builtinHint")}</p>
-          {groups.map(g => (
-            <div key={g} style={{ display: "contents" }}>
-              <div style={st.sectionLabel}>{groupLabel(g)}</div>
-              {categoryBeats("builtin").filter(b => b.group === g).map(b => renderRow(b, "builtin"))}
-            </div>
-          ))}
+          <TagFilter value={tagFilter} onChange={setTagFilter} available={tagsInUse(categoryBeats("builtin"))} />
+          {groups.map(g => {
+            const inGroup = filterByTag(categoryBeats("builtin").filter(b => b.group === g));
+            return inGroup.length > 0 && (
+              <div key={g} style={{ display: "contents" }}>
+                <div style={st.sectionLabel}>{groupLabel(g)}</div>
+                {inGroup.map(b => renderRow(b, "builtin"))}
+              </div>
+            );
+          })}
         </>
       );
     }
@@ -644,9 +683,24 @@ function BeatsView({
           <div style={st.pageActions}>
             <button onClick={onNewBeat} style={st.addBeatsBtn}>{t("beats.new")}</button>
           </div>
-          {customBeats.length === 0
+          <TagFilter value={tagFilter} onChange={setTagFilter} available={tagsInUse(categoryBeats("custom"))} />
+          {categoryBeats("custom").length === 0
             ? <p style={sh.emptyHint}>{t("beats.customEmpty")}</p>
-            : customBeats.map(b => renderRow(b, "custom"))}
+            : filterByTag(categoryBeats("custom")).map(b => renderRow(b, "custom"))}
+        </>
+      );
+    }
+
+    // From the community: read-only beats following their originals.
+    if (id === "community") {
+      const beats = categoryBeats("community");
+      return (
+        <>
+          <p style={sh.emptyHint}>{t("community.hint")}</p>
+          <TagFilter value={tagFilter} onChange={setTagFilter} available={tagsInUse(beats)} />
+          {beats.length === 0
+            ? <p style={sh.emptyHint}>{t("community.empty")}</p>
+            : filterByTag(beats).map(b => renderRow(b, "community"))}
         </>
       );
     }
@@ -752,10 +806,12 @@ function BeatsView({
                   Edit/Start keep their 1:2 balance — three buttons squeezed
                   into one row makes "Customize" too narrow to read. */}
               <div style={st.sheetHeadBtns}>
-                <button onClick={() => openShare({ kind: "beat", beat: detailBeat })}
-                  aria-label={t("share.named", { name: detailBeat.name })} style={st.sheetHeadBtn}>
-                  <ShareIcon />
-                </button>
+                {!isCommunity(detailBeat) && (
+                  <button onClick={() => openShare({ kind: "beat", beat: detailBeat })}
+                    aria-label={t("share.named", { name: detailBeat.name })} style={st.sheetHeadBtn}>
+                    <ShareIcon />
+                  </button>
+                )}
                 <button onClick={() => setDetailBeat(null)} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
               </div>
             </div>
@@ -766,11 +822,31 @@ function BeatsView({
               <BeatStrip beat={detailBeat} />
             </div>
             <p style={st.sheetDesc}>
-              {beatDescription(detailBeat) || t("beats.ownDesc")}
+              {beatDescription(detailBeat) || (isCommunity(detailBeat) ? t("community.detailDesc") : t("beats.ownDesc"))}
             </p>
+            {tagLine(detailBeat.tags) && (
+              <span style={sh.beatRowMeta}>{t("tags.byAuthor", { tags: tagLine(detailBeat.tags) })}</span>
+            )}
+            <button onClick={() => setPrivateTagsFor(detailBeat)} style={st.tagsBtn}>
+              {tagLine(privateTags[detailBeat.id])
+                ? t("tags.yours", { tags: tagLine(privateTags[detailBeat.id]) })
+                : t("tags.addPrivate")}
+            </button>
+            {(() => {
+              const status = isCommunity(detailBeat) ? tracking?.statusOf(detailBeat) : null;
+              if (status?.kind === "update") return (
+                <button onClick={() => updateFromOriginal(detailBeat)} disabled={updating === detailBeat.id}
+                  style={{ ...st.sheetStartBtn, marginTop: "var(--space-3)" }}>
+                  {updating === detailBeat.id ? t("common.loading") : t("community.update")}
+                </button>
+              );
+              if (status?.kind === "gone") return <p style={sh.emptyHint}>{t("community.goneHint")}</p>;
+              return null;
+            })()}
             <div style={st.sheetActions}>
               <button onClick={() => { setDetailBeat(null); onEdit(detailBeat); }} style={st.sheetEditBtn}>
-                {isCustomBeat(detailBeat.id) ? t("common.edit") : t("beats.customize")}
+                {isCommunity(detailBeat) ? t("community.editCopy")
+                  : isCustomBeat(detailBeat.id) ? t("common.edit") : t("beats.customize")}
               </button>
               <button onClick={() => { setDetailBeat(null); onStartBeat(detailBeat); }} disabled={!ready}
                 style={{ ...st.sheetStartBtn, opacity: ready ? 1 : 0.5 }}>
@@ -779,6 +855,14 @@ function BeatsView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Private tags — on this device, any beat, never published. */}
+      {privateTagsFor && (
+        <TagPicker title={t("tags.privateTitle")} hint={t("tags.privateHint")}
+          selected={privateTags[privateTagsFor.id] ?? []}
+          onChange={(tags) => setPrivateTags(privateTagsFor.id, tags)}
+          onClose={() => setPrivateTagsFor(null)} />
       )}
 
       {/* New-category sheet — name it, create it, land in its page. */}
@@ -885,7 +969,7 @@ function BeatsView({
             {auth?.configured && (
               <div style={st.publishRow}>
                 <button onClick={handlePublish}
-                  disabled={publishState === "publishing" || publishState === "done" || (publishState == null && targetStatus === "shared")}
+                  disabled={publishState === "publishing" || publishState === "done" || (publishState == null && !canShare(targetStatus))}
                   style={{ ...st.sheetStartBtn, ...st.iconLabel, flex: "1 0 100%",
                     opacity: publishState === "publishing" ? 0.6 : 1 }}>
                   {p2p ? <GlobeIcon size={18} /> : <ShareIcon />}
@@ -893,6 +977,8 @@ function BeatsView({
                     : publishState === "done" ? t("share.published")
                     : !signedIn ? t(p2p ? "share.signInToPublish" : "share.signInToShare")
                     : targetStatus === "shared" ? t("share.alreadyShared")
+                    : targetStatus === "notYours" ? t("share.notYours")
+                    : targetStatus === "unchangedCopy" ? t("share.unchangedCopy")
                     : targetStatus.changed ? t("share.update")
                     : p2p ? t("share.publish") : t("share.action")}
                 </button>
@@ -901,6 +987,9 @@ function BeatsView({
                 )}
                 {publishState === "done" && (
                   <p style={sh.emptyHint}>{t("share.publishedHint")}</p>
+                )}
+                {publishState == null && targetStatus === "unchangedCopy" && (
+                  <p style={sh.emptyHint}>{t("share.unchangedCopyHint")}</p>
                 )}
               </div>
             )}
@@ -1048,6 +1137,9 @@ const st = {
   linkBtn: { flexShrink: 0, border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
   addChip: { flexShrink: 0, minHeight: 40, padding: "0 16px", borderRadius: 999, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
   previewBtn: { alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, minHeight: 40, padding: "0 14px 0 10px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  badge: { alignSelf: "flex-start", marginTop: 4, padding: "2px 8px", borderRadius: 999, background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700 },
+  badgeMuted: { background: "transparent", color: "var(--syahi-soft)", border: "var(--rule-hairline)" },
+  tagsBtn: { alignSelf: "flex-start", marginTop: "var(--space-2)", minHeight: 40, padding: 0, border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer", textAlign: "left" },
   addChipDone: { background: "transparent", color: "var(--syahi-soft)", border: "var(--rule-hairline)", cursor: "default" },
   publishRow: { display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-4)" },
 

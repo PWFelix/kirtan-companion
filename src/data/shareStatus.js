@@ -9,6 +9,11 @@
 // its content (shares from before the record existed). Only "edited since"
 // needs the record, since an edited beat matches nothing.
 
+import { isCommunity, isUnchangedCopy } from "./communityTracking.js";
+
+/** True when Share may publish or update. */
+export const canShare = (status) => status === "new" || Boolean(status?.changed);
+
 const LINKS_KEY = "kirtan-share-links";
 
 // The beat as published, minus ids, with keys sorted so two objects built in a
@@ -22,16 +27,22 @@ export function fingerprint(beat) {
     return v;
   };
   // eslint-disable-next-line no-unused-vars
-  const { id, sourceItemId, ...rest } = beat;
+  const { id, sourceItemId, sourceIndex, forkedFrom, ...rest } = beat;
   return JSON.stringify(sorted(rest));
 }
 
 /**
- * "new" | "shared" | { changed: itemId }.
+ * "new" | "shared" | { changed: itemId } | "notYours" | "unchangedCopy".
  * `mine` is [{ id, beat }] for the user's published beats; `links` maps local
- * beat id → item id.
+ * beat id → item id; `originals` (optional) is what the library's community
+ * beats and copies came from — see communityTracking.js.
+ *
+ * "notYours": a community beat, someone else's, never re-shared.
+ * "unchangedCopy": a copy that's musically still the original.
  */
-export function shareStatus(beat, mine, links) {
+export function shareStatus(beat, mine, links, originals = null) {
+  if (isCommunity(beat)) return "notYours";
+  if (isUnchangedCopy(beat, originals)) return "unchangedCopy";
   const print = fingerprint(beat);
   const linked = beat.id && links[beat.id] ? mine.find((m) => m.id === links[beat.id]) : null;
   if (linked) return fingerprint(linked.beat) === print ? "shared" : { changed: linked.id };

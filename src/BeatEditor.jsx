@@ -3,6 +3,8 @@ import BeatStrip from "./BeatStrip.jsx";
 import { labelsFromGroups } from "./data/stepLabels.js";
 import { BOLS, COMBO_BOLS } from "./data/bols.js";
 import { t, tOr } from "./i18n/index.js";
+import { tagLine } from "./data/tags.js";
+import { TagPicker } from "./ui/TagPicker.jsx";
 
 /**
  * BeatEditor — three zones, phone-first
@@ -146,6 +148,9 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   // Which instrument the pads write: "mrdanga" | "kartal". Set by tapping a row.
   const [instrument, setInstrument] = useState("mrdanga");
   const [feelOpen, setFeelOpen] = useState(false);
+  // The author's tags, published with the beat (data/tags.js).
+  const [tags, setTags] = useState(() => initialBeat?.tags ?? []);
+  const [tagsOpen, setTagsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const overviewRef = useRef(null);
   const scrubbingRef = useRef(false);
@@ -281,7 +286,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setSaving(true);
     const saved = await onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar,
       cellsPerGroup: uniform ? groups[0] : cpq, groups, dayan, bayan,
-      ...(hasKartal ? { kartal } : {}) });
+      ...(hasKartal ? { kartal } : {}),
+      ...(tags.length ? { tags } : {}),
+      // A copy of a community beat remembers its original (see communityTracking.js).
+      ...(initialBeat?.forkedFrom ? { forkedFrom: initialBeat.forkedFrom } : {}) });
     if (saved) { onClose(); return; }   // unmounts — no state to reset
     setSaving(false);
   }
@@ -312,6 +320,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
             style={st.titlePencil}><PencilIcon /></button>
         </div>
       </header>
+      <button onClick={() => setTagsOpen(true)} style={st.tagsLine} aria-label={t("tags.editAuthor")}>
+        <span style={st.tagsLabel}>{t("tags.title")}</span>
+        <span style={st.tagsValue}>{tagLine(tags) || t("tags.none")}</span>
+      </button>
 
       {/* Everything between the title and Save scrolls as one region. The
           editor's sections are all flexShrink:0 (a squashed pad grid is
@@ -457,6 +469,11 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         </button>
       </div>
 
+      {tagsOpen && (
+        <TagPicker title={t("tags.title")} hint={t("tags.authorHint")}
+          selected={tags} onChange={setTags} onClose={() => setTagsOpen(false)} />
+      )}
+
       {/* Feel/meter picker sheet */}
       {feelOpen && (
         <div style={st.sheetBackdrop} onClick={() => setFeelOpen(false)}>
@@ -495,6 +512,9 @@ const st = {
   // the overview's and the pads' outer edges off the clipping boundary.
   body: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)", padding: "2px" },
   backBtn: { flexShrink: 0, width: 40, height: 44, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 28, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
+  tagsLine: { flexShrink: 0, display: "flex", alignItems: "baseline", gap: "var(--space-2)", minHeight: 40, padding: "var(--space-2) 0", border: "none", background: "transparent", textAlign: "left", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)" },
+  tagsLabel: { fontWeight: 700, color: "var(--syahi-soft)" },
+  tagsValue: { color: "var(--syahi)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   titleWrap: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
   titleInput: { flex: 1, minWidth: 0, border: "none", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", padding: "2px 0", outline: "none" },
   titlePencil: { flexShrink: 0, width: 40, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", cursor: "pointer", display: "grid", placeItems: "center" },

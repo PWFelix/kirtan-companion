@@ -28,6 +28,17 @@ function ensureClient() {
   }
 }
 
+/**
+ * A beat as it goes out: no local id and none of the library's bookkeeping
+ * about where it came from (another item's id would make other people's
+ * "In your library" wrong).
+ */
+export function publishable(beat) {
+  // eslint-disable-next-line no-unused-vars
+  const { id, sourceItemId, sourceIndex, forkedFrom, readOnly, ...rest } = beat;
+  return rest;
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Same clock-skew race as the provider: a brand-new sign-in token can look
@@ -71,7 +82,7 @@ export async function publish(target, { authorId, authorName }) {
     author_name: authorName || "A devotee",
     kind: isBeat ? "beat" : "playlist",
     name: isBeat ? target.beat.name : target.name,
-    payload: isBeat ? { beat: target.beat } : { name: target.name, beats: target.beats },
+    payload: isBeat ? { beat: publishable(target.beat) } : { name: target.name, beats: target.beats.map(publishable) },
   };
   const data = await run(
     () => supabase.from("published_beats").insert(row).select("id, author_name, kind, name, copies, created_at").single(),
@@ -85,7 +96,7 @@ export async function publish(target, { authorId, authorName }) {
  * `limit` caps the page. Returns rows with their payload so a card can preview
  * the real pattern without a second request.
  */
-export async function browse({ query = "", limit = 40 } = {}) {
+export async function browse({ query = "", tag = null, limit = 40 } = {}) {
   const build = () => {
     let q = supabase
       .from("published_beats")
@@ -93,9 +104,34 @@ export async function browse({ query = "", limit = 40 } = {}) {
       .order("created_at", { ascending: false })
       .limit(limit);
     if (query.trim()) q = q.ilike("name", `%${query.trim()}%`);
+    // JSON containment on the snapshot's tags (so playlists drop out).
+    if (tag) q = q.filter("payload->beat->tags", "cs", JSON.stringify([tag]));
     return q;
   };
   return (await run(build, "act.loadCommunity")) ?? [];
+}
+
+/**
+ * The current originals of the library's community beats: { itemId: [beats] }
+ * (one beat for a beat item, the list's beats for a playlist). An id missing
+ * from the result was unpublished. Readable signed out. Batched to keep URLs
+ * short.
+ */
+export async function originals(itemIds) {
+  const ids = [...new Set(itemIds)].sort();
+  const out = {};
+  for (let i = 0; i < ids.length; i += 50) {
+    const batch = ids.slice(i, i + 50);
+    const rows = (await run(
+      () => supabase.from("published_beats").select("id, kind, payload").in("id", batch),
+      "act.loadCommunity",
+    )) ?? [];
+    for (const row of rows) {
+      const beats = row.kind === "beat" ? [row.payload?.beat] : row.payload?.beats;
+      if (Array.isArray(beats) && beats.every(Boolean)) out[row.id] = beats.map(publishable);
+    }
+  }
+  return out;
 }
 
 /** Everything the signed-in user has published, so they can unpublish it. */
@@ -126,7 +162,7 @@ export async function myPublishedBeats(authorId) {
  */
 export async function updatePublishedBeat(id, beat) {
   await run(
-    () => supabase.from("published_beats").update({ name: beat.name, payload: { beat } }).eq("id", id),
+    () => supabase.from("published_beats").update({ name: beat.name, payload: { beat: publishable(beat) } }).eq("id", id),
     "act.publish",
   );
 }
