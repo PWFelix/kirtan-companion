@@ -222,6 +222,8 @@ function App() {
           beat={beat}
           beatId={beatId}
           ready={transport.ready}
+          onPreview={transport.startPreview}
+          onEndPreview={transport.endPreview}
           onSelect={selectBeat}
           onStart={startCurrent}
           onStartBeat={startFromDetail}

@@ -13,7 +13,7 @@ import * as sh from "../ui/styles.js";
 import { t, noteLabel, groupLabel, beatDescription } from "../i18n/index.js";
 import {
   InfoIcon, StartIcon, ShareIcon, TrashIcon, GlobeIcon, CheckIcon, CheckDot, RadioDot,
-  ChevronRightIcon, SearchIcon, BackIcon,
+  ChevronRightIcon, SearchIcon, BackIcon, PlayIcon, StopIcon,
 } from "../ui/icons.jsx";
 import { encodeBeat, encodeCategory, decodeShare, codeFromInput, shareUrl } from "../data/shareCodec.js";
 import {
@@ -66,7 +66,7 @@ function SortableRow({ id, children }) {
  * The list — which can be long — scrolls beneath it.
  */
 function BeatsView({
-  library, beat, beatId, ready,
+  library, beat, beatId, ready, onPreview, onEndPreview,
   onSelect, onStart, onStartBeat, onEdit, onNewBeat, onDeleteBeat,
   pendingShare, onImportShare, onDismissShare, auth, onRequestAuth, nav,
 }) {
@@ -134,6 +134,25 @@ function BeatsView({
 
   // Copy a community item into the library (an import), then best-effort bump
   // its copy counter. The card flashes "Added" briefly.
+  // ── Preview: listen to a community beat before adding it ──
+  // Nothing is saved or selected. Stop, another card's Preview, leaving the
+  // Browse page or unmounting ends it; endPreview hands Home its tempo back.
+  const [previewId, setPreviewId] = useState(null);
+  // Refs so the cleanups below needn't depend on endPreview, a new function
+  // each render (a dependency would re-run them — ending the preview — every render).
+  const previewIdRef = useRef(null);
+  const endPreviewRef = useRef(onEndPreview);
+  useEffect(() => { previewIdRef.current = previewId; endPreviewRef.current = onEndPreview; });
+  function togglePreview(row, beat) {
+    if (previewId === row.id) { onEndPreview?.(); setPreviewId(null); return; }
+    setPreviewId(row.id);
+    onPreview?.(beat);
+  }
+  useEffect(() => {
+    if (page.name !== "browse" && previewIdRef.current) { endPreviewRef.current?.(); setPreviewId(null); }
+  }, [page.name]);
+  useEffect(() => () => { if (previewIdRef.current) endPreviewRef.current?.(); }, []);
+
   async function copyCommunity(row) {
     const result = await onImportShare(toImportPayload(row));
     if (result?.beats?.length) {
@@ -466,6 +485,8 @@ function BeatsView({
   function communityCard(row) {
     const added = copiedId === row.id;
     const count = row.kind === "playlist" ? row.payload?.beats?.length ?? 0 : 0;
+    const previewBeat = row.kind === "beat" ? row.payload?.beat : row.payload?.beats?.[0];
+    const previewing = previewId === row.id;
     return (
       <div key={row.id} style={st.beatRow}>
         <div style={sh.beatRowTop}>
@@ -483,6 +504,14 @@ function BeatsView({
           </button>
         </div>
         {row.kind === "beat" && row.payload?.beat && <BeatStrip beat={row.payload.beat} mini />}
+        {previewBeat && (
+          <button onClick={() => togglePreview(row, previewBeat)} disabled={!ready}
+            aria-pressed={previewing} aria-label={t(previewing ? "browse.stopPreviewNamed" : "browse.previewNamed", { name: row.name })}
+            style={st.previewBtn}>
+            {previewing ? <StopIcon /> : <PlayIcon />}
+            {previewing ? t("browse.stopPreview") : t("browse.preview")}
+          </button>
+        )}
       </div>
     );
   }
@@ -980,6 +1009,7 @@ const st = {
   accountRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", minHeight: 44 },
   linkBtn: { flexShrink: 0, border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
   addChip: { flexShrink: 0, minHeight: 40, padding: "0 16px", borderRadius: 999, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  previewBtn: { alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, minHeight: 40, padding: "0 14px 0 10px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
   addChipDone: { background: "transparent", color: "var(--syahi-soft)", border: "var(--rule-hairline)", cursor: "default" },
   publishRow: { display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-4)" },
 

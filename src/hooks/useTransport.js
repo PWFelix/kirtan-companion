@@ -198,6 +198,23 @@ export function useTransport() {
     engine.setBpm(bpmRef.current);
   }
 
+  // Community preview: the same direct-to-engine path as the sync test, playing
+  // a beat that isn't Home's at its own tempo. endPreview restores Home's tempo;
+  // play() re-applies Home's beat next time.
+  async function startPreview(beat) {
+    if (!ready) return;
+    await engine.unlock();
+    if (playing) engine.stop();
+    engine.setBpm(clampBpm(beat.bpm || bpmRef.current));
+    engine.setBeat(beat);
+    engine.start();
+  }
+
+  function endPreview() {
+    engine.stop();
+    engine.setBpm(bpmRef.current);
+  }
+
   const clampBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
 
   // Same contract the (unexported) bandOf helper in eqPrefs.js applies on
@@ -362,6 +379,6 @@ export function useTransport() {
     eqBands, eqOpen, changeEqBand, toggleEqPanel, eqTune, changeEqTune,
     tuneOpen, toggleTunePanel,
     loadBeat, togglePlay, play, stop, unlock,
-    displayDelayMs, setDisplayDelay, startSyncTest, stopSyncTest,
+    displayDelayMs, setDisplayDelay, startSyncTest, stopSyncTest, startPreview, endPreview,
   };
 }

@@ -234,6 +234,14 @@ export function PauseIcon({ size = 22 }) {
   );
 }
 
+export function StopIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+    </svg>
+  );
+}
+
 // The Beats page's Start button uses a slightly tighter play triangle.
 export function StartIcon() {
   return (

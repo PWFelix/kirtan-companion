@@ -76,6 +76,10 @@ export default {
   "browse.signInPrompt": "Inicia sesión para explorar y compartir",
   "browse.signedInAs": "Sesión iniciada como {name}",
   "browse.subtitle": "Ritmos y listas compartidos por otros devotos",
+  "browse.preview": "Escuchar",
+  "browse.stopPreview": "Detener",
+  "browse.previewNamed": "Escuchar {name}",
+  "browse.stopPreviewNamed": "Detener {name}",
   "browse.title": "Explorar",
 
   "common.and": " y ",

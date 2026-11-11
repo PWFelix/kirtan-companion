@@ -77,6 +77,10 @@ export default {
   "browse.signInPrompt": "Sign in to browse & share",
   "browse.signedInAs": "Signed in as {name}",
   "browse.subtitle": "Beats and playlists shared by other devotees",
+  "browse.preview": "Preview",
+  "browse.stopPreview": "Stop",
+  "browse.previewNamed": "Preview {name}",
+  "browse.stopPreviewNamed": "Stop preview of {name}",
   "browse.title": "Browse",
 
   "common.and": " and ",
