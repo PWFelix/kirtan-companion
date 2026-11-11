@@ -136,7 +136,7 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
       }
       hline(hitY, c.syahi, 3);
 
-      // Notes: open = filled disc, closed = ring (the strip's language). One
+      // Notes: open = filled disc, closed = X (the strip's language). One
       // that has just landed glows its column's target.
       for (const n of frame.notes) {
         const ci = colOf(n);
@@ -152,7 +152,13 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
         if (COLUMNS[n.column].stroke === "O") {
           ctx.fillStyle = laneColor(ci); circle(cx, y, r); ctx.fill();
         } else {
-          ctx.strokeStyle = laneColor(ci); ctx.lineWidth = 4; circle(cx, y, r - 2); ctx.stroke();
+          // An X inscribed in the disc's bounds, round-capped like a pen stroke.
+          const d = (r - 2) * 0.75;
+          ctx.strokeStyle = laneColor(ci); ctx.lineWidth = 4; ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(cx - d, y - d); ctx.lineTo(cx + d, y + d);
+          ctx.moveTo(cx + d, y - d); ctx.lineTo(cx - d, y + d);
+          ctx.stroke();
         }
         ctx.globalAlpha = 1;
       }

@@ -5,6 +5,8 @@ import { BOLS, COMBO_BOLS } from "./data/bols.js";
 import { t, tOr } from "./i18n/index.js";
 import { tagLine } from "./data/tags.js";
 import { TagPicker } from "./ui/TagPicker.jsx";
+import { MAX_NAME_LEN, clampName } from "./data/names.js";
+import { closedMarkBackground } from "./data/strokes.js";
 
 /**
  * BeatEditor — three zones, phone-first
@@ -75,10 +77,10 @@ function seedGroups(b) {
 }
 const seedCpq = (b) => (b ? Math.max(1, Math.round(b.steps / (b.beatsPerBar ?? 4))) : 2);
 
-// filled = open, ring = closed, faint dot = silent.
+// filled = open, X = closed, faint dot = silent.
 function dotStyle(v, color, size) {
   if (v === "O") return { width: size, height: size, borderRadius: "50%", background: color };
-  if (v === "X") return { width: size, height: size, borderRadius: "50%", border: `2.5px solid ${color}` };
+  if (v === "X") return { width: size, height: size, background: closedMarkBackground(color, 1.4) };
   return { width: 4, height: 4, borderRadius: "50%", background: "var(--rule)" };
 }
 
@@ -273,7 +275,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     if (previewing) { engine.stop(); setPreviewing(false); }
     const hasAnyHit = dayan.some((c) => c !== null) || bayan.some((c) => c !== null) || kartal.some((c) => c !== null);
     if (!hasAnyHit) { alert(t("editor.needStroke")); return; }
-    const finalName = name.trim() || t("editor.defaultName");
+    const finalName = clampName(name.trim()) || t("editor.defaultName");
     // No id means "new" — the library mints one on save, and it is now the
     // only place in the app ids come from. Editing an existing custom beat
     // keeps its id and so overwrites in place.
@@ -315,6 +317,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         {onBack && <button onClick={onBack} style={st.backBtn} aria-label={t("common.back")}>‹</button>}
         <div style={st.titleWrap}>
           <input ref={nameInputRef} type="text" value={name} onChange={(e) => setName(e.target.value)}
+            maxLength={MAX_NAME_LEN}
             placeholder={t("editor.namePlaceholder")} aria-label={t("editor.name")} style={st.titleInput} />
           <button onClick={() => nameInputRef.current?.focus()} aria-label={t("editor.rename")}
             style={st.titlePencil}><PencilIcon /></button>

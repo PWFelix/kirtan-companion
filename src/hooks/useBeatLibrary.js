@@ -4,6 +4,7 @@ import { BEATS } from "../data/beats.js";
 import { isCommunity } from "../data/communityTracking.js";
 import { t } from "../i18n/index.js";
 import { beatsProvider, storageErrorMessage } from "../storage/index.js";
+import { MAX_NAME_LEN, clampName } from "../data/names.js";
 
 /**
  * The shipped beats, tagged once at module load.
@@ -32,8 +33,12 @@ const BUILTIN_BEATS = BEATS.map((b) => ({ ...b, readOnly: true }));
  * itself and not just against what was already saved.
  */
 function uniqueName(wanted, taken) {
-  let name = wanted;
-  for (let n = 2; taken.has(name); n++) name = `${wanted} (${n})`;
+  let name = clampName(wanted);
+  // The suffix must fit inside the limit too, so the base gives way to it.
+  for (let n = 2; taken.has(name); n++) {
+    const suffix = ` (${n})`;
+    name = clampName(wanted, MAX_NAME_LEN - suffix.length) + suffix;
+  }
   taken.add(name);
   return name;
 }

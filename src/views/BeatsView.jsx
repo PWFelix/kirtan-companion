@@ -25,6 +25,7 @@ import { shareStatus, canShare, loadLinks, saveLink } from "../data/shareStatus.
 import { isCommunity } from "../data/communityTracking.js";
 import { tagLine } from "../data/tags.js";
 import { TagPicker, TagFilter } from "../ui/TagPicker.jsx";
+import { MAX_NAME_LEN } from "../data/names.js";
 
 // Whether the platform has a native share sheet (iOS/Android do, most
 // desktop browsers don't). Checked once — it can't change mid-session.
@@ -920,7 +921,7 @@ function BeatsView({
               {t("playlists.newHint")}
             </p>
             <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
-              <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
+              <input type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} maxLength={MAX_NAME_LEN}
                 onKeyDown={(e) => { if (e.key === "Enter") handleCreateCategory(); }}
                 placeholder={t("playlists.namePlaceholder")} autoFocus style={st.catNameInput} />
               <button onClick={handleCreateCategory} disabled={!newCatName.trim()}
