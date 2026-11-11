@@ -77,14 +77,28 @@ struct Beat: Hashable {
     /// and needs no new column. Lets Community show "In your library" instead of letting
     /// you add the same item twice (issue #11). Beats copied from a list carry the LIST's id.
     var sourceItemId: String? = nil
+    /// The author's tags, ids from TagVocabulary. Published with the beat. The user's
+    /// PRIVATE tags are not here: they live per beat id on the device (PrivateTags), so
+    /// they work on built-in and community beats and are never published.
+    var tags: [String] = []
+    /// For a beat from a community PLAYLIST: its position in that list, so it can be
+    /// matched to the original for updates. Nil for a single beat.
+    var sourceIndex: Int? = nil
+    /// The community item an EDITED COPY was made from: credit, and what stops a copy
+    /// being re-shared until it actually differs. Exclusive with sourceItemId.
+    var forkedFrom: String? = nil
+
+    /// A community beat the user added: read-only, follows the original, can't be
+    /// shared. Editing one makes a copy in Your beats.
+    var isCommunity: Bool { sourceItemId != nil }
 
     /// True when this beat is one of the built-ins rather than user-made. Asks
     /// ShippedBeats, not the compiled list: the built-in set is served from the
     /// database, so a beat promoted after this build was compiled must still read-only.
     var isBuiltIn: Bool { ShippedBeats.shared.isShippedId(id) }
 
-    /// Built-in beats are read-only; editing one forks it.
-    var readOnly: Bool { isBuiltIn }
+    /// Built-in and community beats are read-only; editing one makes a copy.
+    var readOnly: Bool { isBuiltIn || isCommunity }
 
     /// A lane's pattern, or nil when the beat has no row for that lane.
     func pattern(_ lane: LaneId) -> [Stroke?]? { lanePatterns[lane] }

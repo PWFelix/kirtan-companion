@@ -47,6 +47,9 @@ let BUILTIN_CATEGORY = "builtin"
 
 /// The "everything you have made" pseudo-category. Never stored as a row.
 let CUSTOM_CATEGORY = "custom"
+/// Community beats the user added (read-only, following their originals). Like the two
+/// above, a view over the library rather than a stored category.
+let COMMUNITY_CATEGORY = "community"
 
 /// What a new category needs: a name, and the progression it starts holding.
 struct CategoryDraft {

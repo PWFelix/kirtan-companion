@@ -39,10 +39,10 @@ final class CommunityClient {
 
     // The community list, newest first. Reads need no identity — RLS already allows the
     // world — so this is the one call that does not require a session.
-    func browse(query: String = "", scope: BrowseScope = .everything, limit: Int = CommunityClient.defaultLimit) async throws -> [PublishedItem] {
+    func browse(query: String = "", scope: BrowseScope = .everything, limit: Int = CommunityClient.defaultLimit, tag: String? = nil) async throws -> [PublishedItem] {
         let rows = try await client.select(
             table: Self.table, columns: Self.columns,
-            filters: browseFilters(query: query, scope: scope),
+            filters: browseFilters(query: query, scope: scope) + tagFilter(tag),
             order: "created_at.desc", limit: limit, requireSession: false,
             whileDoing: String(localized: "load the community library", bundle: .strings),
         )
@@ -105,6 +105,31 @@ final class CommunityClient {
             if case .beat(let beat) = toImportPayload(item) { return (id: item.id, beat: beat) }
             return nil
         }
+    }
+
+    // The current originals of the library's community beats: item id → its beats (one
+    // for a beat, the list's beats for a playlist). An id absent from the result was
+    // unpublished. Batched to keep URLs short.
+    func originals(_ itemIds: [String]) async throws -> [String: [Beat]] {
+        var out: [String: [Beat]] = [:]
+        let ids = Array(Set(itemIds)).sorted()
+        for start in stride(from: 0, to: ids.count, by: 50) {
+            let batch = ids[start..<min(start + 50, ids.count)]
+            let rows = try await client.select(
+                table: Self.table, columns: Self.columns,
+                filters: [("id", "in.(\(batch.joined(separator: ",")))")],
+                requireSession: false,
+                whileDoing: String(localized: "load the community library", bundle: .strings),
+            )
+            for item in (rows?.asArray() ?? []).compactMap({ itemOf($0) }) {
+                switch toImportPayload(item) {
+                case .beat(let beat): out[item.id] = [beat]
+                case .category(_, let beats): out[item.id] = beats
+                default: break
+                }
+            }
+        }
+        return out
     }
 
     // Everything the signed-in user has published, so they can unpublish it.
@@ -206,6 +231,8 @@ final class CommunityClient {
         // Publishing a copy makes a NEW item; the old item's id would make other
         // people's "In your library" wrong.
         copy.sourceItemId = nil
+        copy.sourceIndex = nil
+        copy.forkedFrom = nil
         return copy
     }
 
@@ -264,6 +291,13 @@ struct PublishedItem: Identifiable {
 // The PostgREST filters for a community search. Pure so the wiring is testable: EVERYTHING
 // is a single `or=(…)` rather than two queries unioned client-side, and an empty query means
 // "no filters" rather than a filter that matches nothing.
+// Only beats carrying `tag` — a JSON containment test on the snapshot's tags. Playlists
+// have no single tag set, so a tag filter shows beats only.
+func tagFilter(_ tag: String?) -> [(String, String)] {
+    guard let tag, !tag.isEmpty else { return [] }
+    return [("payload->beat->tags", "cs.[\"\(tag)\"]")]
+}
+
 func browseFilters(query: String, scope: CommunityClient.BrowseScope) -> [(String, String)] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }

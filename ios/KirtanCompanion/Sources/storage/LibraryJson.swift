@@ -51,6 +51,10 @@ enum LibraryJson {
     private static let keyDescription = "description"
     private static let keyGroup = "group"
     private static let keySourceItemId = "sourceItemId"
+    private static let keyTags = "tags"
+    private static let keySourceIndex = "sourceIndex"
+    private static let keyForkedFrom = "forkedFrom"
+    private static let maxTags = 16
     private static let keyBeatIds = "beatIds"
 
     // ── Encoding ───────────────────────────────────────────────────────────
@@ -86,6 +90,16 @@ enum LibraryJson {
         }
         if let source = beat.sourceItemId {
             pairs.append(JPair(key: keySourceItemId, value: .string(source)))
+        }
+        // Omitted when empty/absent, so an untagged beat's body is unchanged.
+        if !beat.tags.isEmpty {
+            pairs.append(JPair(key: keyTags, value: .array(beat.tags.map { .string($0) })))
+        }
+        if let index = beat.sourceIndex {
+            pairs.append(JPair(key: keySourceIndex, value: .number(Double(index))))
+        }
+        if let from = beat.forkedFrom {
+            pairs.append(JPair(key: keyForkedFrom, value: .string(from)))
         }
         for lane in LaneId.ordered {
             if let cells = beat.pattern(lane) {
@@ -205,7 +219,23 @@ enum LibraryJson {
             lanePatterns: lanes,
             group: obj.stringField(keyGroup),
             sourceItemId: obj.stringField(keySourceItemId),
+            tags: decodeTags(obj.element(keyTags)),
+            sourceIndex: obj.intField(keySourceIndex).flatMap { $0 >= 0 ? $0 : nil },
+            forkedFrom: obj.stringField(keyForkedFrom),
         )
+    }
+
+    /// Tolerant: unknown ids are kept (the vocabulary can grow on another device first);
+    /// junk entries and absurd counts are dropped, not fatal.
+    private static func decodeTags(_ value: JValue?) -> [String] {
+        guard case .array(let items)? = value else { return [] }
+        var out: [String] = []
+        for item in items {
+            guard case .string(let tag) = item, (1...40).contains(tag.count), !out.contains(tag) else { continue }
+            out.append(tag)
+            if out.count == maxTags { break }
+        }
+        return out
     }
 
     /// A stored category, or null when the blob is not one. An absent or null beatIds

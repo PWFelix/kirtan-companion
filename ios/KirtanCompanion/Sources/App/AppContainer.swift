@@ -30,6 +30,10 @@ final class AppContainer {
     /// The observable account slice views read; `supabase` is the engine underneath.
     let auth: AuthViewModel
     private let localProvider: BeatsProvider
+    /// The library's community beats against their originals (update available, gone).
+    let communityLibrary: CommunityLibrary
+    /// The user's private tags, per beat, on this device.
+    let privateTags = PrivateTags()
 
     private init() {
         let store = KirtanStore()
@@ -59,6 +63,7 @@ final class AppContainer {
         self.community = community
         self.auth = auth
         self.shippedBeats = shippedBeats
+        self.communityLibrary = CommunityLibrary(library: library, community: community)
     }
 
     /// The splash's Begin: decode the samples once, open the output and arm, hydrate

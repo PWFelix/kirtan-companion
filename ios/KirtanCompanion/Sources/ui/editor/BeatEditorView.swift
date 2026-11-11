@@ -68,6 +68,9 @@ struct BeatEditorView: View {
     @State private var seeded = false
     @State private var saving = false
     @State private var saveError: String?
+    /// The author's tags, published with the beat.
+    @State private var tags: [String] = []
+    @State private var pickingTags = false
 
     private struct KeptMeter: Equatable {
         let groups: [Int]
@@ -86,6 +89,7 @@ struct BeatEditorView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     nameField
+                    tagsLine
                     meterRow
                     grid
                     pads
@@ -108,6 +112,7 @@ struct BeatEditorView: View {
         guard !seeded, let beat = mode.seed else { return }
         seeded = true
         name = beat.name
+        tags = beat.tags
         bpm = beat.bpm
         let n = beat.steps
         func lane(_ id: LaneId) -> [Stroke?] {
@@ -386,7 +391,39 @@ struct BeatEditorView: View {
             group: keepsIdentity ? seed?.group : nil
         )
         if case .edit(let original) = mode { beat.sourceItemId = original.sourceItemId }
+        beat.tags = tags
+        // A copy of a community beat (or of a copy) remembers where it came from: credit,
+        // and what keeps it from being shared until the rhythm actually differs.
+        if case .fork(let original) = mode { beat.forkedFrom = original.sourceItemId ?? original.forkedFrom }
         return beat
+    }
+
+    /// "Tags: Keherwa · Kirtan  Edit", and for a copy of a community beat, what saving does.
+    private var tagsLine: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(String(localized: "Tags", bundle: .strings) + ": " + (TagVocabulary.line(tags) ?? String(localized: "none", bundle: .strings)))
+                    .font(.footnote)
+                    .foregroundStyle(Palette.syahiSoft)
+                    .lineLimit(2)
+                Spacer()
+                Button(String(localized: "Edit", bundle: .strings)) { pickingTags = true }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Palette.clay)
+            }
+            if case .fork(let original) = mode, original.isCommunity {
+                Text(String(localized: "The community beat stays as it is. Saving adds your version to Your beats; you can share it once the rhythm differs.", bundle: .strings))
+                    .font(.caption)
+                    .foregroundStyle(Palette.syahiSoft)
+            }
+        }
+        .sheet(isPresented: $pickingTags) {
+            TagPickerSheet(
+                title: String(localized: "Tags", bundle: .strings),
+                hint: String(localized: "Published with your beat, so others can find it.", bundle: .strings),
+                initial: tags,
+            ) { tags = $0 }
+        }
     }
 
     private func startPreview() {

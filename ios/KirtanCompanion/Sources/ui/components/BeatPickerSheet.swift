@@ -15,7 +15,8 @@ struct BeatPickerSheet: View {
     private var library: LibraryRepository { container.library }
 
     private var tabs: [String] {
-        [BUILTIN_CATEGORY, CUSTOM_CATEGORY] + library.state.categories.map(\.id)
+        let community = library.state.customBeats.contains(where: \.isCommunity) ? [COMMUNITY_CATEGORY] : []
+        return [BUILTIN_CATEGORY, CUSTOM_CATEGORY] + community + library.state.categories.map(\.id)
     }
 
     private func tabName(_ id: String) -> String {

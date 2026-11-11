@@ -103,7 +103,8 @@ final class LibraryRepository {
     func categoryBeats(_ categoryId: String) -> [Beat] {
         switch categoryId {
         case BUILTIN_CATEGORY: return shippedBeats.effective
-        case CUSTOM_CATEGORY: return state.customBeats
+        case CUSTOM_CATEGORY: return state.customBeats.filter { !$0.isCommunity }
+        case COMMUNITY_CATEGORY: return state.customBeats.filter(\.isCommunity)
         default: break
         }
         let everything = allBeats
@@ -118,6 +119,7 @@ final class LibraryRepository {
         switch categoryId {
         case BUILTIN_CATEGORY: return "Built in"
         case CUSTOM_CATEGORY: return "Your beats"
+        case COMMUNITY_CATEGORY: return String(localized: "From the community", bundle: .strings)
         default:
             return state.categories.first(where: { $0.id == categoryId })?.name ?? String(localized: "Beats", bundle: .strings)
         }
@@ -190,8 +192,10 @@ final class LibraryRepository {
                 // The editor builds a fresh Beat and knows nothing of where it came from;
                 // carry the community origin over so an edited copy still counts as "in
                 // your library" (issue #11).
-                fields.sourceItemId = newBeat.sourceItemId
-                    ?? current.customBeats.first { id != nil && $0.id == id }?.sourceItemId
+                let existing = editing ? current.customBeats.first { $0.id == id } : nil
+                fields.sourceItemId = newBeat.sourceItemId ?? existing?.sourceItemId
+                fields.sourceIndex = newBeat.sourceIndex ?? existing?.sourceIndex
+                fields.forkedFrom = newBeat.forkedFrom ?? existing?.forkedFrom
                 let saved: Beat
                 if let id, editing {
                     saved = try await self.provider.updateBeat(id: id, patch: fields)
@@ -207,6 +211,27 @@ final class LibraryRepository {
                 self.log.warn("[library] save failed", error)
                 self.state.error = storageErrorMessage(error)
                 return nil
+            }
+        }
+    }
+
+    /// Overwrite a library beat as given — name, origin and all. For bringing a community
+    /// beat up to its original and for the one-time migration; the editor uses saveBeat.
+    @discardableResult
+    func replaceBeat(_ beat: Beat) async -> Bool {
+        guard let id = beat.id else { return false }
+        return await withWrite {
+            guard self.state.customBeats.contains(where: { $0.id == id }) else { return false }
+            var fields = beat
+            fields.id = nil
+            do {
+                let saved = try await self.provider.updateBeat(id: id, patch: fields)
+                self.state.customBeats = self.state.customBeats.map { $0.id == id ? saved : $0 }
+                return true
+            } catch {
+                self.log.warn("[library] replace failed", error)
+                self.state.error = storageErrorMessage(error)
+                return false
             }
         }
     }
@@ -272,11 +297,14 @@ final class LibraryRepository {
             // Re-importing your own link shouldn't produce two rows with one name.
             var taken = Set(self.allBeats.map { $0.name })
             var drafts: [Beat] = []
-            for beat in incoming {
+            for (index, beat) in incoming.enumerated() {
                 var d = beat
                 d.id = nil
                 d.name = uniqueName(beat.name, &taken)
                 d.sourceItemId = sourceItemId
+                // A list's beats remember their place, to find their original for updates.
+                d.sourceIndex = (sourceItemId != nil && categoryName != nil) ? index : nil
+                d.forkedFrom = nil
                 drafts.append(d)
             }
 

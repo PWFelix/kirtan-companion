@@ -18,6 +18,8 @@ struct BrowseView: View {
 
     @State private var query = ""
     @State private var scope: CommunityClient.BrowseScope = .everything
+    /// Show only beats the author tagged with this.
+    @State private var tag: String?
     @State private var items: [PublishedItem] = []
     /// The signed-in user's own stars per item, so their row shows what THEY chose while
     /// the number beside it is the community's average. Empty when signed out.
@@ -40,7 +42,7 @@ struct BrowseView: View {
     private var auth: AuthViewModel { container.auth }
     private var session: AuthSession? { auth.session }
     /// Re-keys the loader when the query, the scope or the session changes.
-    private var loadKey: String { "\(query)~\(scope)~\(session?.userId ?? "-")" }
+    private var loadKey: String { "\(query)~\(scope)~\(tag ?? "-")~\(session?.userId ?? "-")" }
 
     /// Community item ids the library already holds a copy of.
     private var inLibrary: Set<String> {
@@ -59,6 +61,9 @@ struct BrowseView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 12)
+                // Every vocabulary tag: the server filters, so this page can't tell which
+                // tags exist out there.
+                TagFilterRow(tags: TagVocabulary.allTags.map(\.id), selected: $tag)
                 list
             }
         }
@@ -215,6 +220,13 @@ struct BrowseView: View {
                     Text(meta(item))
                         .font(.caption)
                         .foregroundStyle(Palette.syahiSoft)
+                    // The author's tags, straight off the snapshot.
+                    if let line = TagVocabulary.line(authorTags(item)) {
+                        Text(line)
+                            .font(.caption)
+                            .foregroundStyle(Palette.syahiSoft)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 8)
                 if held {
@@ -308,6 +320,10 @@ struct BrowseView: View {
         }
     }
 
+    private func authorTags(_ item: PublishedItem) -> [String] {
+        (item.payload.element("beat")?.element("tags")?.asArray() ?? []).compactMap { $0.asString() }
+    }
+
     private func meta(_ item: PublishedItem) -> String {
         let count = item.payload.element("beats")?.asArray()?.count ?? 0
         let kind = item.kind == .playlist
@@ -399,7 +415,7 @@ struct BrowseView: View {
         loading = true
         errorMessage = nil
         do {
-            let loaded = try await community.browse(query: query, scope: scope)
+            let loaded = try await community.browse(query: query, scope: scope, tag: tag)
             items = loaded
             if let me = session?.userId {
                 myRatings = (try? await community.myRatings(userId: me, itemIds: loaded.map(\.id))) ?? [:]

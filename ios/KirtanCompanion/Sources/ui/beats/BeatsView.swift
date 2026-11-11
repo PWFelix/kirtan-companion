@@ -33,11 +33,14 @@ struct BeatsView: View {
         case share(ShareTarget)
         case importCode
         case confirm(ShareCodec.SharePayload)
+        /// The user's private tags on one beat.
+        case tags(Beat)
         var id: String {
             switch self {
             case .share(let t): return "share:\(t.id)"
             case .importCode: return "import"
             case .confirm: return "confirm"
+            case .tags(let beat): return "tags:\(beat.id ?? "")"
             }
         }
     }
@@ -80,6 +83,29 @@ struct BeatsView: View {
     @State private var pending: Pending?
     @State private var namePrompt: NamePrompt?
     @State private var nameDraft = ""
+    /// Show only beats with this tag (the author's or the user's own).
+    @State private var tagFilter: String?
+
+    private var communityLibrary: CommunityLibrary { container.communityLibrary }
+    private var privateTags: PrivateTags { container.privateTags }
+
+    /// The share index with the originals folded in, so community beats and unchanged
+    /// copies answer "not shareable".
+    private var index: ShareIndex {
+        var i = shareIndex
+        i.originals = communityLibrary.originals
+        return i
+    }
+
+    /// The author's tags and the user's private ones, together.
+    private func allTags(_ beat: Beat) -> [String] {
+        beat.tags + privateTags.tags(beat.id).filter { !beat.tags.contains($0) }
+    }
+
+    private func passesFilter(_ beat: Beat) -> Bool {
+        guard let tagFilter else { return true }
+        return allTags(beat).contains(tagFilter)
+    }
 
     /// DEBUG: `-kirtanCommunity` opens on the Community segment, for screenshots.
     private static func defaultSegment() -> Segment {
@@ -130,6 +156,8 @@ struct BeatsView: View {
             }
         }
         .task(id: auth.session?.userId) { await reloadShared() }
+        // Re-check the originals whenever the set of community items in the library changes.
+        .task(id: communityLibrary.referencedIds) { await communityLibrary.refresh() }
         .sheet(item: $sheet) { which in
             switch which {
             case .share(let target):
@@ -140,6 +168,14 @@ struct BeatsView: View {
                 ImportConfirmView(payload: payload, onDismiss: { sheet = nil }) {
                     sheet = nil
                     Task { await container.acceptImport(payload) }
+                }
+            case .tags(let beat):
+                TagPickerSheet(
+                    title: String(localized: "My tags", bundle: .strings),
+                    hint: String(localized: "Only you see these. They help you find beats in your library.", bundle: .strings),
+                    initial: privateTags.tags(beat.id),
+                ) { tags in
+                    if let id = beat.id { privateTags.set(id, tags) }
                 }
             }
         }
@@ -203,17 +239,20 @@ struct BeatsView: View {
                 .buttonStyle(.plain)
             }
             searchField
+            TagFilterRow(tags: Array(Set(library.allBeats.flatMap(allTags))), selected: $tagFilter)
             if trimmedQuery.isEmpty {
                 // A List rather than a ScrollView, for the native swipe actions on each
                 // beat row; styled flat so it reads exactly as the stack did.
                 List {
                     Group {
                         builtInHeader
-                        ForEach(library.shippedBeats.effective, id: \.id) { beatRow($0) }
-                        section(String(localized: "Your beats", bundle: .strings), library.state.customBeats)
+                        ForEach(library.shippedBeats.effective.filter(passesFilter), id: \.id) { beatRow($0) }
+                        section(String(localized: "Your beats", bundle: .strings), library.categoryBeats(CUSTOM_CATEGORY).filter(passesFilter))
+                        // Beats added from the community: read-only, following their originals.
+                        section(String(localized: "From the community", bundle: .strings), library.categoryBeats(COMMUNITY_CATEGORY).filter(passesFilter))
                         ForEach(library.state.categories, id: \.id) { category in
                             categoryHeader(category)
-                            let beats = library.categoryBeats(category.id)
+                            let beats = library.categoryBeats(category.id).filter(passesFilter)
                             if beats.isEmpty {
                                 Text(String(localized: "Empty — add beats from any row's … menu.", bundle: .strings))
                                     .font(.caption).foregroundStyle(Palette.faint)
@@ -226,8 +265,10 @@ struct BeatsView: View {
                 }
                 .libraryList()
             } else {
-                let results = library.allBeats.filter {
-                    $0.name.localizedCaseInsensitiveContains(trimmedQuery)
+                // Names, and the labels of the beat's tags ("dadra" finds Dadra beats).
+                let results = library.allBeats.filter { beat in
+                    passesFilter(beat) && (beat.name.localizedCaseInsensitiveContains(trimmedQuery)
+                        || TagVocabulary.known(allTags(beat)).contains { $0.label.localizedCaseInsensitiveContains(trimmedQuery) })
                 }
                 List {
                     Group {
@@ -344,6 +385,7 @@ struct BeatsView: View {
                                 .font(.caption)
                                 .foregroundStyle(Palette.syahiSoft)
                         }
+                        rowBadges(beat)
                     }
                     Spacer()
                     Text("\(beat.bpm) bpm")
@@ -372,7 +414,7 @@ struct BeatsView: View {
                 }
                 .tint(Palette.danger)
             }
-            if p2pSharing || (container.community != nil && shareIndex.status(beat) != .shared) {
+            if p2pSharing || (container.community != nil && index.status(beat).canShare) {
                 Button {
                     if p2pSharing { sheet = .share(.beat(beat)) } else { shareBeat(beat) }
                 } label: {
@@ -386,11 +428,17 @@ struct BeatsView: View {
     private func beatMenu(_ beat: Beat) -> some View {
         let custom = library.isCustomBeat(beat.id)
         return Menu {
-            if custom {
+            if case .updateAvailable = communityLibrary.status(beat) {
+                Button { updateFromCommunity(beat) } label: {
+                    Label(String(localized: "Update to the new version", bundle: .strings), systemImage: "arrow.down.circle")
+                }
+            }
+            if custom && !beat.readOnly {
                 Button { onEdit(.edit(beat)) } label: { Label(String(localized: "Edit", bundle: .strings), systemImage: "pencil") }
             } else {
+                // Built-in and community beats stay as they are; editing makes your copy.
                 Button { onEdit(.fork(beat)) } label: { Label(String(localized: "Edit a copy", bundle: .strings), systemImage: "doc.on.doc") }
-                if auth.isMaintainer {
+                if beat.isBuiltIn && auth.isMaintainer {
                     Button { onEdit(.everyone(beat)) } label: { Label(String(localized: "Edit for everyone", bundle: .strings), systemImage: "person.3") }
                 }
             }
@@ -402,7 +450,12 @@ struct BeatsView: View {
             } else if container.community != nil {
                 // Atomic, and never a silent duplicate: an unchanged shared beat can't be
                 // shared again, and an edited one updates its community copy.
-                switch shareIndex.status(beat) {
+                switch index.status(beat) {
+                case .notYours:
+                    EmptyView()
+                case .unchangedCopy:
+                    Button {} label: { Label(String(localized: "Change the rhythm to share", bundle: .strings), systemImage: "square.and.arrow.up") }
+                        .disabled(true)
                 case .shared:
                     Button {} label: { Label(String(localized: "Already shared", bundle: .strings), systemImage: "checkmark") }
                         .disabled(true)
@@ -411,6 +464,9 @@ struct BeatsView: View {
                 case .new:
                     Button { shareBeat(beat) } label: { Label(String(localized: "Share…", bundle: .strings), systemImage: "square.and.arrow.up") }
                 }
+            }
+            if beat.id != nil {
+                Button { sheet = .tags(beat) } label: { Label(String(localized: "My tags…", bundle: .strings), systemImage: "tag") }
             }
             if !library.state.categories.isEmpty, let id = beat.id {
                 Menu {
@@ -475,7 +531,11 @@ struct BeatsView: View {
             auth.notice = String(localized: "Sign in to rate beats and publish your own.", bundle: .strings)
             return
         }
-        switch shareIndex.status(beat) {
+        switch index.status(beat) {
+        case .notYours:
+            auth.notice = String(localized: "This beat is from the community, so it can’t be shared again. Edit it to make your own version.", bundle: .strings)
+        case .unchangedCopy:
+            auth.notice = String(localized: "This copy is still the same as the community original. Change the rhythm to share it as your own.", bundle: .strings)
         case .shared:
             auth.notice = String(localized: "Already shared", bundle: .strings)
         case .changed(let itemId):
@@ -490,6 +550,34 @@ struct BeatsView: View {
             }
         case .new:
             publish(.beat(beat), name: beat.name)
+        }
+    }
+
+    private func updateFromCommunity(_ beat: Beat) {
+        Task {
+            if await communityLibrary.update(beat) {
+                auth.notice = String(localized: "Updated “\(beat.name)”.", bundle: .strings)
+            } else {
+                auth.notice = String(localized: "Couldn’t update that beat. Try again when you’re online.", bundle: .strings)
+            }
+        }
+    }
+
+    /// Under the name: a community beat's status, then its tags.
+    @ViewBuilder
+    private func rowBadges(_ beat: Beat) -> some View {
+        switch communityLibrary.status(beat) {
+        case .updateAvailable:
+            Label(String(localized: "Update available", bundle: .strings), systemImage: "arrow.down.circle")
+                .font(.caption.weight(.semibold)).foregroundStyle(Palette.clay)
+        case .gone:
+            Label(String(localized: "No longer shared", bundle: .strings), systemImage: "minus.circle")
+                .font(.caption).foregroundStyle(Palette.faint)
+        default:
+            EmptyView()
+        }
+        if let line = TagVocabulary.line(allTags(beat)) {
+            Text(line).font(.caption).foregroundStyle(Palette.syahiSoft).lineLimit(1)
         }
     }
 

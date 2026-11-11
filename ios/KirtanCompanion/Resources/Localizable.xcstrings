@@ -503,6 +503,26 @@
         }
       }
     },
+    "Advanced" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avanzado"
+          }
+        }
+      }
+    },
+    "All" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todos"
+          }
+        }
+      }
+    },
     "All %lld beats in this list travel inside the link. Nothing is uploaded." : {
       "localizations" : {
         "en" : {
@@ -645,6 +665,16 @@
         }
       }
     },
+    "Arati" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arati"
+          }
+        }
+      }
+    },
     "As written (%lld)" : {
       "localizations" : {
         "es" : {
@@ -705,6 +735,26 @@
         }
       }
     },
+    "Beginner" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Principiante"
+          }
+        }
+      }
+    },
+    "Bhajan" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bhajan"
+          }
+        }
+      }
+    },
     "Bluetooth speakers play a little after the screen. If the strip or the highway runs ahead of the drum, set the delay here. Each speaker remembers its own." : {
       "localizations" : {
         "es" : {
@@ -721,6 +771,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Para subir"
+          }
+        }
+      }
+    },
+    "Build-up" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crescendo"
           }
         }
       }
@@ -797,6 +857,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cancelar"
+          }
+        }
+      }
+    },
+    "Change the rhythm to share" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambia el ritmo para compartir"
           }
         }
       }
@@ -951,6 +1021,16 @@
         }
       }
     },
+    "Couldn’t update that beat. Try again when you’re online." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo actualizar ese ritmo. Inténtalo de nuevo con conexión."
+          }
+        }
+      }
+    },
     "Create" : {
       "localizations" : {
         "es" : {
@@ -967,6 +1047,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Personalizado"
+          }
+        }
+      }
+    },
+    "Dadra" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dadra"
           }
         }
       }
@@ -1061,6 +1151,16 @@
         }
       }
     },
+    "Double time" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doble tiempo"
+          }
+        }
+      }
+    },
     "Drag" : {
       "localizations" : {
         "es" : {
@@ -1127,6 +1227,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vacía: añade ritmos desde el menú … de cualquier fila."
+          }
+        }
+      }
+    },
+    "Ending" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Final"
           }
         }
       }
@@ -1201,6 +1311,16 @@
         }
       }
     },
+    "Fill" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relleno"
+          }
+        }
+      }
+    },
     "Flash on each click" : {
       "localizations" : {
         "es" : {
@@ -1227,6 +1347,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fundamental"
+          }
+        }
+      }
+    },
+    "From the community" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De la comunidad"
           }
         }
       }
@@ -1291,6 +1421,16 @@
         }
       }
     },
+    "Intermediate" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Intermedio"
+          }
+        }
+      }
+    },
     "Is the screen ahead of the drum? Sync them." : {
       "localizations" : {
         "es" : {
@@ -1317,6 +1457,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "También se quita de todas las listas que lo usan."
+          }
+        }
+      }
+    },
+    "Jhaptal" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jhaptal"
+          }
+        }
+      }
+    },
+    "Keherwa" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keherwa"
+          }
+        }
+      }
+    },
+    "Kirtan" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirtan"
+          }
+        }
+      }
+    },
+    "Laid back" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relajado"
           }
         }
       }
@@ -1367,6 +1547,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zurdo · dayan a la izquierda"
+          }
+        }
+      }
+    },
+    "Level" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nivel"
           }
         }
       }
@@ -1447,6 +1637,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Suelto"
+          }
+        }
+      }
+    },
+    "Main beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ritmo principal"
           }
         }
       }
@@ -1587,6 +1787,26 @@
         }
       }
     },
+    "My tags" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mis etiquetas"
+          }
+        }
+      }
+    },
+    "My tags…" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mis etiquetas…"
+          }
+        }
+      }
+    },
     "Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, courageous or heroic in relation to the mṛdaṅga." : {
       "localizations" : {
         "es" : {
@@ -1663,6 +1883,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ningún ritmo coincide con «%@»."
+          }
+        }
+      }
+    },
+    "No longer shared" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya no se comparte"
           }
         }
       }
@@ -1777,6 +2007,16 @@
         }
       }
     },
+    "Only you see these. They help you find beats in your library." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo tú las ves. Te ayudan a encontrar ritmos en tu biblioteca."
+          }
+        }
+      }
+    },
     "Open" : {
       "localizations" : {
         "es" : {
@@ -1803,6 +2043,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SONANDO POR"
+          }
+        }
+      }
+    },
+    "Part" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parte"
           }
         }
       }
@@ -1943,6 +2193,16 @@
         }
       }
     },
+    "Prayers" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oraciones"
+          }
+        }
+      }
+    },
     "Press Play — strokes land on the line" : {
       "localizations" : {
         "es" : {
@@ -1989,6 +2249,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Publicar en la comunidad"
+          }
+        }
+      }
+    },
+    "Published with your beat, so others can find it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se publican con tu ritmo para que otros lo encuentren."
           }
         }
       }
@@ -2145,6 +2415,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diestro · dayan a la derecha"
+          }
+        }
+      }
+    },
+    "Rupak" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rupak"
           }
         }
       }
@@ -2439,6 +2719,16 @@
         }
       }
     },
+    "Steady" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estable"
+          }
+        }
+      }
+    },
     "Stop" : {
       "localizations" : {
         "es" : {
@@ -2499,6 +2789,26 @@
         }
       }
     },
+    "Tags" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etiquetas"
+          }
+        }
+      }
+    },
+    "Tala" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tala"
+          }
+        }
+      }
+    },
     "Tap" : {
       "localizations" : {
         "es" : {
@@ -2535,6 +2845,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zona de toque: toca en cada clic"
+          }
+        }
+      }
+    },
+    "Teental" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teental"
           }
         }
       }
@@ -2709,6 +3029,16 @@
         }
       }
     },
+    "The community beat stays as it is. Saving adds your version to Your beats; you can share it once the rhythm differs." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El ritmo de la comunidad se queda como está. Al guardar, tu versión se añade a Tus ritmos; podrás compartirla cuando el ritmo sea distinto."
+          }
+        }
+      }
+    },
     "The community library isn't available in this build." : {
       "localizations" : {
         "es" : {
@@ -2849,12 +3179,32 @@
         }
       }
     },
+    "This beat is from the community, so it can’t be shared again. Edit it to make your own version." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este ritmo es de la comunidad, así que no se puede volver a compartir. Edítalo para crear tu propia versión."
+          }
+        }
+      }
+    },
     "This category is empty — add beats to it on the Beats page." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Esta categoría está vacía: añádele ritmos en la página Ritmos."
+          }
+        }
+      }
+    },
+    "This copy is still the same as the community original. Change the rhythm to share it as your own." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta copia sigue igual que el original de la comunidad. Cambia el ritmo para compartirla como tuya."
           }
         }
       }
@@ -2945,6 +3295,16 @@
         }
       }
     },
+    "Turnaround" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transición"
+          }
+        }
+      }
+    },
     "Unpublish" : {
       "localizations" : {
         "es" : {
@@ -2955,12 +3315,52 @@
         }
       }
     },
+    "Update available" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización disponible"
+          }
+        }
+      }
+    },
+    "Update to the new version" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualizar a la nueva versión"
+          }
+        }
+      }
+    },
     "Updated “%@” in the community library." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Se actualizó «%@» en la biblioteca de la comunidad."
+          }
+        }
+      }
+    },
+    "Updated “%@”." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se actualizó «%@»."
+          }
+        }
+      }
+    },
+    "Use" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uso"
           }
         }
       }
@@ -3181,6 +3581,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "sin retraso."
+          }
+        }
+      }
+    },
+    "none" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ninguna"
           }
         }
       }

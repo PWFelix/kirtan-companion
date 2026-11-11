@@ -19,6 +19,19 @@ enum ShareStatus: Equatable {
     case shared
     /// Shared before, edited since: Share updates `itemId` in place.
     case changed(itemId: String)
+    /// Added from the community: someone else's beat, never re-shared.
+    case notYours
+    /// A copy of a community beat that is musically still the original (renamed or
+    /// retagged at most). Sharable once the music actually changes.
+    case unchangedCopy
+
+    /// True when Share may publish or update.
+    var canShare: Bool {
+        switch self {
+        case .new, .changed: return true
+        default: return false
+        }
+    }
 }
 
 struct ShareIndex: Equatable {
@@ -26,8 +39,12 @@ struct ShareIndex: Equatable {
     var mine: [(id: String, beat: Beat)] = []
     /// Local beat id → the community item it was published as.
     var links: [String: String] = [:]
+    /// The originals of the library's community beats and copies, when loaded.
+    var originals: [String: [Beat]]? = nil
 
     func status(_ beat: Beat) -> ShareStatus {
+        if beat.isCommunity { return .notYours }
+        if CommunityTracking.isUnchangedCopy(beat, originals) { return .unchangedCopy }
         let print = Self.fingerprint(beat)
         if let linkedId = beat.id.flatMap({ links[$0] }),
            let linked = mine.first(where: { $0.id == linkedId }) {
@@ -42,12 +59,15 @@ struct ShareIndex: Equatable {
         var copy = beat
         copy.id = nil
         copy.sourceItemId = nil
+        copy.sourceIndex = nil
+        copy.forkedFrom = nil
         return LibraryJson.encodeBody(copy)
     }
 
     static func == (a: ShareIndex, b: ShareIndex) -> Bool {
         a.links == b.links && a.mine.map(\.id) == b.mine.map(\.id)
             && a.mine.map { fingerprint($0.beat) } == b.mine.map { fingerprint($0.beat) }
+            && a.originals == b.originals
     }
 
     // ── The per-device record ──
