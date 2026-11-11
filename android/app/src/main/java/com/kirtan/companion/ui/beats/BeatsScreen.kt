@@ -69,6 +69,13 @@ import com.kirtan.companion.R
 import com.kirtan.companion.Strings
 import com.kirtan.companion.ui.BeatText
 
+/**
+ * Peer-to-peer sharing (codes and links, the Share sheet) is soft-retired:
+ * "Share" now means publishing to the community. The code stays — and imports
+ * of codes and links still work — so this one switch brings it back.
+ */
+private const val P2P_SHARING = false
+
 /** Where the Beats screen has drilled to. Dies with the screen, as on the web. */
 private sealed interface BeatsPage {
     data object Landing : BeatsPage
@@ -228,7 +235,10 @@ internal fun BeatsScreen(
                 builtInMeta = shippedSourceLine(shipped.source, builtIns.size),
                 onOpenCategory = { page = BeatsPage.Category(it) },
                 onOpenDetail = { detail = it },
-                onShareBeat = { shareTarget = ShareTarget.BeatTarget(it) },
+                onShareBeat = {
+                    if (P2P_SHARING) shareTarget = ShareTarget.BeatTarget(it)
+                    else communityVm.publishBeat(it) { message -> importResult = message }
+                },
                 onDeleteBeat = { pendingDelete = it },
                 onOpenImport = { importOpen = true },
                 onOpenCommunity = { page = BeatsPage.Community },
@@ -255,7 +265,10 @@ internal fun BeatsScreen(
                 canCheckForUpdates = library.canCheckForUpdates,
                 onCheckForUpdates = { library.checkForBeatUpdates() },
                 onOpenDetail = { detail = it },
-                onShareBeat = { shareTarget = ShareTarget.BeatTarget(it) },
+                onShareBeat = {
+                    if (P2P_SHARING) shareTarget = ShareTarget.BeatTarget(it)
+                    else communityVm.publishBeat(it) { message -> importResult = message }
+                },
                 onDeleteBeat = { pendingDelete = it },
                 onShareList = { name, beats ->
                     shareTarget = ShareTarget.CategoryTarget(name, beats)
@@ -671,7 +684,7 @@ private fun CategoryPage(
         // actually play. The built-in set is excluded: everyone already has it,
         // and its link would be enormous for nothing.
         if (categoryId != BUILTIN_CATEGORY && beats.isNotEmpty()) {
-            item(key = "share-list") {
+            if (P2P_SHARING) item(key = "share-list") {
                 SecondaryButton(
                     label = stringResource(R.string.share_list),
                     icon = KcIcons.Share,
@@ -683,8 +696,8 @@ private fun CategoryPage(
             // share link follows.
             item(key = "publish-list") {
                 SecondaryButton(
-                    label = stringResource(R.string.publish_to_community),
-                    icon = KcIcons.Globe,
+                    label = stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.share_list),
+                    icon = if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
                     onClick = { onPublishList(categoryName, beats) },
                 )
             }
@@ -878,14 +891,16 @@ private fun BeatDetailSheet(
                     onClick = onRemoveShipped,
                 )
             }
+            if (P2P_SHARING) {
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = stringResource(R.string.common_share),
+                    icon = KcIcons.Share,
+                    onClick = onShare,
+                )
+            }
             com.kirtan.companion.ui.components.SecondaryButton(
-                label = stringResource(R.string.common_share),
-                icon = KcIcons.Share,
-                onClick = onShare,
-            )
-            com.kirtan.companion.ui.components.SecondaryButton(
-                label = stringResource(R.string.publish_to_community),
-                icon = KcIcons.Globe,
+                label = stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.common_share),
+                icon = if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
                 onClick = onPublish,
             )
             if (!beat.isBuiltIn && beat.id != null) {
