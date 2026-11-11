@@ -298,12 +298,18 @@ struct BeatsView: View {
                 }
                 let beats = library.categoryBeats(category.id)
                 if !beats.isEmpty {
-                    Button { sheet = .share(.category(name: category.name, beats: beats)) } label: {
-                        Label(String(localized: "Share list…", bundle: .strings), systemImage: "square.and.arrow.up")
-                    }
-                    if canPublish {
+                    if p2pSharing {
+                        Button { sheet = .share(.category(name: category.name, beats: beats)) } label: {
+                            Label(String(localized: "Share list…", bundle: .strings), systemImage: "square.and.arrow.up")
+                        }
+                        if canPublish {
+                            Button { publish(.category(name: category.name, beats: beats), name: category.name) } label: {
+                                Label(String(localized: "Publish to community", bundle: .strings), systemImage: "globe")
+                            }
+                        }
+                    } else if container.community != nil {
                         Button { publish(.category(name: category.name, beats: beats), name: category.name) } label: {
-                            Label(String(localized: "Publish to community", bundle: .strings), systemImage: "globe")
+                            Label(String(localized: "Share list…", bundle: .strings), systemImage: "square.and.arrow.up")
                         }
                     }
                 }
@@ -363,10 +369,14 @@ struct BeatsView: View {
                 }
                 .tint(Palette.danger)
             }
-            Button { sheet = .share(.beat(beat)) } label: {
-                Label(String(localized: "Share", bundle: .strings), systemImage: "square.and.arrow.up")
+            if p2pSharing || container.community != nil {
+                Button {
+                    if p2pSharing { sheet = .share(.beat(beat)) } else { publish(.beat(beat), name: beat.name) }
+                } label: {
+                    Label(String(localized: "Share", bundle: .strings), systemImage: "square.and.arrow.up")
+                }
+                .tint(Palette.strap)
             }
-            .tint(Palette.strap)
         }
     }
 
@@ -381,9 +391,13 @@ struct BeatsView: View {
                     Button { onEdit(.everyone(beat)) } label: { Label(String(localized: "Edit for everyone", bundle: .strings), systemImage: "person.3") }
                 }
             }
-            Button { sheet = .share(.beat(beat)) } label: { Label(String(localized: "Share…", bundle: .strings), systemImage: "square.and.arrow.up") }
-            if custom && canPublish {
-                Button { publish(.beat(beat), name: beat.name) } label: { Label(String(localized: "Publish to community", bundle: .strings), systemImage: "globe") }
+            if p2pSharing {
+                Button { sheet = .share(.beat(beat)) } label: { Label(String(localized: "Share…", bundle: .strings), systemImage: "square.and.arrow.up") }
+                if custom && canPublish {
+                    Button { publish(.beat(beat), name: beat.name) } label: { Label(String(localized: "Publish to community", bundle: .strings), systemImage: "globe") }
+                }
+            } else if container.community != nil {
+                Button { publish(.beat(beat), name: beat.name) } label: { Label(String(localized: "Share…", bundle: .strings), systemImage: "square.and.arrow.up") }
             }
             if !library.state.categories.isEmpty, let id = beat.id {
                 Menu {
@@ -426,8 +440,17 @@ struct BeatsView: View {
     /// Publishing needs a cloud and a session; signed out, the item is simply not offered.
     private var canPublish: Bool { container.community != nil && auth.session != nil }
 
+    /// Peer-to-peer sharing (codes, links, the share sheet) is soft-retired: "Share"
+    /// now publishes to the community. Imports of codes and links still work, and
+    /// flipping this brings the old menu entries back.
+    private let p2pSharing = false
+
     private func publish(_ payload: ShareCodec.SharePayload, name: String) {
-        guard let community = container.community, let session = auth.session else { return }
+        guard let community = container.community else { return }
+        guard let session = auth.session else {
+            auth.notice = String(localized: "Sign in to rate beats and publish your own.", bundle: .strings)
+            return
+        }
         Task {
             do {
                 _ = try await community.publish(payload, authorId: session.userId, authorName: session.displayName)
