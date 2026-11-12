@@ -272,6 +272,7 @@ internal fun HomeScreen(
                 bpmDraft.toIntOrNull()?.let { transport.commitBpm(it) }
                 sheet = null
             },
+            onJump = { transport.nudgeBpm(it) },
             onDismiss = { sheet = null },
         )
 
@@ -752,7 +753,29 @@ private fun PanelToggle(
     }
 }
 
-/** The tempo sheet: a large entry field over a slider. */
+/** A ±10 pill beside the tempo field. */
+@Composable
+private fun BpmJumpButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(width = 64.dp, height = 48.dp)
+            .alpha(if (enabled) 1f else 0.35f)
+            .clip(RoundedCornerShape(14.dp))
+            .background(PaletteToken.HEAD_WORN.color)
+            .border(1.dp, KirtanTheme.colors.rule, RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = PaletteToken.SYAHI.color,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/** The tempo sheet: a large entry field (with ±10 jumps) over a slider. */
 @Composable
 private fun TempoSheet(
     bpm: Int,
@@ -761,6 +784,7 @@ private fun TempoSheet(
     draft: String,
     onDraftChange: (String) -> Unit,
     onCommit: () -> Unit,
+    onJump: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     KcSheet(
@@ -781,6 +805,14 @@ private fun TempoSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space3),
         ) {
+            // Big jumps either side of the number: the slider and keyboard are for
+            // precision, ±10 for "a lot faster/slower" in one tap. +10 at the top
+            // of the normal range opens Brahmaloka, the same as +.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space3),
+            ) {
+            BpmJumpButton("−10", enabled = bpm > MIN_BPM) { onJump(-10) }
             OutlinedTextField(
                 value = draft,
                 // Digits only, and capped at three characters: MAX_BPM is 500, so
@@ -810,6 +842,8 @@ private fun TempoSheet(
                     unfocusedTextColor = PaletteToken.SYAHI.color,
                 ),
             )
+            BpmJumpButton("+10", enabled = !(brahmaloka && bpm >= MAX_BPM)) { onJump(10) }
+            }
 
             Text(
                 text = stringResource(R.string.tempo_bpm),
