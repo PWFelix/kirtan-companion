@@ -22,38 +22,25 @@ import kotlin.math.max
  * Animating off step events instead would need interpolation and would lag the
  * sound by up to a whole cell.
  *
- * WHY FOUR COLUMNS. The learner is learning hands and strokes, not lanes: each
- * column is one stroke of one hand, labelled with its bol, laid out the way the
- * drum sits in front of a player — bayan (left hand) on the left, dayan (right
- * hand) on the right, the open strokes on the outside. Kartal is left off: it is
- * the congregation's part, not the mridanga player's.
+ * WHY ONE COLUMN PER HAND. The learner's eyes only need to know WHICH HAND
+ * and WHEN; the hand already knows how to make the stroke. So the mridanga is
+ * two columns — bayan (left hand) on the left, dayan (right hand) on the right,
+ * the way the drum sits in front of a player — and the karatalas one. Each note
+ * still says what it is: open is a disc, closed an X, with its bol beside it.
  *
- * The enum's order is the RIGHT-handed layout. A left-handed player sits the
- * drum the other way round — dayan under the left hand — so [Highway.columnsFor]
- * mirrors it: dayan on the left, and the open strokes still on the outside.
+ * A left-handed player sits the drum the other way round — dayan under the left
+ * hand — so [Highway.columnsFor] mirrors the two.
  */
-enum class HighwayColumn(val lane: LaneId, val stroke: Stroke) {
-    BAYAN_OPEN(LaneId.BAYAN, Stroke.OPEN),
-    BAYAN_CLOSED(LaneId.BAYAN, Stroke.CLOSED),
-    DAYAN_CLOSED(LaneId.DAYAN, Stroke.CLOSED),
-    DAYAN_OPEN(LaneId.DAYAN, Stroke.OPEN),
+typealias HighwayColumn = LaneId
 
-    // The karatalas' highway: the ringing "Ching" and the choked "Chip".
-    KARTAL_OPEN(LaneId.KARTAL, Stroke.OPEN),
-    KARTAL_CLOSED(LaneId.KARTAL, Stroke.CLOSED),
-    ;
-
-    /** The spoken syllable for this stroke — the column's heading. */
-    val bol: String get() = Bols.forStroke(lane.wireId, stroke.code) ?: ""
-
-    companion object {
-        fun of(lane: LaneId, stroke: Stroke): HighwayColumn? =
-            entries.firstOrNull { it.lane == lane && it.stroke == stroke }
-    }
+/**
+ * One falling note: in [column] (its lane), struck [stroke]. [step] is its index
+ * in the beat, [rel] its distance in steps.
+ */
+data class HighwayNote(val column: HighwayColumn, val stroke: Stroke, val step: Int, val rel: Double) {
+    /** The spoken syllable for this stroke, drawn beside the note. */
+    val bol: String get() = Bols.forStroke(column.wireId, stroke.code) ?: ""
 }
-
-/** One falling note. [step] is its index in the beat, [rel] its distance in steps. */
-data class HighwayNote(val column: HighwayColumn, val step: Int, val rel: Double)
 
 /** A horizontal guide at a beat (group) boundary; [sam] marks the bar's first. */
 data class HighwayLine(val rel: Double, val sam: Boolean)
@@ -66,16 +53,16 @@ data class HighwayFrame(
 )
 
 /**
- * What Learn teaches: the mridanga (four columns, mirrored for a left-handed
- * player) or the karatalas (two columns; handedness does not apply). Same split
- * as the web's highway.js INSTRUMENTS.
+ * What Learn teaches: the mridanga (two columns, one per hand, mirrored for a
+ * left-handed player) or the karatalas (one column; handedness does not apply).
+ * Same split as the web's highway.js INSTRUMENTS.
  */
 enum class LearnInstrument(val columns: List<HighwayColumn>) {
-    MRDANGA(listOf(HighwayColumn.BAYAN_OPEN, HighwayColumn.BAYAN_CLOSED, HighwayColumn.DAYAN_CLOSED, HighwayColumn.DAYAN_OPEN)),
-    KARTAL(listOf(HighwayColumn.KARTAL_OPEN, HighwayColumn.KARTAL_CLOSED)),
+    MRDANGA(listOf(LaneId.BAYAN, LaneId.DAYAN)),
+    KARTAL(listOf(LaneId.KARTAL)),
     ;
 
-    val lanes: List<LaneId> get() = columns.map { it.lane }.distinct()
+    val lanes: List<LaneId> get() = columns
 }
 
 object Highway {
@@ -132,8 +119,7 @@ object Highway {
             val rel = abs - position
             for (lane in instrument.lanes) {
                 val stroke = beat.pattern(lane)?.getOrNull(step) ?: continue
-                val column = HighwayColumn.of(lane, stroke) ?: continue
-                notes.add(HighwayNote(column, step, rel))
+                notes.add(HighwayNote(lane, stroke, step, rel))
             }
             if (step in boundaries) lines.add(HighwayLine(rel, sam = step == 0))
         }

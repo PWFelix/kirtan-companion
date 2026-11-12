@@ -13,9 +13,17 @@ class HighwayTest {
     private val daspahir = BEATS.first { it.id == "daspahir_taal" }
 
     @Test
-    fun columnsAreHeadedByTheirBols() {
-        assertEquals(listOf("Ge", "Khe", "Te", "Ta"), LearnInstrument.MRDANGA.columns.map { it.bol })
-        assertEquals(listOf("Ching", "Chip"), LearnInstrument.KARTAL.columns.map { it.bol })
+    fun oneColumnPerHandNotPerStroke() {
+        assertEquals(listOf(LaneId.BAYAN, LaneId.DAYAN), LearnInstrument.MRDANGA.columns)
+        assertEquals(listOf(LaneId.KARTAL), LearnInstrument.KARTAL.columns)
+    }
+
+    @Test
+    fun eachNoteKeepsItsStrokeAndBol() {
+        // Step 0 of Double Time 2: dayan X (Te) and bayan O (Ge), one per column.
+        val now = Highway.frame(doubleTime, 0.0, 8.0).notes.filter { it.rel == 0.0 }
+        assertEquals(setOf(Triple(LaneId.DAYAN, Stroke.CLOSED, "Te"), Triple(LaneId.BAYAN, Stroke.OPEN, "Ge")),
+            now.map { Triple(it.column, it.stroke, it.bol) }.toSet())
     }
 
     @Test
@@ -23,7 +31,8 @@ class HighwayTest {
         val beat = BEATS.first { Highway.hasPart(it, LearnInstrument.KARTAL) }
         val frame = Highway.frame(beat, 0.0, beat.steps.toDouble() - 1, LearnInstrument.KARTAL)
         assertTrue(frame.notes.isNotEmpty())
-        assertTrue(frame.notes.all { it.column.lane == LaneId.KARTAL })
+        assertTrue(frame.notes.all { it.column == LaneId.KARTAL })
+        assertEquals(setOf("Ching", "Chip"), frame.notes.map { it.bol }.toSet())
         val expected = (0 until beat.steps).count { beat.pattern(LaneId.KARTAL)!![it] != null }
         assertEquals(expected, frame.notes.count { it.rel >= 0 && it.rel < beat.steps })
         // And the kartal never mirrors: handedness is the drum's.
@@ -35,7 +44,7 @@ class HighwayTest {
         // Step 0 of Double Time 2: dayan X (Te) and bayan O (Ge).
         val frame = Highway.frame(doubleTime, 0.0, 8.0)
         val now = frame.notes.filter { it.rel == 0.0 }.map { it.column }.toSet()
-        assertEquals(setOf(HighwayColumn.DAYAN_CLOSED, HighwayColumn.BAYAN_OPEN), now)
+        assertEquals(setOf(LaneId.DAYAN, LaneId.BAYAN), now)
         assertEquals(0, frame.currentStep)
     }
 
@@ -49,7 +58,7 @@ class HighwayTest {
             for (abs in 6..15) {
                 val stroke = pattern[abs % 16] ?: continue
                 val hits = frame.notes.filter {
-                    it.column == HighwayColumn.of(lane, stroke) && it.rel == abs - pos
+                    it.column == lane && it.stroke == stroke && it.rel == abs - pos
                 }
                 assertEquals("lane $lane step $abs", 1, hits.size)
             }
@@ -64,7 +73,7 @@ class HighwayTest {
         val sam = frame.lines.filter { it.sam }
         assertTrue(sam.any { it.rel == 2.0 })
         val bar2Downbeat = frame.notes.filter { it.step == 0 && it.rel == 2.0 }
-        assertEquals(listOf(HighwayColumn.BAYAN_OPEN), bar2Downbeat.map { it.column })
+        assertEquals(listOf(LaneId.BAYAN to Stroke.OPEN), bar2Downbeat.map { it.column to it.stroke })
     }
 
     @Test
@@ -95,10 +104,8 @@ class HighwayTest {
     fun leftHandedMirrorsTheColumns() {
         val right = Highway.columnsFor(leftHanded = false)
         val left = Highway.columnsFor(leftHanded = true)
-        assertEquals(listOf("Ge", "Khe", "Te", "Ta"), right.map { it.bol })
-        // Dayan under the left hand, open strokes still on the outside.
-        assertEquals(listOf("Ta", "Te", "Khe", "Ge"), left.map { it.bol })
-        assertEquals(LaneId.DAYAN, left.first().lane)
-        assertEquals(Stroke.OPEN, left.last().stroke)
+        assertEquals(listOf(LaneId.BAYAN, LaneId.DAYAN), right)
+        // Dayan under the left hand.
+        assertEquals(listOf(LaneId.DAYAN, LaneId.BAYAN), left)
     }
 }

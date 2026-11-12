@@ -78,7 +78,8 @@ import com.kirtan.companion.Strings
 /**
  * The Learn tab: a "falling notes" view of the loaded beat.
  *
- * Each stroke drops down its own column (one per hand and stroke, headed by its
+ * Each stroke drops down its hand's column (bayan and dayan, or the karatalas'
+ * one), drawn as its stroke's shape with its bol beside it, headed by its
  * bol) and lands on the hit line at the instant the drum sounds it, so a learner
  * can watch what is coming and play along on a real mridanga. Watch-only by
  * design: there is no scoring, because the point is to follow the drum, not to
@@ -453,19 +454,22 @@ private fun HighwayCanvas(
             val cx = colX(i) + colW / 2
             val y = yFor(note.rel)
             if (y < -noteR || y > hitY + noteR * 3) continue
-            val laneColor = note.column.lane.colorToken.color
+            val laneColor = note.column.colorToken.color
             val landed = note.rel <= 0.0
             val alpha = if (landed) (1f + note.rel.toFloat() / Highway.TRAIL_STEPS.toFloat()).coerceIn(0f, 1f) else 1f
             if (playing && landed && note.rel > -0.6) {
                 drawCircle(laneColor.copy(alpha = 0.25f * alpha), radius = noteR * 2f, center = Offset(cx, hitY))
             }
-            drawNote(note.column.stroke, laneColor.copy(alpha = alpha), Offset(cx, y), noteR)
+            drawNote(note.stroke, laneColor.copy(alpha = alpha), Offset(cx, y), noteR)
+            // Its bol beside it: one column per hand, so the stroke is named here.
+            val bol = measurer.measure(note.bol, TextStyle(color = syahi.copy(alpha = alpha), fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
+            drawText(bol, topLeft = Offset(cx + noteR + 6.dp.toPx(), y - bol.size.height / 2f))
         }
 
-        // Targets on the hit line, with the column's bol underneath.
+        // Targets on the hit line, with the hand (lane) underneath.
         columns.forEachIndexed { i, column ->
             val cx = colX(i) + colW / 2
-            val laneColor = column.lane.colorToken.color
+            val laneColor = column.colorToken.color
             val hot = frame.notes.any { it.column == column && it.rel <= 0.0 && it.rel > -0.5 } && playing
             drawCircle(
                 color = if (hot) laneColor else laneColor.copy(alpha = 0.35f),
@@ -474,15 +478,10 @@ private fun HighwayCanvas(
                 style = DrawStroke(width = if (hot) 4.dp.toPx() else 2.dp.toPx()),
             )
             val label = measurer.measure(
-                column.bol,
+                column.label,
                 TextStyle(color = syahi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
             )
             drawText(label, topLeft = Offset(cx - label.size.width / 2f, size.height - labelH + 4.dp.toPx()))
-            val sub = measurer.measure(
-                "${column.lane.label} · " + Strings.get(if (column.stroke == Stroke.OPEN) R.string.learn_open else R.string.learn_closed),
-                TextStyle(color = soft, fontSize = 9.sp),
-            )
-            drawText(sub, topLeft = Offset(cx - sub.size.width / 2f, size.height - sub.size.height.toFloat()))
         }
 
         // A beat with nothing for this instrument says so, rather than leaving an
