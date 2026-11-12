@@ -31,7 +31,8 @@ const intervalLabel = (s) => (s < 60 ? t("learn.climbSec", { n: s }) : t("learn.
 /**
  * LearnView — "falling strokes": the loaded beat as a highway.
  *
- * Each stroke drops down its own column (one per hand and stroke, headed by
+ * Each stroke drops down its hand's column (bayan and dayan, or the karatalas'
+ * one), drawn as its stroke's shape with its bol beside it, headed by
  * its bol) and lands on the hit line the instant the drum sounds it, so a
  * learner can watch what's coming and play along on a real mridanga.
  * Watch-only: no scoring — the point is to follow the drum, not tap a phone.
@@ -277,7 +278,7 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns, base, emptyMsg }
           circle(cx, hitY, r * 2); ctx.fill();
         }
         ctx.globalAlpha = alpha;
-        if (base[n.column].stroke === "O") {
+        if (n.stroke === "O") {
           ctx.fillStyle = laneColor(ci); circle(cx, y, r); ctx.fill();
         } else {
           // An X inscribed in the disc's bounds, round-capped like a pen stroke.
@@ -288,10 +289,16 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns, base, emptyMsg }
           ctx.moveTo(cx + d, y - d); ctx.lineTo(cx - d, y + d);
           ctx.stroke();
         }
+        // Its bol beside it: one column per hand, so the stroke is named here.
+        ctx.fillStyle = c.syahi; ctx.font = `600 13px ${c.font}`;
+        ctx.textAlign = "left"; ctx.textBaseline = "middle";
+        // (Not once it has passed the line: it would run into the hand's label.)
+        if (y <= hitY) ctx.fillText(n.bol, cx + r + 6, y);
+        ctx.textBaseline = "alphabetic";
         ctx.globalAlpha = 1;
       }
 
-      // Targets on the hit line, with each column's bol underneath.
+      // Targets on the hit line, with the hand (lane) underneath.
       ctx.textAlign = "center";
       columns.forEach((col, i) => {
         const cx = colX(i) + colW / 2;
@@ -301,9 +308,7 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns, base, emptyMsg }
         circle(cx, hitY, r + 4); ctx.stroke();
         ctx.globalAlpha = 1;
         ctx.fillStyle = c.syahi; ctx.font = `600 15px ${c.font}`;
-        ctx.fillText(col.bol, cx, h - labelH + 18);
-        ctx.fillStyle = c.soft; ctx.font = `9px ${c.font}`;
-        ctx.fillText(`${LANE_NAMES[col.lane]} · ${col.stroke === "O" ? t("stroke.open") : t("stroke.closed")}`, cx, h - 3);
+        ctx.fillText(LANE_NAMES[col.lane], cx, h - labelH + 18);
       });
 
       // A beat with nothing for this instrument says so, rather than leaving
