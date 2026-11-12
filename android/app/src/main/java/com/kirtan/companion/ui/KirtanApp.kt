@@ -125,27 +125,27 @@ internal fun KirtanApp(
     var syncOpen by remember { mutableStateOf(false) }
 
     // ── Editor session ─────────────────────────────────────────────────────
-    // The editor is opened with an optional seed beat (from Home's or Beats'
-    // pencil) and remembers where to go back to. `editorSession` is a key: the
-    // draft is `remember`ed inside the screen, so a new session must force a new
-    // composition or the previous draft would survive into the next opening —
-    // the Compose equivalent of the web editor unmounting on close.
-    var editorInitial by remember { mutableStateOf<Beat?>(null) }
-    var editorReturn by remember { mutableStateOf<Tab?>(null) }
-    var editorSession by remember { mutableIntStateOf(0) }
+    // ONE draft, held here rather than in the editor screen, so leaving the tab
+    // and coming back finds it as it was (see EditorSession). Restored from disk
+    // at launch while it has unsaved changes. `forEveryone` on the session: the
+    // same beat can be opened both ways — "Customize" forks a private copy,
+    // "Edit for everyone" corrects the shipped row — and only the opener knows.
+    val draftStore = remember { com.kirtan.companion.ui.editor.EditorDraftStore(context) }
+    var editor by remember { mutableStateOf(draftStore.load()) }
     var prevTab by remember { mutableStateOf(Tab.HOME) }
 
-    /**
-     * True when the open editor session saves to the SHIPPED set rather than to
-     * this user's library.
-     *
-     * State on the session rather than a property of the beat, because the same
-     * beat can be opened both ways: "Customize" forks a private copy, "Edit for
-     * everyone" corrects the row every install reads. The editor itself does not
-     * know or care which — it drafts a beat and hands it back — so the distinction
-     * lives with whoever opened it.
-     */
-    var editorForEveryone by remember { mutableStateOf(false) }
+    /** An edit asked for while another has unsaved changes: Keep or Discard. */
+    var pendingOpen by remember { mutableStateOf<PendingOpen?>(null) }
+
+    // Kept on disk while dirty (cleared when clean), a beat behind each change.
+    LaunchedEffect(editor) {
+        val session = editor
+        androidx.compose.runtime.snapshotFlow { session?.let { Triple(it.draft, it.tags, it.dirty) } }
+            .collect {
+                kotlinx.coroutines.delay(400)
+                draftStore.save(session)
+            }
+    }
 
     /** A shipped save waiting on the maintainer's confirmation. */
     var pendingShippedSave by remember { mutableStateOf<PendingShippedSave?>(null) }
@@ -154,11 +154,19 @@ internal fun KirtanApp(
     /** A decoded share payload awaiting the library screen's confirmation. */
     var pendingImport by remember { mutableStateOf<ShareCodec.SharePayload?>(null) }
 
-    fun openEditor(beat: Beat?, from: Tab?, forEveryone: Boolean = false) {
-        editorInitial = beat
-        editorReturn = from
-        editorForEveryone = forEveryone
-        editorSession++
+    fun openEditor(beat: Beat?, from: Tab?, forEveryone: Boolean = false, discard: Boolean = false) {
+        val current = editor
+        if (!discard && current != null && current.dirty) {
+            // The same edit again (its pencil tapped twice): resume it.
+            if (beat != null && current.seed?.id == beat.id && current.forEveryone == forEveryone) {
+                current.returnTo = from
+                tab = Tab.EDITOR
+            } else {
+                pendingOpen = PendingOpen(beat, from, forEveryone)
+            }
+            return
+        }
+        editor = com.kirtan.companion.ui.editor.EditorSession(beat, forEveryone, from)
         tab = Tab.EDITOR
     }
 
@@ -298,11 +306,15 @@ internal fun KirtanApp(
                     onPendingImportHandled = { pendingImport = null },
                 )
 
-                Tab.EDITOR -> key(editorSession) {
+                Tab.EDITOR -> editor?.let { session -> key(session) {
+                    val editorForEveryone = session.forEveryone
+                    val editorInitial = session.seed
+                    val editorReturn = session.returnTo
                     BeatEditorScreen(
+                        session = session,
+                        onDiscard = { editor = session.fresh() },
                         engine = transport.engine,
                         transport = transport,
-                        initialBeat = editorInitial,
                         // Built-ins and community beats are read-only: editing makes a copy.
                         savesAsCopy = editorInitial?.readOnly == true && !editorForEveryone,
                         onSave = { beat, callback ->
@@ -324,9 +336,14 @@ internal fun KirtanApp(
                             }
                         },
                         onBack = editorReturn?.let { from -> { tab = from } },
-                        onClose = { tab = editorReturn ?: Tab.HOME },
+                        // Called only once a save has stuck: the draft is done with.
+                        onClose = {
+                            editor = null
+                            draftStore.save(null)
+                            tab = editorReturn ?: Tab.HOME
+                        },
                     )
-                }
+                } }
 
                 Tab.LEARN -> LearnScreen(
                     transport = transport,
@@ -358,6 +375,37 @@ internal fun KirtanApp(
             }
         }
 
+        pendingOpen?.let { pending ->
+            val name = editor?.draft?.name?.trim().orEmpty()
+            com.kirtan.companion.ui.components.KcSheet(
+                title = stringResource(R.string.editor_unsaved_title),
+                onDismiss = { pendingOpen = null },
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.editor_unsaved_body,
+                        name.ifEmpty { stringResource(R.string.editor_unsaved_new) },
+                    ),
+                    color = com.kirtan.companion.data.PaletteToken.SYAHI_SOFT.color,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(bottom = KirtanTheme.dimens.space4),
+                )
+                com.kirtan.companion.ui.components.PrimaryButton(
+                    label = stringResource(R.string.editor_keep_editing),
+                    onClick = { pendingOpen = null; tab = Tab.EDITOR },
+                )
+                Spacer(Modifier.height(KirtanTheme.dimens.space2))
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = stringResource(R.string.editor_discard_continue),
+                    onClick = {
+                        pendingOpen = null
+                        openEditor(pending.beat, pending.from, pending.forEveryone, discard = true)
+                    },
+                )
+                Spacer(Modifier.height(KirtanTheme.dimens.space4))
+            }
+        }
+
         BottomNav(
             active = tab,
             modifier = Modifier
@@ -375,7 +423,12 @@ internal fun KirtanApp(
             // The editor is a tab, so the pill parks on it while editing — but
             // opening it from the nav means a BLANK draft, not whatever was
             // loaded last, and nowhere to go back to.
-            onOpenEditor = { openEditor(null, null) },
+            // Unsaved work comes back; otherwise a blank draft, nowhere to go back to.
+            onOpenEditor = {
+                val current = editor
+                if (current != null && current.dirty) { current.returnTo = null; tab = Tab.EDITOR } else openEditor(null, null)
+            },
+            editorDirty = editor?.dirty == true,
             onLearn = { tab = Tab.LEARN },
             onSettings = { tab = Tab.SETTINGS },
         )
@@ -427,6 +480,8 @@ internal fun KirtanApp(
  * failure, and losing it would strand the user in an editor that no longer
  * responds to Save.
  */
+private class PendingOpen(val beat: Beat?, val from: Tab?, val forEveryone: Boolean)
+
 private class PendingShippedSave(val beat: Beat, val callback: (Beat?) -> Unit)
 
 /** A shipped remove waiting on the maintainer's confirmation. */

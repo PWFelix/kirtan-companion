@@ -92,6 +92,8 @@ internal fun BottomNav(
     onOpenEditor: () -> Unit,
     onLearn: () -> Unit,
     onSettings: () -> Unit,
+    /** The editor holds unsaved changes: a dot on its tab, visible from anywhere. */
+    editorDirty: Boolean = false,
 ) {
     val dimens = KirtanTheme.dimens
     val rule = KirtanTheme.colors.rule
@@ -131,6 +133,7 @@ internal fun BottomNav(
                 NavCell(
                     tab = tab,
                     isActive = tab == active,
+                    dot = tab == Tab.EDITOR && editorDirty,
                     onClick = when (tab) {
                         Tab.HOME -> onHome
                         Tab.BEATS -> onBeats
@@ -152,6 +155,7 @@ private fun NavCell(
     isActive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    dot: Boolean = false,
 ) {
     val dimens = KirtanTheme.dimens
     val target = if (isActive) PaletteToken.ON_CLAY.color else PaletteToken.SYAHI_SOFT.color
@@ -177,12 +181,25 @@ private fun NavCell(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            imageVector = tab.icon,
-            contentDescription = null,
-            tint = ink,
-            modifier = Modifier.size(22.dp),
-        )
+        Box {
+            Icon(
+                imageVector = tab.icon,
+                contentDescription = null,
+                tint = ink,
+                modifier = Modifier.size(22.dp),
+            )
+            if (dot) {
+                // Clay on the bar, ink-coloured on the clay pill so it still shows.
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 4.dp, y = (-2).dp)
+                        .size(8.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(if (isActive) PaletteToken.ON_CLAY.color else PaletteToken.CLAY.color),
+                )
+            }
+        }
         Spacer(Modifier.height(dimens.navLabelGap))
         Text(
             text = stringResource(tab.label),

@@ -132,8 +132,10 @@
     <string name="editor_community_copy_note">El ritmo de la comunidad se queda como está. Al guardar, tu versión se añade a Tus ritmos; podrás compartirla cuando el ritmo sea distinto.</string>
     <string name="editor_copy_name">%1$s (copia)</string>
     <string name="editor_default_name">Ritmo personalizado</string>
+    <string name="editor_discard_continue">Descartar y continuar</string>
     <string name="editor_feel_clears">Cambiar la sensación borra la cuadrícula.</string>
     <string name="editor_feel_meter">Sensación y compás</string>
+    <string name="editor_keep_editing">Seguir editando</string>
     <string name="editor_name_placeholder">Ponle nombre a tu ritmo</string>
     <string name="editor_need_stroke">Añade al menos un golpe antes de guardar.</string>
     <string name="editor_next_page">Página siguiente</string>
@@ -144,11 +146,18 @@
     <string name="editor_resample_undo">Deshacer recupera la cuadrícula anterior.</string>
     <string name="editor_resolution">Resolución</string>
     <string name="editor_rest">Silencio</string>
+    <string name="editor_revert">Revertir</string>
+    <string name="editor_revert_body">¿Descartar tus cambios y volver a %1$s tal como está guardado?</string>
     <string name="editor_save">Guardar ritmo</string>
     <string name="editor_save_as_new">Guardar como ritmo nuevo</string>
     <string name="editor_save_copy">Guardar como mi versión</string>
+    <string name="editor_start_over">Empezar de nuevo</string>
+    <string name="editor_start_over_body">¿Borrar este ritmo sin guardar y empezar de nuevo con la cuadrícula vacía?</string>
     <string name="editor_tap_any_cell">toca cualquier celda para cambiar de fila</string>
     <string name="editor_undo">Deshacer</string>
+    <string name="editor_unsaved_body">Tienes cambios sin guardar en %1$s.</string>
+    <string name="editor_unsaved_new">un ritmo nuevo</string>
+    <string name="editor_unsaved_title">Cambios sin guardar</string>
     <string name="err_bad_credentials">Ese correo y esa contraseña no coinciden. Inténtalo de nuevo.</string>
     <string name="err_beat_format">Uno de tus ritmos guardados («%1$s») tiene un formato que esta versión de la app no puede leer.</string>
     <string name="err_beat_gone">Ese ritmo ya no existe.</string>
@@ -269,6 +278,7 @@
     <string name="mixer_tone">Tono</string>
     <string name="mixer_tune">Afinar</string>
     <string name="mixer_unmute">Activar %1$s</string>
+    <string name="nav_editor_unsaved">Editor, cambios sin guardar</string>
     <string name="note_build_up">Para subir</string>
     <string name="note_custom">Personalizado</string>
     <string name="note_everyday">Diario</string>

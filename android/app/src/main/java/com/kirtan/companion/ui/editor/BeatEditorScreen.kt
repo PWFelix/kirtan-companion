@@ -108,7 +108,10 @@ import com.kirtan.companion.Strings
 internal fun BeatEditorScreen(
     engine: KirtanEngine,
     transport: TransportViewModel,
-    initialBeat: Beat?,
+    /** The draft being edited, held by the app so it outlives this screen. */
+    session: EditorSession,
+    /** Back to [session]'s starting point (Revert / Start over). */
+    onDiscard: () -> Unit,
     onSave: (Beat, (Beat?) -> Unit) -> Unit,
     onBack: (() -> Unit)?,
     onClose: () -> Unit,
@@ -124,11 +127,14 @@ internal fun BeatEditorScreen(
     val colors = KirtanTheme.colors
     val scope = rememberCoroutineScope()
 
-    var draft by remember { mutableStateOf(EditorDraft.from(initialBeat)) }
+    val initialBeat = session.seed
+    // Delegated to the session, so every edit below lands in the app-held draft.
+    var draft by session::draft
     // The editor's own Brahmaloka mode: a beat saved above 200 opens in it.
     var brahmaloka by remember { mutableStateOf(draft.bpm > com.kirtan.companion.data.NORMAL_MAX_BPM) }
     // The author's tags. A copy starts with the original's, as a suggestion.
-    var tags by remember { mutableStateOf(initialBeat?.tags.orEmpty()) }
+    var tags by session::tags
+    var discardOpen by remember { mutableStateOf(false) }
     var tagsOpen by remember { mutableStateOf(false) }
     var previewing by remember { mutableStateOf(false) }
     var feelOpen by remember { mutableStateOf(false) }
@@ -280,6 +286,20 @@ internal fun BeatEditorScreen(
                 },
                 modifier = Modifier.weight(1f),
             )
+            // Only when there is something to lose. The Editor tab's dot says the
+            // same from anywhere else in the app.
+            if (session.dirty) {
+                Text(
+                    text = stringResource(if (initialBeat == null) R.string.editor_start_over else R.string.editor_revert),
+                    color = PaletteToken.CLAY.color,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(dimens.radiusPad))
+                        .clickable { discardOpen = true }
+                        .padding(horizontal = dimens.space2, vertical = dimens.space2),
+                )
+            }
         }
 
         // ── Scrolling body ──
@@ -383,6 +403,33 @@ internal fun BeatEditorScreen(
                 enabled = !saving,
                 onClick = { handleSave(asNew = true) },
             )
+        }
+    }
+
+    if (discardOpen) {
+        val isNew = initialBeat == null
+        KcSheet(
+            title = stringResource(if (isNew) R.string.editor_start_over else R.string.editor_revert),
+            onDismiss = { discardOpen = false },
+        ) {
+            Text(
+                text = if (isNew) stringResource(R.string.editor_start_over_body)
+                else stringResource(R.string.editor_revert_body, initialBeat?.name.orEmpty()),
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(bottom = dimens.space4),
+            )
+            PrimaryButton(
+                label = stringResource(if (isNew) R.string.editor_start_over else R.string.editor_revert),
+                onClick = {
+                    discardOpen = false
+                    if (previewing) { transport.stopPreview(); previewing = false }
+                    onDiscard()
+                },
+            )
+            Spacer(Modifier.height(dimens.space2))
+            SecondaryButton(label = stringResource(R.string.common_cancel), onClick = { discardOpen = false })
+            Spacer(Modifier.height(dimens.space4))
         }
     }
 

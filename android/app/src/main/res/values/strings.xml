@@ -138,8 +138,10 @@
     <string name="editor_community_copy_note">The community beat stays as it is. Saving adds your version to Your beats; you can share it once the rhythm differs.</string>
     <string name="editor_copy_name">%1$s (copy)</string>
     <string name="editor_default_name">Custom Beat</string>
+    <string name="editor_discard_continue">Discard and continue</string>
     <string name="editor_feel_clears">Changing the feel clears the grid.</string>
     <string name="editor_feel_meter">Feel &amp; meter</string>
+    <string name="editor_keep_editing">Keep editing</string>
     <string name="editor_name_placeholder">Name your beat</string>
     <string name="editor_need_stroke">Add at least one stroke before saving.</string>
     <string name="editor_next_page">Next page</string>
@@ -150,11 +152,18 @@
     <string name="editor_resample_undo">Undo restores the old grid.</string>
     <string name="editor_resolution">Resolution</string>
     <string name="editor_rest">Rest</string>
+    <string name="editor_revert">Revert</string>
+    <string name="editor_revert_body">Throw away your changes and go back to the saved %1$s?</string>
     <string name="editor_save">Save beat</string>
     <string name="editor_save_as_new">Save as new beat</string>
     <string name="editor_save_copy">Save as my version</string>
+    <string name="editor_start_over">Start over</string>
+    <string name="editor_start_over_body">Clear this unsaved beat and start again from a blank grid?</string>
     <string name="editor_tap_any_cell">tap any cell to change row</string>
     <string name="editor_undo">Undo</string>
+    <string name="editor_unsaved_body">You have unsaved changes to %1$s.</string>
+    <string name="editor_unsaved_new">a new beat</string>
+    <string name="editor_unsaved_title">Unsaved changes</string>
     <string name="err_bad_credentials">That email and password didn\'t match. Try again.</string>
     <string name="err_beat_format">One of your saved beats (\"%1$s\") is in a format this version of the app can\'t read.</string>
     <string name="err_beat_gone">That beat no longer exists.</string>
@@ -275,6 +284,7 @@
     <string name="mixer_tone">Tone</string>
     <string name="mixer_tune">Tune</string>
     <string name="mixer_unmute">Unmute %1$s</string>
+    <string name="nav_editor_unsaved">Editor, unsaved changes</string>
     <string name="note_build_up">Build up</string>
     <string name="note_custom">Custom</string>
     <string name="note_everyday">Everyday</string>
