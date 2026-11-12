@@ -30,23 +30,22 @@ func clampBpm(_ bpm: Int) -> Int { min(max(bpm, MIN_BPM), MAX_BPM) }
 // tempos people actually chant at get real resolution under a thumb. Holding it at 200
 // for BRAHMA_HOLD_SECONDS unlocks the high range by ZOOMING OUT: the slider keeps its
 // size and its left end (40), and its right end becomes MAX_BPM, so the thumb slides
-// left to where 200 now sits. Dragging below 200 zooms back in. Same rules as the
+// left to where 200 now sits. It STAYS zoomed out below 200 — the slider never
+// resizes under a finger; only the ✦ badge leaves. Same rules as the
 // web's data/meter.js and Android's Meter.kt.
 let NORMAL_MAX_BPM = 200
-let BRAHMA_HOLD_SECONDS = 0.9
+let BRAHMA_HOLD_SECONDS = 1.4
 
 /// The slider's range for the current mode.
 func tempoRange(brahmaloka: Bool) -> ClosedRange<Int> {
     brahmaloka ? MIN_BPM...MAX_BPM : MIN_BPM...NORMAL_MAX_BPM
 }
 
-/// The mode a BPM puts you in, given the mode you were in: below 200 is always the
-/// normal range, above 200 always Brahmaloka (a loaded fast beat must be reachable on
-/// the slider), and exactly 200 keeps whatever you had.
+/// The mode a BPM puts you in, given the mode you were in: once in Brahmaloka you stay
+/// (leaving is the ✦ badge's job, so the slider never resizes mid-drag); outside it,
+/// only a tempo above 200 — a loaded fast beat — puts you in.
 func brahmalokaFor(bpm: Int, was: Bool) -> Bool {
-    if bpm < NORMAL_MAX_BPM { return false }
-    if bpm > NORMAL_MAX_BPM { return true }
-    return was
+    was || bpm > NORMAL_MAX_BPM
 }
 
 /// A tempo restored at launch: every launch starts outside Brahmaloka.

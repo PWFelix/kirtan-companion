@@ -11,8 +11,10 @@ final class BrahmalokaTests: XCTestCase {
         XCTAssertEqual(tempoRange(brahmaloka: true), 40...500)
     }
 
-    func testBelow200AlwaysLeaves() {
-        XCTAssertFalse(brahmalokaFor(bpm: 199, was: true))
+    func testBelow200StaysInBrahmaloka() {
+        // The slider must not resize under the finger; only the ✦ badge leaves.
+        XCTAssertTrue(brahmalokaFor(bpm: 199, was: true))
+        XCTAssertTrue(brahmalokaFor(bpm: 40, was: true))
         XCTAssertFalse(brahmalokaFor(bpm: 120, was: false))
     }
 

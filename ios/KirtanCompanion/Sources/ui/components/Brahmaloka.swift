@@ -6,7 +6,7 @@ import UIKit
 // Brahmaloka time: the tempo slider's high range and the weather that opens it.
 // The rules are pure and live in data/Meter.swift; this file is only the feel:
 // the hold-to-unlock slider, the ✦ badge, the storm overlay, the thunder and the
-// haptics. Same design as the web's useBrahmaHold.js + BrahmalokaBurst.jsx and
+// haptics. Same design as the web's ui/BpmRange.jsx + BrahmalokaBurst.jsx and
 // Android's ui/components/Brahmaloka.kt.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -14,14 +14,19 @@ private let gold = Color(hex: 0xF2C14E)
 private let fire = Color(hex: 0xD9541E)
 private let ember = Color(hex: 0xB8471A)
 
-/// The tempo slider: 40–200, or zoomed out to 40–500 in Brahmaloka (same width, the thumb moves). Holding the thumb at 200 for
-/// `BRAHMA_HOLD_SECONDS` calls `onUnlock`, with a glow swelling behind the thumb
-/// while you hold so it is clear something is coming.
+/// The tempo slider: 40–200, or zoomed out to 40–500 in Brahmaloka (same width, the
+/// thumb moves). Same design as Android's BpmSlider and the web's ui/BpmRange.jsx.
 ///
-/// Identified BY THE MODE so the slider is rebuilt when the range changes. That ends
-/// the drag in progress, which is the point: the finger is still pressed at the
-/// right-hand end, and a live drag on the new 40–500 range would fling the tempo
-/// to ~490 on its next move.
+/// A GRAB SLIDER, not SwiftUI's: touching anywhere grabs the thumb where it is, and
+/// the drag moves it RELATIVE to that, so a tap never changes the tempo.
+///
+/// THE BUILD-UP. Holding at 200 (in the normal range) pushes against the end: over
+/// `BRAHMA_HOLD_SECONDS` the slider shakes harder, a glow swells round the thumb and
+/// haptic ticks quicken, then it breaks through and `onUnlock` fires — feedback that
+/// you are pushing through something, and what makes Brahmaloka findable.
+///
+/// Drags are applied as DELTAS on the range in force, so when the range zooms out
+/// under a finger still pressed it carries on at the new scale — no fling to ~490.
 struct BpmSlider: View {
     let bpm: Int
     let brahmaloka: Bool
@@ -29,55 +34,95 @@ struct BpmSlider: View {
     let onChange: (Int) -> Void
     let onUnlock: () -> Void
 
-    var body: some View {
-        BpmSliderInner(bpm: bpm, brahmaloka: brahmaloka, enabled: enabled, onChange: onChange, onUnlock: onUnlock)
-            .id(brahmaloka)
-    }
-}
+    @State private var held = false
+    @State private var lastX: CGFloat?
+    @State private var dragValue = 0.0
+    @State private var build = 0.0
+    @State private var chargeStart: Date?
 
-private struct BpmSliderInner: View {
-    let bpm: Int
-    let brahmaloka: Bool
-    let enabled: Bool
-    let onChange: (Int) -> Void
-    let onUnlock: () -> Void
-
-    @State private var editing = false
-    @State private var glow = 0.0
-
-    private var charging: Bool { enabled && !brahmaloka && bpm >= NORMAL_MAX_BPM && editing }
+    private let pad: CGFloat = 12
+    private var range: ClosedRange<Int> { tempoRange(brahmaloka: brahmaloka) }
+    private var charging: Bool { enabled && held && !brahmaloka && bpm >= NORMAL_MAX_BPM }
 
     var body: some View {
-        let range = tempoRange(brahmaloka: brahmaloka)
-        Slider(
-            value: Binding(
-                get: { Double(min(max(bpm, range.lowerBound), range.upperBound)) },
-                set: { onChange(Int($0.rounded())) },
-            ),
-            in: Double(range.lowerBound)...Double(range.upperBound),
-            step: 1,
-            onEditingChanged: { editing = $0 },
-        )
-        .tint(brahmaloka ? fire : Palette.clay)
-        .disabled(!enabled)
-        .background(alignment: .trailing) {
-            // Charging only happens at 200, so the thumb is at the trailing end.
-            Circle()
-                .fill(RadialGradient(colors: [gold.opacity(0.8), fire.opacity(0.35), .clear], center: .center, startRadius: 0, endRadius: 40))
-                .frame(width: 80, height: 80)
-                .scaleEffect(0.4 + 0.6 * glow)
-                .opacity(glow)
-                .offset(x: 26)
-                .allowsHitTesting(false)
+        GeometryReader { geo in
+            let span = Double(range.upperBound - range.lowerBound)
+            let fraction = min(max(Double(bpm - range.lowerBound) / span, 0), 1)
+            let x = pad + CGFloat(fraction) * (geo.size.width - 2 * pad)
+            let accent = brahmaloka ? fire : Palette.clay
+            TimelineView(.animation(paused: chargeStart == nil)) { timeline in
+                let t = chargeStart.map { timeline.date.timeIntervalSince($0) } ?? 0
+                let b = min(t / BRAHMA_HOLD_SECONDS, 1)
+                let amp = chargeStart == nil ? 0 : 1 + 5 * b * b
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Palette.headSunken).frame(height: 6).padding(.horizontal, pad)
+                    Capsule().fill(accent).frame(width: max(0, x - pad), height: 6).padding(.leading, pad)
+                    if b > 0 {
+                        Circle()
+                            .fill(RadialGradient(colors: [gold.opacity(0.8 * b), fire.opacity(0.4 * b), .clear],
+                                                 center: .center, startRadius: 0, endRadius: 14 + 30 * b))
+                            .frame(width: 2 * (14 + 30 * b), height: 2 * (14 + 30 * b))
+                            .offset(x: x - (14 + 30 * b))
+                    }
+                    Circle()
+                        .fill(Palette.head)
+                        .overlay(Circle().stroke(accent, lineWidth: 2))
+                        .shadow(color: .black.opacity(0.15), radius: 1, y: 1)
+                        .frame(width: held ? 24 : 22, height: held ? 24 : 22)
+                        .offset(x: x - (held ? 12 : 11))
+                }
+                .frame(maxHeight: .infinity)
+                .offset(x: amp * sin(t * 90), y: amp * 0.4 * sin(t * 130 + 1))
+                .rotationEffect(.degrees(0.8 * b * sin(t * 70)))
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { g in
+                        guard enabled else { return }
+                        if !held { held = true; dragValue = Double(bpm); lastX = g.location.x }
+                        let dx = g.location.x - (lastX ?? g.location.x)
+                        lastX = g.location.x
+                        guard dx != 0 else { return }
+                        let r = range
+                        let track = max(1, geo.size.width - 2 * pad)
+                        dragValue = min(max(dragValue + Double(dx / track) * Double(r.upperBound - r.lowerBound),
+                                            Double(r.lowerBound)), Double(r.upperBound))
+                        let v = Int(dragValue.rounded())
+                        if v != bpm { onChange(v) }
+                    }
+                    .onEnded { _ in held = false; lastX = nil }
+            )
+        }
+        .frame(height: 44)
+        .opacity(enabled ? 1 : 0.5)
+        .accessibilityElement()
+        .accessibilityLabel(String(localized: "Tempo", bundle: .strings))
+        .accessibilityValue("\(bpm)")
+        .accessibilityAdjustableAction { direction in
+            guard enabled else { return }
+            switch direction {
+            case .increment: onChange(min(bpm + 1, range.upperBound))
+            case .decrement: onChange(max(bpm - 1, range.lowerBound))
+            @unknown default: break
+            }
         }
         .task(id: charging) {
-            guard charging else {
-                glow = 0
-                return
+            guard charging else { chargeStart = nil; return }
+            chargeStart = .now
+            let tick = UIImpactFeedbackGenerator(style: .rigid)
+            tick.prepare()
+            let start = Date.now
+            while !Task.isCancelled {
+                let b = min(Date.now.timeIntervalSince(start) / BRAHMA_HOLD_SECONDS, 1)
+                if b >= 1 { break }
+                tick.impactOccurred(intensity: 0.4 + 0.6 * b)
+                try? await Task.sleep(for: .milliseconds(Int(max(40, 220 - 180 * b))))
             }
-            withAnimation(.easeIn(duration: BRAHMA_HOLD_SECONDS)) { glow = 1 }
-            try? await Task.sleep(for: .seconds(BRAHMA_HOLD_SECONDS))
-            if !Task.isCancelled { onUnlock() }
+            guard !Task.isCancelled else { return }
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            chargeStart = nil
+            onUnlock()
         }
     }
 }
