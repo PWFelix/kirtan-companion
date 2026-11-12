@@ -37,4 +37,13 @@ class HillClimbTest {
         assertEquals("0:05", HillClimb.clock(5))
         assertEquals("0:00", HillClimb.clock(-3))
     }
+
+    @Test fun handsOverHalfABarPlusASecondEarly() {
+        // 60 bpm, 4/4: a 4 s bar, so 2 s + 1.
+        assertEquals(3, HillClimb.leadSeconds(60, 4.0))
+        // 120 bpm, 4/4: a 2 s bar → 1 + 1.
+        assertEquals(2, HillClimb.leadSeconds(120, 4.0))
+        // 7/8 at 40 bpm: 5.25 s bar → ceil(2.625) + 1.
+        assertEquals(4, HillClimb.leadSeconds(40, 3.5))
+    }
 }

@@ -127,16 +127,25 @@ internal fun LearnScreen(
     val climbTop = HillClimb.atTop(state.bpm, ceiling)
     val liveBpm by rememberUpdatedState(state.bpm)
     val liveCeiling by rememberUpdatedState(ceiling)
+    val liveBeatsPerBar by rememberUpdatedState(beat?.beatsPerBar ?: 4.0)
     // The countdown runs on PLAYING time: pausing holds it, and Play carries on.
     LaunchedEffect(climbOn, state.playing, climbStep, climbEvery) {
         if (!climbOn || !state.playing) return@LaunchedEffect
+        // Handed over a little early so it can land on the 1 nearest the deadline
+        // (HillClimb.leadSeconds); `handed` keeps it to once per step.
+        var handed = false
         while (true) {
             delay(1000)
             if (HillClimb.atTop(liveBpm, liveCeiling)) continue
             climbLeft -= 1
+            val lead = HillClimb.leadSeconds(liveBpm, liveBeatsPerBar)
+            if (!handed && climbLeft <= lead) {
+                transport.changeBpmAtBar(HillClimb.next(liveBpm, climbStep, liveCeiling), climbLeft.coerceAtLeast(0).toDouble())
+                handed = true
+            }
             if (climbLeft <= 0) {
-                transport.changeBpm(HillClimb.next(liveBpm, climbStep, liveCeiling))
                 climbLeft = climbEvery
+                handed = false
             }
         }
     }

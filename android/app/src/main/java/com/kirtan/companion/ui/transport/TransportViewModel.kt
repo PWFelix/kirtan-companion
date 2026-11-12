@@ -325,11 +325,34 @@ class TransportViewModel(
     // ── Tempo ──────────────────────────────────────────────────────────────
 
     fun changeBpm(value: Int) {
+        barChange?.cancel()
         bpm = value.coerceIn(MIN_BPM, MAX_BPM)
         engine.setBpm(bpm)
         val s = _state.value
         _state.value = s.copy(bpm = bpm, brahmaloka = brahmalokaFor(bpm, s.brahmaloka))
         container.session.saveBpm(bpm)
+    }
+
+    private var barChange: kotlinx.coroutines.Job? = null
+
+    /**
+     * Hill climb's step: the new tempo starts on the 1 nearest [inSeconds] from
+     * now rather than mid-bar. The display follows when it is HEARD. Stopped,
+     * there's no bar to wait for, so it's an ordinary change.
+     */
+    fun changeBpmAtBar(value: Int, inSeconds: Double) {
+        val target = value.coerceIn(MIN_BPM, MAX_BPM)
+        val wait = engine.setBpmAtBar(target, inSeconds) ?: return changeBpm(target)
+        barChange?.cancel()
+        barChange = viewModelScope.launch {
+            kotlinx.coroutines.delay((wait * 1000).toLong())
+            // Stopped before that bar: the engine dropped it, so must the display.
+            if (!_state.value.playing) return@launch
+            bpm = target
+            val s = _state.value
+            _state.value = s.copy(bpm = bpm, brahmaloka = brahmalokaFor(bpm, s.brahmaloka))
+            container.session.saveBpm(bpm)
+        }
     }
 
     /** Clamp to what the slider reaches now: 200, or 500 in Brahmaloka. */

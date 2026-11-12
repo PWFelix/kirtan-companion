@@ -142,6 +142,20 @@ class MusicalClock(val sampleRate: Int) {
         beatsPerBar = newBeatsPerBar.coerceAtLeast(0.25)
     }
 
+    /**
+     * The bar line (as an absolute tick) nearest [targetFrame] — the 1 a change
+     * aimed at that moment should land on — but never one already behind
+     * [nowFrame]: a downbeat that has sounded can't be changed any more, so the
+     * next one stands in. Measured at the current tempo.
+     */
+    fun barTickNear(targetFrame: Long, nowFrame: Long): Double {
+        val tpb = ticksPerBar.toDouble()
+        var bar = kotlin.math.round(tickAt(targetFrame) / tpb) * tpb
+        val now = tickAt(nowFrame)
+        while (bar < now) bar += tpb
+        return bar
+    }
+
     /** The absolute tick at an absolute frame. */
     fun tickAt(frame: Long): Double {
         val elapsed = frame - anchorFrame

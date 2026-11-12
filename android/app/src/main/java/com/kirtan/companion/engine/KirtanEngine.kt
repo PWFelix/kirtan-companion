@@ -218,7 +218,29 @@ class KirtanEngine(
         sequencer.invalidateGuard()
     }
 
-    fun setBpm(bpm: Int) = clock.setBpm(bpm.toDouble(), renderer.framesRendered)
+    fun setBpm(bpm: Int) {
+        pendingBarBpm.set(null) // a direct change overrides one waiting for its bar
+        clock.setBpm(bpm.toDouble(), renderer.framesRendered)
+    }
+
+    /** A tempo waiting for its bar line: (absolute tick of that 1, bpm). */
+    private val pendingBarBpm = java.util.concurrent.atomic.AtomicReference<Pair<Double, Int>?>(null)
+
+    /**
+     * Change tempo ON THE 1 nearest [inSeconds] from now (Learn's hill climb), so
+     * the speed-up starts a bar rather than landing mid-phrase. Applied on the
+     * audio thread at that downbeat's exact frame. Returns the seconds until
+     * then, so the UI can show the new tempo as it is heard; null when stopped
+     * (nothing to snap to — the caller changes tempo directly).
+     */
+    fun setBpmAtBar(bpm: Int, inSeconds: Double): Double? {
+        if (!clock.isRunning) return null
+        val now = renderer.framesRendered
+        val target = now + (inSeconds * clock.sampleRate).toLong()
+        val bar = clock.barTickNear(target, now)
+        pendingBarBpm.set(bar to bpm)
+        return ((clock.frameAt(bar) - now).coerceAtLeast(0)).toDouble() / clock.sampleRate
+    }
 
     fun setVolume(value: Float) = soundPlayer.setVolume(value)
 
@@ -279,6 +301,7 @@ class KirtanEngine(
         if (!isPlaying) return
         isPlaying = false
         pendingStart.set(false)
+        pendingBarBpm.set(null)
         clock.stop()
         // Voices are left to ring out rather than being cut: stopping mid-decay
         // is a click, and a drum that is allowed to finish sounds like a drum
@@ -395,6 +418,18 @@ class KirtanEngine(
         while (true) {
             val key = pendingPads.poll() ?: break
             soundPlayer.play(key, 0)
+        }
+
+        // 2b. A tempo waiting for its bar line, if that 1 falls in this block:
+        //     re-anchor exactly there, so the downbeat keeps its place and every
+        //     step after it runs at the new tempo.
+        pendingBarBpm.get()?.let { (barTick, newBpm) ->
+            if (!clock.isRunning) return@let
+            val at = clock.frameAt(barTick)
+            if (at < fromFrame + count) {
+                clock.setBpm(newBpm.toDouble(), maxOf(at, fromFrame))
+                pendingBarBpm.compareAndSet(pendingBarBpm.get(), null)
+            }
         }
 
         // 3. Sequenced steps falling inside this block.

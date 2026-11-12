@@ -23,6 +23,19 @@ object HillClimb {
     /** One step up, never past [ceiling] (the top of the slider's range, 200 or 500). */
     fun next(bpm: Int, step: Int, ceiling: Int): Int = maxOf(bpm, minOf(bpm + step, ceiling))
 
+    /**
+     * SNAP TO BAR. A step doesn't land mid-phrase: the new tempo starts on the 1
+     * nearest the moment the countdown runs out — up to half a bar before it or
+     * after it. So the change is handed to the engine this many whole seconds
+     * BEFORE the deadline (half a bar, rounded up, plus a second for the
+     * countdown's own granularity), early enough that the nearest 1 is still
+     * ahead. The engine picks that 1 and applies the tempo exactly on it.
+     */
+    fun leadSeconds(bpm: Int, beatsPerBar: Double): Int {
+        val barSeconds = 60.0 / bpm.coerceAtLeast(1) * beatsPerBar
+        return kotlin.math.ceil(barSeconds / 2).toInt() + 1
+    }
+
     /** True when another step can't go any higher. */
     fun atTop(bpm: Int, ceiling: Int): Boolean = bpm >= ceiling
 
