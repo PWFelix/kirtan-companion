@@ -514,7 +514,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           </div>
 
           <div style={st.tempoRow}>
-            <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>{t("tempo.bpm")}</span>
+            {/* Three digits' room, so the slider doesn't shift at 100 or 200. */}
+            <span style={{ ...st.bpmNum, minWidth: "3ch", textAlign: "right" }}>{bpm}</span><span style={st.bpmUnit}>{t("tempo.bpm")}</span>
             <input className={"kc-range" + (brahmaloka ? " kc-brahma" : "") + (hold.charging ? " kc-charging" : "")}
               type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
               title={brahmaloka ? t("brahma.badge") : t("brahma.hint")}

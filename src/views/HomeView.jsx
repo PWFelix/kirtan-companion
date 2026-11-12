@@ -391,12 +391,17 @@ function HomeView({
             <span style={st.bpmUnit}>{t("tempo.bpm")}</span>
             <span style={st.bpmCaret} aria-hidden="true">▾</span>
           </button>
+          {/* The way out of Brahmaloka rides on the number, never in the slider's
+              row, so the slider keeps its width and nothing is pushed off. */}
+          {/* Always present (zero-width), so the row's gaps are the same either way. */}
+          <span style={st.landBadgeAnchor}>
+            {brahmaloka && <span style={st.landBadge}>{brahmaBadge}</span>}
+          </span>
           <input className={rangeClass} type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
             title={brahmaloka ? undefined : t("brahma.hint")}
             onChange={hold.guard((e) => changeBpm(Number(e.target.value)))} disabled={tempoLocked}
             style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
             aria-label={t("tempo.title")} />
-          {brahmaBadge}
           {lockButton}
           <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
           <button onClick={() => setMixerOpen(true)} style={st.landEditBtn} aria-label={t("mixer.title")}
@@ -469,6 +474,9 @@ function HomeView({
             </button>
             <button onClick={() => nudgeBpm(1)} disabled={bpm >= MAX_BPM}
               aria-label={t("common.faster")} style={{ ...st.bpmStep, opacity: bpm >= MAX_BPM ? 0.3 : 1 }}>+</button>
+            {/* With the number it changes, not in the slider's row: the slider
+                keeps its width in Brahmaloka. */}
+            {brahmaBadge}
           </div>
           <div style={st.tempoRow}>
             <input className={rangeClass} type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
@@ -476,7 +484,6 @@ function HomeView({
               onChange={hold.guard((e) => changeBpm(Number(e.target.value)))} disabled={tempoLocked}
               style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
               aria-label={t("tempo.title")} />
-            {brahmaBadge}
             {lockButton}
             <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
           </div>
@@ -526,6 +533,10 @@ const st = {
     border: "1px solid oklch(0.70 0.17 60)", background: "oklch(0.93 0.07 80)",
     color: "oklch(0.45 0.14 45)", fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 700, lineHeight: 1,
   },
+  // Landscape: a zero-width anchor after the BPM button, the badge hung off it
+  // over the number's top-right corner so the packed row doesn't reflow.
+  landBadgeAnchor: { position: "relative", width: 0, alignSelf: "stretch", flexShrink: 0 },
+  landBadge: { position: "absolute", top: -8, right: 2, zIndex: 1, transform: "scale(0.7)", transformOrigin: "top right" },
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   tapBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
   lockBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },

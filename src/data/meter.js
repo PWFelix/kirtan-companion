@@ -28,14 +28,14 @@ export const MIN_BPM = 40, MAX_BPM = 500;
 
 // Brahmaloka time. The slider normally spans MIN_BPM–NORMAL_MAX_BPM, so the
 // tempos people actually chant at get real resolution under a thumb. Holding
-// it at NORMAL_MAX_BPM unlocks the high range (BRAHMA_FLOOR_BPM–MAX_BPM); going
-// below NORMAL_MAX_BPM locks it again. The floor sits just under 200 so you can
-// drag back down out of Brahmaloka with the same slider.
-export const NORMAL_MAX_BPM = 200, BRAHMA_FLOOR_BPM = 190;
+// it at NORMAL_MAX_BPM unlocks the high range by ZOOMING OUT: the slider keeps
+// its size and its left end (40) and its right end becomes MAX_BPM, so the thumb
+// slides left to where 200 now sits. Dragging below NORMAL_MAX_BPM zooms back in.
+export const NORMAL_MAX_BPM = 200;
 
 /** The slider's { min, max } for the current mode. */
 export const tempoRange = (brahmaloka) =>
-  brahmaloka ? { min: BRAHMA_FLOOR_BPM, max: MAX_BPM } : { min: MIN_BPM, max: NORMAL_MAX_BPM };
+  brahmaloka ? { min: MIN_BPM, max: MAX_BPM } : { min: MIN_BPM, max: NORMAL_MAX_BPM };
 
 /**
  * The mode a BPM puts you in, given the mode you were in: below 200 is always
