@@ -185,7 +185,7 @@ struct BeatEditorView: View {
                 .pickerStyle(.menu)
             }
             control(String(localized: "Tempo", bundle: .strings)) {
-                Stepper("\(bpm)", value: $bpm, in: 40...240, step: 1)
+                Stepper("\(bpm)", value: $bpm, in: MIN_BPM...MAX_BPM, step: 1)
                     .font(.footnote.monospacedDigit())
             }
         }

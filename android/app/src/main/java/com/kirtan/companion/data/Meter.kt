@@ -32,7 +32,7 @@ import kotlin.math.roundToInt
  * audio engine.
  */
 const val MIN_BPM = 40
-const val MAX_BPM = 200
+const val MAX_BPM = 500
 
 fun clampBpm(bpm: Int): Int = bpm.coerceIn(MIN_BPM, MAX_BPM)
 

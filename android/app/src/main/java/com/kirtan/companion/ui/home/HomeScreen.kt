@@ -769,7 +769,7 @@ private fun TempoSheet(
         ) {
             OutlinedTextField(
                 value = draft,
-                // Digits only, and capped at three characters: MAX_BPM is 200, so
+                // Digits only, and capped at three characters: MAX_BPM is 500, so
                 // nothing longer can ever be valid, and accepting it would invite
                 // a value that is then silently clamped.
                 onValueChange = { input ->

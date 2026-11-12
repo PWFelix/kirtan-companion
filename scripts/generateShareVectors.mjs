@@ -33,7 +33,7 @@ out.hostile = [
   { why: "q out of range", code: b64url({ v: 1, t: "b", n: "x", m: 90, g: [2, 2], q: 99, p: {} }) },
   { why: "empty groups", code: b64url({ v: 1, t: "b", n: "x", m: 90, g: [], q: 2, p: {} }) },
   { why: "not JSON at all", code: "bm90LWpzb24" },
-  { why: "bpm absurd, must clamp not reject", code: b64url({ v: 1, t: "b", n: "x", m: 1e9, g: [2, 2], q: 2, p: {} }), expectClampedBpm: 200 },
+  { why: "bpm absurd, must clamp not reject", code: b64url({ v: 1, t: "b", n: "x", m: 1e9, g: [2, 2], q: 2, p: {} }), expectClampedBpm: 500 },
   { why: "name with control + format chars", code: b64url({ v: 1, t: "b", n: "Evil\u202e\u0000Name", m: 90, g: [2, 2], q: 2, p: {} }), expectName: "EvilName" },
   // NOTE: the key must be computed. `{ __proto__: ... }` in an object literal
   // sets the PROTOTYPE and is dropped by JSON.stringify, so the vector would

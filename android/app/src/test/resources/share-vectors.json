@@ -1256,7 +1256,7 @@
     {
       "why": "bpm absurd, must clamp not reject",
       "code": "eyJ2IjoxLCJ0IjoiYiIsIm4iOiJ4IiwibSI6MTAwMDAwMDAwMCwiZyI6WzIsMl0sInEiOjIsInAiOnt9fQ",
-      "expectClampedBpm": 200
+      "expectClampedBpm": 500
     },
     {
       "why": "name with control + format chars",

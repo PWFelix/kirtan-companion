@@ -18,7 +18,7 @@
 /// Tempo bounds. They live here rather than in the transport ViewModel so pure data
 /// modules can clamp a BPM without dragging in SwiftUI or the audio engine.
 let MIN_BPM = 40
-let MAX_BPM = 200
+let MAX_BPM = 500
 
 /// A fresh transport's tempo before any beat is loaded. `loadBeat` adopts the
 /// selected beat's own tempo on first selection, so this is only a placeholder.
