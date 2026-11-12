@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.union
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +61,10 @@ internal fun SplashScreen(
             .fillMaxSize()
             // Same edge-to-edge contract as KirtanApp: the window draws behind the
             // system bars, so the splash clears them itself.
-            .windowInsetsPadding(WindowInsets.systemBars)
+            // Plus the camera cutout: in immersive mode the hidden status bar's inset
+            // is zero, and without this the top row (the editor's name field) drew
+            // under the camera.
+            .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
             .background(PaletteToken.HEAD.color),
         contentAlignment = Alignment.Center,
     ) {

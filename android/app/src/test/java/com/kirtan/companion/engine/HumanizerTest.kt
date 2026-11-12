@@ -131,20 +131,37 @@ class HumanizerTest {
     }
 
     @Test
-    fun `drag falls progressively behind through the bar and lands sam on time`() {
+    fun `drag falls behind through the bar then eases back into sam without a jump`() {
         val h = humanizer(Feel.DRAG)
         val stepMs = 375.0 // daspahir at 40 BPM: 32 cells over 8 pulses
-        val ramp = (0 until 32).map { h.rampMs(it, 32, stepMs) }
+        val release = 28 // the last beat of 8 × 4
+        val ramp = (0 until 32).map { h.rampMs(it, 32, stepMs, release) }
         assertEquals(0.0, ramp[0], 0.0)
-        // Each gap longer than the last: the lateness grows, and grows faster.
-        assertTrue(ramp.zipWithNext().all { (a, b) -> b > a })
-        val gaps = ramp.zipWithNext { a, b -> b - a }
+        // Up to the last beat, each gap longer than the last: it grows, and faster.
+        val rising = ramp.take(release + 1)
+        assertTrue(rising.zipWithNext().all { (a, b) -> b > a })
+        val gaps = rising.zipWithNext { a, b -> b - a }
         assertTrue(gaps.last() > gaps.first())
-        assertTrue(ramp.last() <= Humanizer.DRAG_RAMP_MAX_MS)
+        assertTrue(ramp.max() <= Humanizer.DRAG_RAMP_MAX_MS)
+        // Then it eases back: through the last beat and over the loop into sam
+        // (which sits DRAG_SAM_STEPS late), every gap shortens by the same small
+        // amount — no single gap collapses at the loop point.
+        val samLate = Humanizer.DRAG_SAM_STEPS * stepMs
+        val easing = ramp.drop(release) + samLate
+        val shortenings = easing.zipWithNext { a, b -> a - b }
+        assertTrue(shortenings.all { it > 0 })
+        assertEquals(shortenings.first(), shortenings.last(), 1e-9)
+        assertTrue(shortenings.max() < 0.1 * stepMs)
         // Tempo-relative: at a fast tempo it is the same share of a step.
-        assertEquals(h.rampMs(16, 32, 100.0) * 2, h.rampMs(16, 32, 200.0), 1e-9)
-        // And it reaches the engine: a late stroke is later than with no tempo given.
+        assertEquals(h.rampMs(16, 32, 100.0, release) * 2, h.rampMs(16, 32, 200.0, release), 1e-9)
         assertTrue(Feel.entries.filter { it != Feel.DRAG }.all { it.dragMs == 0.0 })
+    }
+
+    @Test
+    fun `the ease back starts on the last beat`() {
+        assertEquals(12, Humanizer.releaseStepFor(listOf(4, 4, 4, 4), 16))
+        assertEquals(28, Humanizer.releaseStepFor(List(8) { 4 }, 32))
+        assertEquals(12, Humanizer.releaseStepFor(listOf(16), 16))
     }
 
     /** Mean (dayan − bayan) onset gap at [step], in ms. Positive: bayan first. */

@@ -46,8 +46,10 @@ enum class Feel(val amount: Float, val label: String, val dragMs: Double = 0.0) 
  *     [DRAG_BEAT_SCALE] on beat starts, all of it between), plus a RAMP that
  *     grows through the bar — position^[DRAG_RAMP_CURVE] × [DRAG_RAMP_STEPS]
  *     of a step, capped at [DRAG_RAMP_MAX_MS] — so each gap is a little longer
- *     than the last and the cycle sounds like it is slowing, until sam snaps
- *     back on the grid. The ramp is in steps, not ms, so it feels the same at
+ *     than the last and the cycle sounds like it is slowing. Over the bar's
+ *     LAST beat it eases back to sam's own small lateness — a few gaps each a
+ *     little short, rather than one gap a quarter short at the loop point,
+ *     which a user heard as the loop "jumping" when it came round again. The ramp is in steps, not ms, so it feels the same at
  *     any tempo. Because none of it is random it reads as a style, not sloppiness.
  *  4. TWO HANDS. The bayan lands a few ms after the dayan, as it does on a real
  *     two-headed drum, rather than both samples starting on the same frame.
@@ -85,6 +87,10 @@ class Humanizer(private val sampleRate: Int) {
     @Volatile
     private var dragShape: FloatArray = FloatArray(0)
 
+    /** The step where the drag stops growing and eases back to sam: the last beat. */
+    @Volatile
+    private var releaseStep: Int = 0
+
     /** The slow timing walk, in ms; positive is late. */
     private var drift = 0.0
 
@@ -109,6 +115,7 @@ class Humanizer(private val sampleRate: Int) {
                 else -> 1f
             }
         }
+        releaseStep = releaseStepFor(groupsFor(beat), levels.size)
         seed = (beat.id ?: beat.name).hashCode().toLong()
     }
 
@@ -147,9 +154,9 @@ class Humanizer(private val sampleRate: Int) {
         // Sam's is wider: the "1" is announced, not just struck.
         if (flam && lane == LaneId.DAYAN) ms += if (step == 0) FLAM_SAM_MS else FLAM_MS
         if (feel.dragMs > 0.0 && shape.isNotEmpty()) {
-            ms += rampMs(step, shape.size, stepMs)
+            ms += rampMs(step, shape.size, stepMs, releaseStep)
             // Sam too sits back: the ramp resets there, but not onto the grid.
-            if (step == 0) ms += (DRAG_SAM_STEPS * stepMs).coerceAtMost(DRAG_SAM_MAX_MS)
+            if (step == 0) ms += samDragMs(stepMs)
         }
         return msToFrames(PAD_MS + ms)
     }
@@ -173,15 +180,37 @@ class Humanizer(private val sampleRate: Int) {
         return (shaped * 10.0.pow(db / 20.0).toFloat()).coerceIn(MIN_GAIN, 1f)
     }
 
-    /** The progressive part of the drag: 0 on sam, growing towards the bar's end. */
-    internal fun rampMs(step: Int, steps: Int, stepMs: Double): Double {
-        val position = step.toDouble() / steps.coerceAtLeast(1)
-        return (position.pow(DRAG_RAMP_CURVE) * DRAG_RAMP_STEPS * stepMs).coerceAtMost(DRAG_RAMP_MAX_MS)
+    /**
+     * The progressive part of the drag: 0 on sam, growing until [release] (the
+     * last beat), then easing linearly down to what sam carries ([samDragMs])
+     * so the loop point is just one more of those easing gaps.
+     */
+    internal fun rampMs(step: Int, steps: Int, stepMs: Double, release: Int = releaseStepFor(emptyList(), steps)): Double {
+        val n = steps.coerceAtLeast(1)
+        fun grow(at: Int) = ((at.toDouble() / n).pow(DRAG_RAMP_CURVE) * DRAG_RAMP_STEPS * stepMs)
+            .coerceAtMost(DRAG_RAMP_MAX_MS)
+        if (step == 0 || release !in 1 until n || step <= release) return grow(step)
+        val peak = grow(release)
+        val t = (step - release).toDouble() / (n - release)
+        return peak + (samDragMs(stepMs) - peak) * t
     }
+
+    private fun samDragMs(stepMs: Double) = (DRAG_SAM_STEPS * stepMs).coerceAtMost(DRAG_SAM_MAX_MS)
 
     private fun msToFrames(ms: Double): Int = (ms * sampleRate / 1000.0).roundToInt().coerceAtLeast(0)
 
     companion object {
+        /**
+         * Where the drag starts easing back: the last beat's first step, or the
+         * last quarter of the bar when the meter is one long group.
+         */
+        internal fun releaseStepFor(groups: List<Int>, steps: Int): Int {
+            var start = 0
+            var last = 0
+            for (g in groups) { if (start < steps) last = start; start += g }
+            return if (last in 1 until steps) last else steps * 3 / 4
+        }
+
         // Loudness: linear gain at full amount.
         const val DOWNBEAT_LEVEL = 1.0f
         const val BEAT_LEVEL = 0.82f

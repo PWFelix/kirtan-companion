@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -264,7 +266,10 @@ internal fun KirtanApp(
             // The cost is a reflow on each transient reveal. That is the correct
             // trade: content that moves is readable; content that is covered is
             // not.
-            .windowInsetsPadding(WindowInsets.systemBars)
+            // Plus the camera cutout: in immersive mode the hidden status bar's inset
+            // is zero, and without this the top row (the editor's name field) drew
+            // under the camera.
+            .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
             .background(PaletteToken.HEAD.color),
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {

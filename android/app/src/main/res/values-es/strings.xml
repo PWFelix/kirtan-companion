@@ -130,6 +130,7 @@
     <string name="editor_cells_per_beat">Celdas por tiempo</string>
     <string name="editor_clear">Borrar</string>
     <string name="editor_community_copy_note">El ritmo de la comunidad se queda como está. Al guardar, tu versión se añade a Tus ritmos; podrás compartirla cuando el ritmo sea distinto.</string>
+    <string name="editor_copy_name">%1$s (copia)</string>
     <string name="editor_default_name">Ritmo personalizado</string>
     <string name="editor_feel_clears">Cambiar la sensación borra la cuadrícula.</string>
     <string name="editor_feel_meter">Sensación y compás</string>
@@ -144,6 +145,7 @@
     <string name="editor_resolution">Resolución</string>
     <string name="editor_rest">Silencio</string>
     <string name="editor_save">Guardar ritmo</string>
+    <string name="editor_save_as_new">Guardar como ritmo nuevo</string>
     <string name="editor_save_copy">Guardar como mi versión</string>
     <string name="editor_tap_any_cell">toca cualquier celda para cambiar de fila</string>
     <string name="editor_undo">Deshacer</string>

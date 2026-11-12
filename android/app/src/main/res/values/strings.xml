@@ -136,6 +136,7 @@
     <string name="editor_cells_per_beat">Cells per beat</string>
     <string name="editor_clear">Clear</string>
     <string name="editor_community_copy_note">The community beat stays as it is. Saving adds your version to Your beats; you can share it once the rhythm differs.</string>
+    <string name="editor_copy_name">%1$s (copy)</string>
     <string name="editor_default_name">Custom Beat</string>
     <string name="editor_feel_clears">Changing the feel clears the grid.</string>
     <string name="editor_feel_meter">Feel &amp; meter</string>
@@ -150,6 +151,7 @@
     <string name="editor_resolution">Resolution</string>
     <string name="editor_rest">Rest</string>
     <string name="editor_save">Save beat</string>
+    <string name="editor_save_as_new">Save as new beat</string>
     <string name="editor_save_copy">Save as my version</string>
     <string name="editor_tap_any_cell">tap any cell to change row</string>
     <string name="editor_undo">Undo</string>

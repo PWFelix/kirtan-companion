@@ -186,7 +186,11 @@ internal fun BeatEditorScreen(
         }
     }
 
-    fun handleSave() {
+    // Your own beat can also be saved as a NEW one, leaving the original as it
+    // was — how a variation is made. (Read-only beats always save as a copy.)
+    val canSaveAsNew = initialBeat != null && !initialBeat.readOnly && !savesAsCopy
+
+    fun handleSave(asNew: Boolean = false) {
         if (saving) return
         if (previewing) {
             engine.stop()
@@ -200,9 +204,16 @@ internal fun BeatEditorScreen(
         saving = true
         // A copy goes out WITHOUT the original's id: a community beat is in the
         // library, so passing its id would overwrite it in place.
-        val built = draft.toBeat(if (savesAsCopy) null else initialBeat?.id)
+        val built = draft.toBeat(if (savesAsCopy || asNew) null else initialBeat?.id)
+        // A variation left with the original's name would be two identical rows.
+        val name = if (asNew && built.name == initialBeat?.name) {
+            com.kirtan.companion.data.Names.clampName(Strings.get(R.string.editor_copy_name, built.name))
+        } else {
+            built.name
+        }
         onSave(
             built.copy(
+                name = name,
                 tags = tags,
                 // Credit for an edited copy of a community beat (and what stops it
                 // being re-shared until the music actually differs).
@@ -363,8 +374,16 @@ internal fun BeatEditorScreen(
                 else -> stringResource(R.string.editor_save)
             },
             enabled = !saving,
-            onClick = ::handleSave,
+            onClick = { handleSave() },
         )
+        if (canSaveAsNew) {
+            Spacer(Modifier.height(dimens.space2))
+            SecondaryButton(
+                label = stringResource(R.string.editor_save_as_new),
+                enabled = !saving,
+                onClick = { handleSave(asNew = true) },
+            )
+        }
     }
 
     if (feelOpen) {
