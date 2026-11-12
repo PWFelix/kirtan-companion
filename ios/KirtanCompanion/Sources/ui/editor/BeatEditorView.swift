@@ -465,6 +465,22 @@ struct BeatEditorView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
+            // Your own beat can also be saved as a NEW one, leaving the original as it
+            // was — how a variation is made. (Built-ins always fork.)
+            if case .edit = mode {
+                Button {
+                    save(asNew: true)
+                } label: {
+                    Text(String(localized: "Save as new beat", bundle: .strings))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Palette.syahi)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.rule, lineWidth: 1))
+                }
+                .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+
             Button {
                 save()
             } label: {
@@ -561,8 +577,17 @@ struct BeatEditorView: View {
 
     private var isFork: Bool { if case .fork = mode { return true } else { return false } }
 
-    private func save() {
-        let beat = currentBeat()
+    private func save(asNew: Bool = false) {
+        var beat = currentBeat()
+        if asNew {
+            // No id: the library mints one, and the original stays as it was.
+            beat.id = nil
+            beat.sourceItemId = nil
+            // A variation left with the original's name would be two identical rows.
+            if beat.name == mode.seed?.name {
+                beat.name = Names.clamp(String(format: String(localized: "%@ (copy)", bundle: .strings), beat.name))
+            }
+        }
         saving = true
         Task {
             defer { saving = false }

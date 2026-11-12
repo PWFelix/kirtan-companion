@@ -125,13 +125,25 @@ final class HumanizerTests: XCTestCase {
         for feel in Feel.allCases where feel != .drag { XCTAssertEqual(feel.dragMs, 0) }
     }
 
-    func testDragRampsThroughTheBarAndResetsOnSam() {
+    func testDragRampsThroughTheBarThenEasesIntoSamWithoutAJump() {
         let h = humanizer(.drag)
-        let ramp = (0..<32).map { h.rampMs(step: $0, steps: 32, stepMs: 375) }
+        let release = 28 // the last beat of 8 × 4
+        let ramp = (0..<32).map { h.rampMs(step: $0, steps: 32, stepMs: 375, release: release) }
         XCTAssertEqual(ramp[0], 0)
-        XCTAssertTrue(zip(ramp, ramp.dropFirst()).allSatisfy { $1 > $0 })
-        XCTAssertLessThanOrEqual(ramp.last!, Humanizer.DRAG_RAMP_MAX_MS)
-        XCTAssertEqual(h.rampMs(step: 16, steps: 32, stepMs: 200), 2 * h.rampMs(step: 16, steps: 32, stepMs: 100), accuracy: 1e-9)
+        let rising = Array(ramp.prefix(release + 1))
+        XCTAssertTrue(zip(rising, rising.dropFirst()).allSatisfy { $1 > $0 })
+        XCTAssertLessThanOrEqual(ramp.max()!, Humanizer.DRAG_RAMP_MAX_MS)
+        // Easing back through the last beat and over the loop into sam: every gap
+        // shortens by the same small amount, none collapses at the loop point.
+        let easing = Array(ramp.dropFirst(release)) + [Humanizer.DRAG_SAM_STEPS * 375]
+        let shortenings = zip(easing, easing.dropFirst()).map { $0 - $1 }
+        XCTAssertTrue(shortenings.allSatisfy { $0 > 0 })
+        XCTAssertEqual(shortenings.first!, shortenings.last!, accuracy: 1e-9)
+        XCTAssertLessThan(shortenings.max()!, 0.1 * 375)
+        XCTAssertEqual(h.rampMs(step: 16, steps: 32, stepMs: 200, release: release),
+                       2 * h.rampMs(step: 16, steps: 32, stepMs: 100, release: release), accuracy: 1e-9)
+        XCTAssertEqual(Humanizer.releaseStep(groups: [4, 4, 4, 4], steps: 16), 12)
+        XCTAssertEqual(Humanizer.releaseStep(groups: [16], steps: 16), 12)
     }
 
     // Drag flams Ge+Ta (fixture step 2: dayan O + bayan nil; step 6: dayan O + bayan O).

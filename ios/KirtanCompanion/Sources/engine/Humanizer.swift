@@ -98,6 +98,8 @@ final class Humanizer {
     private var seed: UInt64 = 0
     private var rng = SplitMix64(seed: 0)
     private var drift = 0.0
+    /// The step where the drag stops growing and eases back to sam: the last beat.
+    private var releaseStep = 0
 
     init(sampleRate: Int) { self.sampleRate = sampleRate }
 
@@ -119,6 +121,7 @@ final class Humanizer {
             $0 == Humanizer.DOWNBEAT_LEVEL ? Humanizer.DRAG_SAM_SCALE
                 : $0 == Humanizer.BEAT_LEVEL ? Humanizer.DRAG_BEAT_SCALE : 1
         }
+        releaseStep = Humanizer.releaseStep(groups: groupsFor(beat), steps: levels.count)
         seed = fnv1a(beat.id ?? beat.name)
     }
 
@@ -151,11 +154,12 @@ final class Humanizer {
         // Ge+Ta in Drag: a flam, the bottom end first and the Ta a grace later.
         // Sam's is wider: the "1" is announced, not just struck.
         if flam && lane == .dayan { ms += step == 0 ? Humanizer.FLAM_SAM_MS : Humanizer.FLAM_MS }
-        // Drag's progressive part: later and later through the bar, sam back on time.
+        // Drag's progressive part: later and later through the bar, easing back
+        // over the last beat to sam's own small lateness.
         if feel.dragMs > 0 && !shape.isEmpty {
-            ms += rampMs(step: step, steps: shape.count, stepMs: stepMs)
+            ms += rampMs(step: step, steps: shape.count, stepMs: stepMs, release: releaseStep)
             // Sam too sits back: the ramp resets there, but not onto the grid.
-            if step == 0 { ms += min(Humanizer.DRAG_SAM_STEPS * stepMs, Humanizer.DRAG_SAM_MAX_MS) }
+            if step == 0 { ms += Humanizer.samDragMs(stepMs) }
         }
         return msToFrames(Humanizer.PAD_MS + ms)
     }
@@ -174,11 +178,33 @@ final class Humanizer {
         return min(1, max(Humanizer.MIN_GAIN, Float(shaped * pow(10, db / 20))))
     }
 
-    /// 0 on sam, growing towards the bar's end; in steps so it feels the same at any tempo.
-    func rampMs(step: Int, steps: Int, stepMs: Double) -> Double {
-        let position = Double(step) / Double(max(1, steps))
-        return min(pow(position, Humanizer.DRAG_RAMP_CURVE) * Humanizer.DRAG_RAMP_STEPS * stepMs,
-                   Humanizer.DRAG_RAMP_MAX_MS)
+    /// 0 on sam, growing until `release` (the last beat), then easing linearly down to
+    /// what sam carries, so the loop point is just one more of those easing gaps. Snapping
+    /// straight back made the gap into sam a quarter short — a user heard the loop "jump".
+    /// In steps, so it feels the same at any tempo.
+    func rampMs(step: Int, steps: Int, stepMs: Double, release: Int? = nil) -> Double {
+        let n = max(1, steps)
+        let release = release ?? Humanizer.releaseStep(groups: [], steps: n)
+        func grow(_ at: Int) -> Double {
+            min(pow(Double(at) / Double(n), Humanizer.DRAG_RAMP_CURVE) * Humanizer.DRAG_RAMP_STEPS * stepMs,
+                Humanizer.DRAG_RAMP_MAX_MS)
+        }
+        if step == 0 || release < 1 || release >= n || step <= release { return grow(step) }
+        let peak = grow(release)
+        let t = Double(step - release) / Double(n - release)
+        return peak + (Humanizer.samDragMs(stepMs) - peak) * t
+    }
+
+    static func samDragMs(_ stepMs: Double) -> Double {
+        min(DRAG_SAM_STEPS * stepMs, DRAG_SAM_MAX_MS)
+    }
+
+    /// Where the drag starts easing back: the last beat's first step, or the last
+    /// quarter of the bar when the meter is one long group.
+    static func releaseStep(groups: [Int], steps: Int) -> Int {
+        var start = 0, last = 0
+        for g in groups { if start < steps { last = start }; start += g }
+        return last >= 1 && last < steps ? last : steps * 3 / 4
     }
 
     private func msToFrames(_ ms: Double) -> Int {

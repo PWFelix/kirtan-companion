@@ -67,6 +67,16 @@
         }
       }
     },
+    "%@ (copy)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (copia)"
+          }
+        }
+      }
+    },
     "%@ no longer exists." : {
       "localizations" : {
         "es" : {
@@ -2737,6 +2747,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Guardar como mi versión"
+          }
+        }
+      }
+    },
+    "Save as new beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar como ritmo nuevo"
           }
         }
       }
