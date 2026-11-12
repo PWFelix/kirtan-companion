@@ -221,6 +221,13 @@ data class EqPrefsSnapshot(
     /** Learn teaches the karatalas' part rather than the mridanga's. */
     val learnKartal: Boolean = false,
     /**
+     * Learn's hill climb, as last accepted: BPM per step and seconds between
+     * steps (data/HillClimb). Only the CHOICE is kept; whether it's on is per
+     * session, so a lesson never starts speeding up unasked.
+     */
+    val hillClimbStep: Int = com.kirtan.companion.data.HillClimb.DEFAULT_STEP,
+    val hillClimbSeconds: Int = com.kirtan.companion.data.HillClimb.DEFAULT_INTERVAL_SEC,
+    /**
      * Display delay in ms for each output device, keyed by
      * [com.kirtan.companion.playback.OutputRoute.key]. A device with no entry
      * plays at 0: the phone's own latency report is trusted until the user says
@@ -321,6 +328,8 @@ internal object EqPrefsCodec {
     private const val KEY_FEEL = "feel"
     private const val KEY_LEARN_LEFT_HANDED = "learnLeftHanded"
     private const val KEY_LEARN_KARTAL = "learnKartal"
+    private const val KEY_HILL_CLIMB_STEP = "hillClimbStep"
+    private const val KEY_HILL_CLIMB_SECONDS = "hillClimbSeconds"
     private const val KEY_DISPLAY_DELAYS = "displayDelays"
     private const val KEY_SYNC_PROMPTED = "syncPrompted"
     private const val KEY_BANDS = "bands"
@@ -347,6 +356,8 @@ internal object EqPrefsCodec {
         put(KEY_FEEL, snapshot.feel.name)
         put(KEY_LEARN_LEFT_HANDED, snapshot.learnLeftHanded)
         put(KEY_LEARN_KARTAL, snapshot.learnKartal)
+        put(KEY_HILL_CLIMB_STEP, snapshot.hillClimbStep)
+        put(KEY_HILL_CLIMB_SECONDS, snapshot.hillClimbSeconds)
         put(KEY_DISPLAY_DELAYS, buildJsonObject {
             for ((key, ms) in snapshot.displayDelays) put(key, ms)
         })
@@ -386,6 +397,8 @@ internal object EqPrefsCodec {
             feel = feelOf(parsed[KEY_FEEL]),
             learnLeftHanded = boolOf(parsed[KEY_LEARN_LEFT_HANDED], false),
             learnKartal = boolOf(parsed[KEY_LEARN_KARTAL], false),
+            hillClimbStep = com.kirtan.companion.data.HillClimb.stepOf(intOf(parsed[KEY_HILL_CLIMB_STEP])),
+            hillClimbSeconds = com.kirtan.companion.data.HillClimb.intervalOf(intOf(parsed[KEY_HILL_CLIMB_SECONDS])),
             displayDelays = displayDelaysOf(parsed[KEY_DISPLAY_DELAYS]),
             syncPrompted = stringSetOf(parsed[KEY_SYNC_PROMPTED]),
             dayan = endOf(parsed[KEY_DAYAN]),
@@ -500,6 +513,9 @@ internal object EqPrefsCodec {
      * scale of 0 or 50, which would render the app as a point or a single cell.
      * Non-finite or wrong-typed falls back to 1.0 — unscaled, the safe default.
      */
+    private fun intOf(element: JsonElement?): Int? =
+        (element as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() }?.toInt()
+
     private fun scaleOf(element: JsonElement?): Float {
         val raw = (element as? JsonPrimitive)?.doubleOrNull ?: return 1.0f
         if (!raw.isFinite()) return 1.0f

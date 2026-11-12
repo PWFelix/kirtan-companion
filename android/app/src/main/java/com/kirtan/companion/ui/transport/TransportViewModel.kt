@@ -391,6 +391,11 @@ class TransportViewModel(
         publish(settings.copy(learnKartal = kartal))
     }
 
+    /** Remember Learn's hill-climb choice (BPM per step, seconds between steps). */
+    fun setHillClimb(step: Int, seconds: Int) {
+        publish(settings.copy(hillClimbStep = step, hillClimbSeconds = seconds))
+    }
+
     /**
      * Tap tempo: average the gaps between the last few taps.
      *

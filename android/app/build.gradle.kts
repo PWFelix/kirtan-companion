@@ -58,8 +58,8 @@ android {
         targetSdk = 36
         // Bump BOTH for every build that goes to a tester: versionCode must go
         // up for Android to accept the update, versionName is what they see.
-        versionCode = 35
-        versionName = "0.4.25"
+        versionCode = 36
+        versionName = "0.4.26"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

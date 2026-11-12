@@ -31,6 +31,18 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.kirtan.companion.data.HillClimb
+import com.kirtan.companion.data.tempoRange
+import com.kirtan.companion.ui.components.KcSheet
+import com.kirtan.companion.ui.components.PillChip
+import com.kirtan.companion.ui.components.SectionLabel
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -98,6 +110,45 @@ internal fun LearnScreen(
                 library.selectBeat(picked, fromCategory)
                 transport.loadBeat(picked)
                 pickerOpen = false
+            },
+        )
+    }
+
+    // ── Hill climb ──────────────────────────────────────────────────────────
+    // On/off is per session (a lesson never speeds up unasked); the step and
+    // interval are remembered, so turning it back on offers the last choice.
+    val climbStep = state.settings.hillClimbStep
+    val climbEvery = state.settings.hillClimbSeconds
+    var climbOn by rememberSaveable { mutableStateOf(false) }
+    var climbLeft by rememberSaveable { mutableIntStateOf(climbEvery) }
+    var climbSheet by rememberSaveable { mutableStateOf(false) }
+    val ceiling = tempoRange(state.brahmaloka).last
+    val climbTop = HillClimb.atTop(state.bpm, ceiling)
+    val liveBpm by rememberUpdatedState(state.bpm)
+    val liveCeiling by rememberUpdatedState(ceiling)
+    // The countdown runs on PLAYING time: pausing holds it, and Play carries on.
+    LaunchedEffect(climbOn, state.playing, climbStep, climbEvery) {
+        if (!climbOn || !state.playing) return@LaunchedEffect
+        while (true) {
+            delay(1000)
+            if (HillClimb.atTop(liveBpm, liveCeiling)) continue
+            climbLeft -= 1
+            if (climbLeft <= 0) {
+                transport.changeBpm(HillClimb.next(liveBpm, climbStep, liveCeiling))
+                climbLeft = climbEvery
+            }
+        }
+    }
+    if (climbSheet) {
+        HillClimbSheet(
+            step = climbStep,
+            seconds = climbEvery,
+            onDismiss = { climbSheet = false },
+            onAccept = { step, seconds ->
+                transport.setHillClimb(step, seconds)
+                climbLeft = seconds
+                climbOn = true
+                climbSheet = false
             },
         )
     }
@@ -199,13 +250,85 @@ internal fun LearnScreen(
                 onClick = { transport.nudgeBpm(5) },
             )
             Spacer(Modifier.weight(1f))
+            // Off: opens the choice (last one pre-selected). On: one tap turns it off.
+            HairlineIconButton(
+                icon = KcIcons.Stairs,
+                contentDescription = if (climbOn) stringResource(R.string.learn_climb_off) else stringResource(R.string.learn_climb),
+                onClick = { if (climbOn) climbOn = false else climbSheet = true },
+                filled = climbOn,
+            )
             PrimaryButton(
                 label = if (state.playing) stringResource(R.string.common_pause) else stringResource(R.string.common_play),
                 icon = if (state.playing) KcIcons.Pause else KcIcons.Play,
                 enabled = state.ready,
                 onClick = { transport.togglePlay(beat) },
-                modifier = Modifier.width(148.dp),
+                modifier = Modifier.width(124.dp),
                 minHeight = 48.dp,
+            )
+        }
+        if (climbOn) {
+            val every = intervalLabel(climbEvery)
+            Text(
+                text = when {
+                    climbTop -> stringResource(R.string.learn_climb_top, state.bpm)
+                    state.playing -> stringResource(R.string.learn_climb_status, climbStep, every, HillClimb.clock(climbLeft))
+                    else -> stringResource(R.string.learn_climb_paused, climbStep, every)
+                },
+                color = PaletteToken.CLAY.color,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun intervalLabel(seconds: Int): String =
+    if (seconds < 60) stringResource(R.string.learn_climb_sec, seconds)
+    else stringResource(R.string.learn_climb_min, seconds / 60)
+
+/** The hill-climb choice: N BPM every X. Accept turns it on; cancel leaves it off. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HillClimbSheet(
+    step: Int,
+    seconds: Int,
+    onDismiss: () -> Unit,
+    onAccept: (step: Int, seconds: Int) -> Unit,
+) {
+    val dimens = KirtanTheme.dimens
+    var pickedStep by rememberSaveable { mutableIntStateOf(step) }
+    var pickedSeconds by rememberSaveable { mutableIntStateOf(seconds) }
+    KcSheet(title = stringResource(R.string.learn_climb), onDismiss = onDismiss) {
+        Text(
+            text = stringResource(R.string.learn_climb_desc),
+            color = PaletteToken.SYAHI_SOFT.color,
+            fontSize = 13.sp,
+        )
+        SectionLabel(stringResource(R.string.learn_climb_step), modifier = Modifier.padding(top = dimens.space3))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(dimens.space2), verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
+            for (n in HillClimb.STEPS) {
+                PillChip(label = stringResource(R.string.learn_climb_bpm, n), selected = n == pickedStep, onClick = { pickedStep = n })
+            }
+        }
+        SectionLabel(stringResource(R.string.learn_climb_every), modifier = Modifier.padding(top = dimens.space3))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(dimens.space2), verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
+            for (s in HillClimb.INTERVALS_SEC) {
+                PillChip(label = intervalLabel(s), selected = s == pickedSeconds, onClick = { pickedSeconds = s })
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = dimens.space4),
+            horizontalArrangement = Arrangement.spacedBy(dimens.space2),
+        ) {
+            SecondaryButton(label = stringResource(R.string.common_cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
+            PrimaryButton(
+                label = stringResource(R.string.learn_climb_start),
+                icon = KcIcons.Stairs,
+                onClick = { onAccept(pickedStep, pickedSeconds) },
+                modifier = Modifier.weight(1f),
             )
         }
     }

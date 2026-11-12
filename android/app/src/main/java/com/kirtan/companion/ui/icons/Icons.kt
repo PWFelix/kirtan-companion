@@ -120,6 +120,21 @@ private fun filledIcon(
 
 internal object KcIcons {
 
+    /** Hill climb: a staircase rising left to right — the tempo going up in steps. */
+    val Stairs: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
+        strokedIcon("Stairs", 20.dp) {
+            // M3 20h5v-5h5v-5h5V5h3
+            moveTo(3f, 20f)
+            horizontalLineToRelative(5f)
+            verticalLineToRelative(-5f)
+            horizontalLineToRelative(5f)
+            verticalLineToRelative(-5f)
+            horizontalLineToRelative(5f)
+            verticalLineTo(5f)
+            horizontalLineToRelative(3f)
+        }
+    }
+
     /**
      * The tempo lock, LOCKED — the shackle closes over the body.
      *

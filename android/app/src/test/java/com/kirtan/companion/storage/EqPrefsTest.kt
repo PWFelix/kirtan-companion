@@ -345,6 +345,8 @@ class EqPrefsTest {
                 // And the Learn highway's left-handed mirror.
                 "learnLeftHanded",
                 "learnKartal",
+                // Learn's hill climb: the last accepted step and interval.
+                "hillClimbStep", "hillClimbSeconds",
                 // Display sync: per-output-device delays, and which Bluetooth
                 // devices have already been offered the sync prompt.
                 "displayDelays", "syncPrompted",
