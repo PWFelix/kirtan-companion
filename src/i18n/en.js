@@ -41,6 +41,12 @@ export default {
   "auth.signIn": "Sign in",
   "auth.signOut": "Sign out",
 
+  "brahma.badge": "Brahmaloka",
+  "brahma.caption": "A day of Brahmā is a thousand ages.",
+  "brahma.hint": "Hold at 200 for Brahmaloka time",
+  "brahma.leave": "Leave Brahmaloka time (back to 40–200 BPM)",
+  "brahma.title": "Brahmaloka time",
+
   "beat.cells": ({ n }) => (n === 1 ? `${n} cell` : `${n} cells`),
   "beat.suggestedBpm": "suggested {bpm} BPM",
 

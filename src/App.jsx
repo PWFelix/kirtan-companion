@@ -19,6 +19,7 @@ import BeatsView from "./views/BeatsView.jsx";
 import LearnView from "./views/LearnView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
 import { readShareFromLocation } from "./data/shareCodec.js";
+import { loadSession, saveSession } from "./storage/sessionPrefs.js";
 
 // An inbound share link, read ONCE at module load. Deliberately not in a
 // useState initialiser: StrictMode double-invokes those, and this one has a
@@ -74,7 +75,9 @@ function App() {
   const [view, setView] = useState(INBOUND_SHARE ? "beats" : "home"); // "home" | "beats" | "editor" | "learn" | "settings"
   const [pendingShare, setPendingShare] = useState(INBOUND_SHARE);
   const [entered, setEntered] = useState(false); // splash shown until Begin
-  const [beatId, setBeatId] = useState(BEATS[0].id);
+  // The last loaded beat comes back on the next visit (storage/sessionPrefs.js).
+  // An id that no longer exists falls through to the first beat below.
+  const [beatId, setBeatId] = useState(() => loadSession().beatId ?? BEATS[0].id);
   const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
   // Where the editor's Back button returns to, or null when it was opened
   // from the nav tab (then there's no Back — the nav bar navigates).
@@ -87,6 +90,7 @@ function App() {
   // playing — the mid-kirtan "next step in the progression" move.
   function selectBeat(b, fromCat) {
     setBeatId(b.id);
+    saveSession({ beatId: b.id });
     transport.loadBeat(b);
     if (fromCat) library.setActiveCat(fromCat);
   }

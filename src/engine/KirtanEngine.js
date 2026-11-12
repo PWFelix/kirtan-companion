@@ -136,6 +136,50 @@ export class KirtanEngine extends EventEmitter {
    * sound as you tap them. Name is the manifest key, e.g. "dayan_open".
    * No-op if audio isn't unlocked yet (silently fails, like play()).
    */
+  /**
+   * A thunder roll for the Brahmaloka unlock: a crack of brown noise whose
+   * lowpass sinks from 900 Hz to 120 Hz, over a sub-bass sine falling 48→30 Hz.
+   * Synthesised on the spot, so there's no sample to load for a once-in-a-while
+   * effect. Goes straight to the output: it's a UI sound, not part of the mix.
+   * Silent if audio isn't running yet (before Begin there's nothing to unlock).
+   */
+  rumble() {
+    const ctx = Tone.getContext().rawContext;
+    if (!ctx || ctx.state !== "running") return;
+    const t = ctx.currentTime, dur = 2.4;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;   // brown noise
+      data[i] = last * 3.5;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(900, t);
+    lp.frequency.exponentialRampToValueAtTime(120, t + dur);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(0.9, t + 0.03);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    noise.connect(lp).connect(ng).connect(ctx.destination);
+
+    const sub = ctx.createOscillator();
+    sub.frequency.setValueAtTime(48, t);
+    sub.frequency.exponentialRampToValueAtTime(30, t + 1.8);
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(0.5, t + 0.08);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+    sub.connect(sg).connect(ctx.destination);
+
+    noise.start(t); noise.stop(t + dur);
+    sub.start(t); sub.stop(t + 1.9);
+  }
+
   playStroke(name) {
     this._soundPlayer.play(name);
   }

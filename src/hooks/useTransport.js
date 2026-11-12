@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { KirtanEngine } from "../engine/KirtanEngine.js";
 import { BEATS } from "../data/beats.js";
-import { MIN_BPM, MAX_BPM } from "../data/meter.js";
+import { MIN_BPM, MAX_BPM, NORMAL_MAX_BPM, brahmalokaFor } from "../data/meter.js";
+import { loadSession, saveSession } from "../storage/sessionPrefs.js";
 import { EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 import { TUNE_MIN_CENTS, TUNE_MAX_CENTS } from "../data/tuning.js";
 import { loadEqPrefs, saveEqPrefs } from "../storage/eqPrefs.js";
@@ -65,7 +66,15 @@ export function useTransport() {
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [step, setStep] = useState(-1);
-  const [bpm, setBpm] = useState(BEATS[0].bpm);
+  // The tempo you left with comes back (capped at 200 — every launch starts
+  // outside Brahmaloka; see storage/sessionPrefs.js).
+  const [bpm, setBpm] = useState(() => loadSession().bpm ?? BEATS[0].bpm);
+  // Brahmaloka time: the slider's high range (data/meter.js). `burstKey` counts
+  // unlocks so the overlay (ui/BrahmalokaBurst) plays once per unlock.
+  const [brahmaloka, setBrahmaloka] = useState(false);
+  const brahmaRef = useRef(false);
+  const [burstKey, setBurstKey] = useState(0);
+  const sessionSaveTimerRef = useRef(null);
   const [volume, setVolume] = useState(0.9);
   const [endVolumes, setEndVolumes] = useState({});  // per-lane faders, default 1
   const [mutedEnds, setMutedEnds] = useState({});
@@ -205,7 +214,7 @@ export function useTransport() {
     if (!ready) return;
     await engine.unlock();
     if (playing) engine.stop();
-    engine.setBpm(clampBpm(beat.bpm || bpmRef.current));
+    engine.setBpm(clampAnyBpm(beat.bpm || bpmRef.current));
     engine.setBeat(beat);
     engine.start();
   }
@@ -215,7 +224,10 @@ export function useTransport() {
     engine.setBpm(bpmRef.current);
   }
 
-  const clampBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
+  // Clamp to what the slider can reach right now: up to 200, or 500 in Brahmaloka.
+  const clampBpm = (v) => Math.min(brahmaRef.current ? MAX_BPM : NORMAL_MAX_BPM, Math.max(MIN_BPM, v));
+  // Clamp to anything a beat may hold (a shared 300 BPM beat still previews at 300).
+  const clampAnyBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
 
   // Same contract the (unexported) bandOf helper in eqPrefs.js applies on
   // load and the engine applies on set: coerce to a finite number
@@ -239,8 +251,30 @@ export function useTransport() {
     bpmRef.current = value;
     setBpm(value);
     engine.setBpm(value);
+    setMode(brahmalokaFor(value, brahmaRef.current));
+    // Debounced like the EQ prefs: a drag fires this many times a second.
+    clearTimeout(sessionSaveTimerRef.current);
+    sessionSaveTimerRef.current = setTimeout(() => saveSession({ bpm: bpmRef.current }), 400);
+  }
+  function setMode(on) {
+    brahmaRef.current = on;
+    setBrahmaloka(on);
+  }
+  // Holding the slider at 200 (hooks/useBrahmaHold) or pressing + there lands here.
+  function unlockBrahmaloka() {
+    if (brahmaRef.current) return;
+    setMode(true);
+    setBurstKey((k) => k + 1);
+    engine.rumble();
+    navigator.vibrate?.([90, 60, 180]);
+  }
+  // The badge's way out: back to the normal range, at its top.
+  function leaveBrahmaloka() {
+    setMode(false);
+    changeBpm(Math.min(bpmRef.current, NORMAL_MAX_BPM));
   }
   function nudgeBpm(delta) {
+    if (delta > 0 && !brahmaRef.current && bpmRef.current >= NORMAL_MAX_BPM) { unlockBrahmaloka(); return; }
     changeBpm(clampBpm(bpmRef.current + delta));
   }
   function commitBpm(value) {
@@ -374,6 +408,7 @@ export function useTransport() {
   return {
     engine, ready, playing, step, getPhase,
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo, clampBpm,
+    brahmaloka, burstKey, unlockBrahmaloka, leaveBrahmaloka,
     tempoLocked, setTempoLocked,
     volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
     eqBands, eqOpen, changeEqBand, toggleEqPanel, eqTune, changeEqTune,

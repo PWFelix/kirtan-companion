@@ -3,6 +3,9 @@ import { LANES } from "../data/lanes.js";
 import { EQ_BANDS, EQ_BAND_COUNT, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 import { TUNE_MIN_CENTS, TUNE_MAX_CENTS, END_BASE_FREQ, centsToRate, freqToNoteName } from "../data/tuning.js";
 import { MIN_BPM, MAX_BPM } from "../hooks/useTransport.js";
+import { tempoRange } from "../data/meter.js";
+import { useBrahmaHold } from "../hooks/useBrahmaHold.js";
+import BrahmalokaBurst from "../ui/BrahmalokaBurst.jsx";
 import BeatStrip from "../BeatStrip.jsx";
 import Wordmark from "../Wordmark.jsx";
 import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
@@ -114,7 +117,13 @@ function HomeView({
     eqTune = { dayan: 0, bayan: 0 }, changeEqTune,
     tuneOpen = { dayan: false, bayan: false }, toggleTunePanel,
     togglePlay,
+    brahmaloka, burstKey, unlockBrahmaloka, leaveBrahmaloka,
   } = transport;
+  // The slider spans 40–200, or 190–500 in Brahmaloka time (data/meter.js);
+  // holding it at 200 unlocks the high range.
+  const range = tempoRange(brahmaloka);
+  const hold = useBrahmaHold({ bpm, brahmaloka, onUnlock: unlockBrahmaloka });
+  const rangeClass = "kc-range" + (brahmaloka ? " kc-brahma" : "") + (hold.charging ? " kc-charging" : "");
   const { isCustomBeat } = library;
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -133,10 +142,10 @@ function HomeView({
   useEffect(() => {
     if (!bpmEntryOpen) return;
     const v = parseInt(bpmDraft, 10);
-    if (!Number.isFinite(v) || v < MIN_BPM || v > MAX_BPM) return;
+    if (!Number.isFinite(v) || v < MIN_BPM || v > range.max) return;
     const t = setTimeout(() => { if (v !== bpm) changeBpm(v); }, 450);
     return () => clearTimeout(t);
-  }, [bpmDraft, bpmEntryOpen, bpm]);
+  }, [bpmDraft, bpmEntryOpen, bpm, range.max]);
 
   function commitBpmDraft() {
     const v = parseInt(bpmDraft, 10);
@@ -155,7 +164,7 @@ function HomeView({
     setPickerOpen(true);
   }
 
-  const fillPct = ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)) * 100;
+  const fillPct = ((bpm - range.min) / (range.max - range.min)) * 100;
   const playIcon = playing ? <PauseIcon /> : <PlayIcon />;
   const editLabel = isCustomBeat(beat.id) ? t("home.editBeat") : t("home.customizeBeat");
 
@@ -191,7 +200,7 @@ function HomeView({
         <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>{t("tempo.bpm")}</span>
         <div style={st.wheelWrap}>
           <div style={st.wheelBand} aria-hidden="true" />
-          <BpmWheel value={bpm} min={MIN_BPM} max={MAX_BPM} onChange={changeBpm} />
+          <BpmWheel value={bpm} min={MIN_BPM} max={range.max} onChange={changeBpm} />
         </div>
       </div>
     </div>
@@ -325,6 +334,14 @@ function HomeView({
     </div>
   );
 
+  // In Brahmaloka: a badge that says so, and is the way back to 40–200.
+  const brahmaBadge = brahmaloka && (
+    <button onClick={leaveBrahmaloka} style={st.brahmaBadge} aria-label={t("brahma.leave")} title={t("brahma.leave")}>
+      ✦
+    </button>
+  );
+  const burst = <BrahmalokaBurst fireKey={burstKey} />;
+
   const lockButton = (
     <button onClick={() => setTempoLocked(v => !v)}
       style={{ ...st.lockBtn,
@@ -340,6 +357,7 @@ function HomeView({
   if (isLandscape) {
     return (
       <div className="kc-screen" style={st.landScreen}>
+        {burst}
         <main style={st.landStripWrap}>
           <BeatStrip
             beat={beat}
@@ -367,10 +385,12 @@ function HomeView({
             <span style={st.bpmUnit}>{t("tempo.bpm")}</span>
             <span style={st.bpmCaret} aria-hidden="true">▾</span>
           </button>
-          <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
+          <input className={rangeClass} type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
+            title={brahmaloka ? undefined : t("brahma.hint")}
             onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
             style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
             aria-label={t("tempo.title")} />
+          {brahmaBadge}
           {lockButton}
           <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
           <button onClick={() => setMixerOpen(true)} style={st.landEditBtn} aria-label={t("mixer.title")}
@@ -395,6 +415,7 @@ function HomeView({
   // ── Portrait ──
   return (
     <div className="kc-screen" style={sh.screenFixed}>
+      {burst}
       {/* Small live wordmark — same component as the splash hero. */}
       <header style={st.header}>
         <Wordmark style={{ "--wm-size": "clamp(18px, 3.6vh, 24px)" }} />
@@ -444,10 +465,12 @@ function HomeView({
               aria-label={t("common.faster")} style={{ ...st.bpmStep, opacity: bpm >= MAX_BPM ? 0.3 : 1 }}>+</button>
           </div>
           <div style={st.tempoRow}>
-            <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
+            <input className={rangeClass} type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
+            title={brahmaloka ? undefined : t("brahma.hint")}
               onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
               style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
               aria-label={t("tempo.title")} />
+            {brahmaBadge}
             {lockButton}
             <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
           </div>
@@ -492,6 +515,11 @@ const st = {
 
   // ── Tempo ──
   bpmRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-4)", marginBottom: "var(--space-2)" },
+  brahmaBadge: {
+    flexShrink: 0, width: 36, height: 36, padding: 0, borderRadius: 999, cursor: "pointer",
+    border: "1px solid oklch(0.70 0.17 60)", background: "oklch(0.93 0.07 80)",
+    color: "oklch(0.45 0.14 45)", fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 700, lineHeight: 1,
+  },
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   tapBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
   lockBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },

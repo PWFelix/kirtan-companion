@@ -7,7 +7,9 @@ import { tagLine } from "./data/tags.js";
 import { TagPicker } from "./ui/TagPicker.jsx";
 import { MAX_NAME_LEN, clampName } from "./data/names.js";
 import { closedMarkBackground } from "./data/strokes.js";
-import { MIN_BPM, MAX_BPM } from "./data/meter.js";
+import { tempoRange, brahmalokaFor } from "./data/meter.js";
+import { useBrahmaHold } from "./hooks/useBrahmaHold.js";
+import BrahmalokaBurst from "./ui/BrahmalokaBurst.jsx";
 import { leverFor, reshape, resample, pagesFor, resolutionFactor } from "./data/resolution.js";
 import { MAX_STEPS } from "./data/shareCodec.js";
 
@@ -155,6 +157,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     initialBeat?.kartal ? [...initialBeat.kartal] : emptyGrid(sum(seedGroups(initialBeat)))
   );
   const [bpm, setBpm]     = useState(initialBeat?.bpm ?? 90);
+  // Brahmaloka time, editor-local (the editor's tempo is the draft's, not the
+  // transport's). A beat saved above 200 opens already in the high range.
+  const [brahmaloka, setBrahmaloka] = useState(() => (initialBeat?.bpm ?? 90) > 200);
+  const [burstKey, setBurstKey] = useState(0);
   const [name, setName]   = useState(initialBeat?.name ?? "");
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
@@ -358,10 +364,20 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setCursor(Math.min(steps - 1, Math.floor(frac * steps)));
   }
 
-  const fillPct = ((bpm - 40) / 160) * 100;
+  const range = tempoRange(brahmaloka);
+  const fillPct = ((bpm - range.min) / (range.max - range.min)) * 100;
+  const hold = useBrahmaHold({
+    bpm, brahmaloka,
+    onUnlock: () => { setBrahmaloka(true); setBurstKey((k) => k + 1); engine.rumble(); navigator.vibrate?.([90, 60, 180]); },
+  });
+  function changeBpm(v) {
+    setBpm(v);
+    setBrahmaloka((was) => brahmalokaFor(v, was));
+  }
 
   return (
     <div className="kc-screen" style={st.screen}>
+      <BrahmalokaBurst fireKey={burstKey} />
       <header style={st.header}>
         {onBack && <button onClick={onBack} style={st.backBtn} aria-label={t("common.back")}>‹</button>}
         <div style={st.titleWrap}>
@@ -535,8 +551,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
 
           <div style={st.tempoRow}>
             <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>{t("tempo.bpm")}</span>
-            <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
-              onChange={(e) => setBpm(Number(e.target.value))}
+            <input className={"kc-range" + (brahmaloka ? " kc-brahma" : "") + (hold.charging ? " kc-charging" : "")}
+              type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
+              title={brahmaloka ? t("brahma.badge") : t("brahma.hint")}
+              onChange={(e) => changeBpm(Number(e.target.value))}
               style={{ "--fill": fillPct + "%", flex: 1 }} aria-label={t("tempo.title")} />
           </div>
         </div>

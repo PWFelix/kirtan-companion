@@ -126,6 +126,43 @@ input[type="range"].kc-range::-moz-range-thumb {
   background: var(--surface-paper); border: 2px solid var(--accent-action);
 }
 
+/* ── Brahmaloka time (see data/meter.js) ──
+   .kc-brahma: the slider in the high range — a fire track and a gold thumb.
+   .kc-charging: the thumb held at 200, its glow swelling over the hold time
+   (900ms, BRAHMA_HOLD_MS in hooks/useBrahmaHold.js) until the range unlocks. */
+input[type="range"].kc-range.kc-brahma::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, oklch(0.80 0.15 85) 0%, oklch(0.60 0.20 35) var(--fill,50%), var(--cell) var(--fill,50%), var(--cell) 100%);
+}
+input[type="range"].kc-range.kc-brahma::-moz-range-progress { background: oklch(0.62 0.20 40); }
+input[type="range"].kc-range.kc-brahma::-webkit-slider-thumb { border-color: oklch(0.70 0.17 60); box-shadow: 0 0 10px oklch(0.80 0.15 75 / 0.7); }
+input[type="range"].kc-range.kc-brahma::-moz-range-thumb { border-color: oklch(0.70 0.17 60); box-shadow: 0 0 10px oklch(0.80 0.15 75 / 0.7); }
+input[type="range"].kc-range.kc-charging::-webkit-slider-thumb { animation: kc-charge 900ms ease-in forwards; }
+input[type="range"].kc-range.kc-charging::-moz-range-thumb { animation: kc-charge 900ms ease-in forwards; }
+@keyframes kc-charge {
+  from { box-shadow: 0 0 0 0 oklch(0.80 0.15 75 / 0); }
+  to   { box-shadow: 0 0 0 14px oklch(0.80 0.15 75 / 0.55), 0 0 28px 10px oklch(0.70 0.20 45 / 0.6); }
+}
+/* The whole app shudders as the range unlocks. */
+.kc-shake { animation: kc-shake 650ms cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes kc-shake {
+  10%, 90% { transform: translate(-2px, 1px); }
+  20%, 80% { transform: translate(4px, -2px); }
+  30%, 50%, 70% { transform: translate(-7px, 3px) rotate(-0.4deg); }
+  40%, 60% { transform: translate(7px, -3px) rotate(0.4deg); }
+}
+.kc-brahma-caption { animation: kc-brahma-caption 2200ms ease-out both; }
+@keyframes kc-brahma-caption {
+  0% { opacity: 0; transform: scale(0.9); }
+  18% { opacity: 1; transform: scale(1.02); }
+  75% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kc-shake { animation: none; }
+  input[type="range"].kc-range.kc-charging::-webkit-slider-thumb,
+  input[type="range"].kc-range.kc-charging::-moz-range-thumb { animation-duration: 1ms; }
+}
+
 /* ── Tal chakra (circular BeatIndicator) ──
    The SVG structure is memo'd in React and never re-renders per step. The
    active step is highlighted by toggling data-active on a step's <g>; the
