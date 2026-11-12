@@ -462,8 +462,11 @@ private fun HighwayCanvas(
             }
             drawNote(note.stroke, laneColor.copy(alpha = alpha), Offset(cx, y), noteR)
             // Its bol beside it: one column per hand, so the stroke is named here.
-            val bol = measurer.measure(note.bol, TextStyle(color = syahi.copy(alpha = alpha), fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
-            drawText(bol, topLeft = Offset(cx + noteR + 6.dp.toPx(), y - bol.size.height / 2f))
+            // (Not once it has passed the line: it would run into the hand's label.)
+            if (y <= hitY) {
+                val bol = measurer.measure(note.bol, TextStyle(color = syahi.copy(alpha = alpha), fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
+                drawText(bol, topLeft = Offset(cx + noteR + 6.dp.toPx(), y - bol.size.height / 2f))
+            }
         }
 
         // Targets on the hit line, with the hand (lane) underneath.
