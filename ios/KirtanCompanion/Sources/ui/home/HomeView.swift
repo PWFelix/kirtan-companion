@@ -14,6 +14,7 @@ struct HomeView: View {
 
     @State private var mixerOpen = false
     @State private var pickerOpen = false
+    @State private var tempoOpen = false
 
     private let rowHeight: CGFloat = 46
 
@@ -43,6 +44,14 @@ struct HomeView: View {
         .sheet(isPresented: $mixerOpen) {
             MixerSheet(container: container, beat: beat)
                 .presentationDetents([.medium, .large])
+        }
+        #if DEBUG
+        // DEBUG: `-kirtanTempo` opens the tempo sheet, for screenshots.
+        .onAppear { if ProcessInfo.processInfo.arguments.contains("-kirtanTempo") { tempoOpen = true } }
+        #endif
+        .sheet(isPresented: $tempoOpen) {
+            TempoSheet(container: container)
+                .presentationDetents([.medium])
         }
         .sheet(isPresented: $pickerOpen) {
             BeatPickerSheet(container: container) { pickerOpen = false }
@@ -100,10 +109,19 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "Choose a beat", bundle: .strings))
-                Text("\(transport.bpm) bpm")
+                // Tap the tempo to type it, or jump it by ten (TempoSheet).
+                Button { tempoOpen = true } label: {
+                    HStack(spacing: 4) {
+                        Text("\(transport.bpm) bpm")
+                            .monospacedDigit()
+                        Image(systemName: "pencil").font(.caption)
+                    }
                     .font(.callout)
                     .foregroundStyle(Palette.syahiSoft)
-                    .monospacedDigit()
+                }
+                .buttonStyle(.plain)
+                .disabled(transport.settings.tempoLocked)
+                .accessibilityLabel(String(localized: "Set tempo", bundle: .strings))
             }
             Spacer()
         }

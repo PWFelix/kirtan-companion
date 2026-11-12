@@ -2691,6 +2691,16 @@
         }
       }
     },
+    "Set tempo" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fijar tempo"
+          }
+        }
+      }
+    },
     "Settings" : {
       "localizations" : {
         "es" : {
@@ -3133,6 +3143,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tempo"
+          }
+        }
+      }
+    },
+    "Tempo in BPM" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempo en BPM"
           }
         }
       }
