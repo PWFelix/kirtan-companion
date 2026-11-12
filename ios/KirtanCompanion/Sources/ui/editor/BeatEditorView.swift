@@ -49,6 +49,9 @@ struct BeatEditorView: View {
     // ── The draft. All of it means nothing outside this view. ──
     @State private var name = String(localized: "New beat", bundle: .strings)
     @State private var bpm = 120
+    /// The editor's own Brahmaloka mode: + at 200 opens it, below 200 closes it, and a
+    /// beat saved above 200 opens in it.
+    @State private var brahmaloka = false
     /// The grid's shape: beats, cells per beat, and what ± adds. See EditorShape.
     @State private var shape = EditorMeter.all[0].shape
     @State private var dayan: [Stroke?] = Array(repeating: nil, count: 8)
@@ -110,6 +113,7 @@ struct BeatEditorView: View {
         name = beat.name
         tags = beat.tags
         bpm = beat.bpm
+        brahmaloka = beat.bpm > NORMAL_MAX_BPM
         let n = beat.steps
         func lane(_ id: LaneId) -> [Stroke?] {
             let cells = beat.pattern(id) ?? []
@@ -175,8 +179,26 @@ struct BeatEditorView: View {
                 .pickerStyle(.menu)
             }
             control(String(localized: "Tempo", bundle: .strings)) {
-                Stepper("\(bpm)", value: $bpm, in: MIN_BPM...MAX_BPM, step: 1)
+                HStack(spacing: 6) {
+                    Stepper("\(bpm)", onIncrement: {
+                        if !brahmaloka && bpm >= NORMAL_MAX_BPM {
+                            brahmaloka = true
+                            container.transport.celebrateBrahmaloka()
+                        } else {
+                            bpm = min(bpm + 1, brahmaloka ? MAX_BPM : NORMAL_MAX_BPM)
+                        }
+                    }, onDecrement: {
+                        bpm = max(bpm - 1, MIN_BPM)
+                        brahmaloka = brahmalokaFor(bpm: bpm, was: brahmaloka)
+                    })
                     .font(.footnote.monospacedDigit())
+                    if brahmaloka {
+                        BrahmalokaBadge {
+                            brahmaloka = false
+                            bpm = min(bpm, NORMAL_MAX_BPM)
+                        }
+                    }
+                }
             }
         }
     }

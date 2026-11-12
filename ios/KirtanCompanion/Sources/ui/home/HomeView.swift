@@ -36,6 +36,9 @@ struct HomeView: View {
             tempo
         }
         .padding(24)
+        // The shell floats its bottom bar OVER the content; without this the tempo
+        // buttons sat underneath it, unreachable. 96 is what the shell's banners clear.
+        .padding(.bottom, 72)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $mixerOpen) {
             MixerSheet(container: container, beat: beat)
@@ -130,6 +133,24 @@ struct HomeView: View {
     }
 
     private var tempo: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
+                BpmSlider(
+                    bpm: transport.bpm,
+                    brahmaloka: transport.brahmaloka,
+                    enabled: !transport.settings.tempoLocked,
+                    onChange: { transport.changeBpm($0) },
+                    onUnlock: { transport.unlockBrahmaloka() },
+                )
+                if transport.brahmaloka {
+                    BrahmalokaBadge { transport.leaveBrahmaloka() }
+                }
+            }
+            tempoButtons
+        }
+    }
+
+    private var tempoButtons: some View {
         HStack(spacing: 16) {
             Button { transport.nudgeBpm(-2) } label: { minus }
             Button { transport.nudgeBpm(2) } label: { plus }
@@ -159,7 +180,8 @@ struct HomeView: View {
     private func beatForTransport() -> Beat {
         // The selected beat, or the default. A fresh Home has already loadBeat'd a
         // beat in the container's begin(), so this is a fallback.
-        container.library.allBeats.first
+        transport.loadedBeat
+            ?? container.library.allBeats.first
             ?? container.library.shippedBeats.defaultBeat
     }
 }

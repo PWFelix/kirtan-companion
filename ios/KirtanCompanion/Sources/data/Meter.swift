@@ -26,6 +26,32 @@ let DEFAULT_BPM = 120
 
 func clampBpm(_ bpm: Int) -> Int { min(max(bpm, MIN_BPM), MAX_BPM) }
 
+// Brahmaloka time. The tempo slider normally spans MIN_BPM...NORMAL_MAX_BPM, so the
+// tempos people actually chant at get real resolution under a thumb. Holding it at 200
+// for BRAHMA_HOLD_SECONDS unlocks the high range (BRAHMA_FLOOR_BPM...MAX_BPM); going
+// below 200 locks it again. The floor sits just under 200 so the same slider can drag
+// you back out. Same rules as the web's data/meter.js and Android's Meter.kt.
+let NORMAL_MAX_BPM = 200
+let BRAHMA_FLOOR_BPM = 190
+let BRAHMA_HOLD_SECONDS = 0.9
+
+/// The slider's range for the current mode.
+func tempoRange(brahmaloka: Bool) -> ClosedRange<Int> {
+    brahmaloka ? BRAHMA_FLOOR_BPM...MAX_BPM : MIN_BPM...NORMAL_MAX_BPM
+}
+
+/// The mode a BPM puts you in, given the mode you were in: below 200 is always the
+/// normal range, above 200 always Brahmaloka (a loaded fast beat must be reachable on
+/// the slider), and exactly 200 keeps whatever you had.
+func brahmalokaFor(bpm: Int, was: Bool) -> Bool {
+    if bpm < NORMAL_MAX_BPM { return false }
+    if bpm > NORMAL_MAX_BPM { return true }
+    return was
+}
+
+/// A tempo restored at launch: every launch starts outside Brahmaloka.
+func restoredBpm(_ bpm: Int) -> Int { min(max(bpm, MIN_BPM), NORMAL_MAX_BPM) }
+
 func sumGroups(_ groups: [Int]) -> Int { groups.reduce(0, +) }
 
 /// A beat's groups — stored if it has them, reconstructed if it doesn't.

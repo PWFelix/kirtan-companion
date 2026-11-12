@@ -64,6 +64,10 @@ final class TransportViewModel {
     /// Set when a Bluetooth device is playing that the user has never been asked
     /// to sync the display for. Drives the one-time banner.
     var syncPrompt: OutputRoute?
+    /// Brahmaloka time: the tempo slider's high range (see data/Meter.swift).
+    var brahmaloka = false
+    /// Counts unlocks; the storm overlay plays once each time it changes.
+    var burstKey = 0
 
     /// The display delay in force for the current output.
     var displayDelayMs: Int { settings.displayDelay(route.key) }
@@ -231,9 +235,40 @@ final class TransportViewModel {
     func changeBpm(_ value: Int) {
         bpm = clampBpm(value)
         engine.setBpm(bpm)
+        brahmaloka = brahmalokaFor(bpm: bpm, was: brahmaloka)
+        SessionPrefs.saveBpm(bpm)
     }
 
-    func nudgeBpm(_ delta: Int) { changeBpm(bpm + delta) }
+    /// Clamp to what the slider reaches now: 200, or 500 in Brahmaloka.
+    private func clampToMode(_ value: Int) -> Int {
+        min(max(value, MIN_BPM), brahmaloka ? MAX_BPM : NORMAL_MAX_BPM)
+    }
+
+    /// + at the top of the normal range opens Brahmaloka, like holding the slider there.
+    func nudgeBpm(_ delta: Int) {
+        if delta > 0 && !brahmaloka && bpm >= NORMAL_MAX_BPM { unlockBrahmaloka() }
+        else { changeBpm(clampToMode(bpm + delta)) }
+    }
+
+    /// Open Brahmaloka time: the high range, plus the storm (BrahmalokaStage watches
+    /// `burstKey`) and its thunder.
+    func unlockBrahmaloka() {
+        guard !brahmaloka else { return }
+        brahmaloka = true
+        celebrateBrahmaloka()
+    }
+
+    /// The storm and thunder alone: the editor keeps its own mode but shares the weather.
+    func celebrateBrahmaloka() {
+        burstKey += 1
+        Rumble.play()
+    }
+
+    /// The badge's way out: back to 40–200, at its top.
+    func leaveBrahmaloka() {
+        brahmaloka = false
+        changeBpm(min(bpm, NORMAL_MAX_BPM))
+    }
 
     /// "Keep this speed while I change beats mid-kirtan." A locked tempo makes
     /// `loadBeat` leave the BPM alone instead of adopting the beat's suggestion.
@@ -275,7 +310,7 @@ final class TransportViewModel {
         }
         let avg = Double(gaps.reduce(0, +)) / Double(gaps.count)
         guard avg > 0 else { return }
-        changeBpm(Int((60_000.0 / avg).rounded()))
+        changeBpm(clampToMode(Int((60_000.0 / avg).rounded())))
     }
 
     // ── Mixer ──────────────────────────────────────────────────────────────
@@ -401,6 +436,7 @@ final class TransportViewModel {
         loadedBeat = beat
         if !settings.tempoLocked && beat.id != loadedBeatId { changeBpm(beat.bpm) }
         loadedBeatId = beat.id
+        if let id = beat.id { SessionPrefs.saveBeat(id) }
     }
 
     /// Start `beat`. A no-op while samples are still decoding, and a no-op while

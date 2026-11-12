@@ -449,6 +449,16 @@
         }
       }
     },
+    "A day of Brahmā is a thousand ages." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un día de Brahmā dura mil eras."
+          }
+        }
+      }
+    },
     "A devotee" : {
       "localizations" : {
         "es" : {
@@ -879,6 +889,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Los altavoces Bluetooth suenan un poco después de la pantalla. Si la tira o la pista va por delante del tambor, ajusta aquí el retraso. Cada altavoz recuerda el suyo."
+          }
+        }
+      }
+    },
+    "Brahmaloka time" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiempo de Brahmaloka"
           }
         }
       }
@@ -1655,6 +1675,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aprender"
+          }
+        }
+      }
+    },
+    "Leave Brahmaloka time (back to 40–200 BPM)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salir del tiempo de Brahmaloka (volver a 40–200 BPM)"
           }
         }
       }

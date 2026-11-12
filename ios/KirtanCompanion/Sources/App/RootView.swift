@@ -11,7 +11,10 @@ struct RootView: View {
     var body: some View {
         Group {
             if running {
-                NavigationShell(container: container)
+                // Brahmaloka time's storm plays over everything, the shake included.
+                BrahmalokaStage(fireKey: container.transport.burstKey) {
+                    NavigationShell(container: container)
+                }
             } else {
                 SplashView {
                     running = true
@@ -31,7 +34,15 @@ struct RootView: View {
         // simulator nobody is listening to.
         if ProcessInfo.processInfo.arguments.contains("-kirtanSkipSplash") {
             running = true
-            Task { await container.begin() }
+            Task {
+                await container.begin()
+                // Screenshot the Brahmaloka storm without a finger on the slider.
+                if ProcessInfo.processInfo.arguments.contains("-kirtanBrahmaloka") {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    container.transport.changeBpm(NORMAL_MAX_BPM)
+                    container.transport.unlockBrahmaloka()
+                }
+            }
             return
         }
         #endif

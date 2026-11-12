@@ -73,8 +73,12 @@ final class AppContainer {
         await transport.begin()
         await transport.loadSettings()
         if transport.beatName == nil {
-            let beat = library.allBeats.first ?? ShippedBeats.shared.defaultBeat
+            // Where you left off: the last loaded beat at its last tempo (capped at
+            // 200 — every launch starts outside Brahmaloka time).
+            let saved = SessionPrefs.beatId.flatMap { id in library.allBeats.first { $0.id == id } }
+            let beat = saved ?? library.allBeats.first ?? ShippedBeats.shared.defaultBeat
             transport.loadBeat(beat)
+            if saved != nil, let bpm = SessionPrefs.bpm { transport.changeBpm(bpm) }
         }
         // Restore the session and re-point the library at the cloud if there is one. Done as a
         // background task, never gating the splash: a slow or absent network must not hold up
