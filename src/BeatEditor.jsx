@@ -7,6 +7,7 @@ import { tagLine } from "./data/tags.js";
 import { TagPicker } from "./ui/TagPicker.jsx";
 import { MAX_NAME_LEN, clampName } from "./data/names.js";
 import { closedMarkBackground } from "./data/strokes.js";
+import { MIN_BPM, MAX_BPM } from "./data/meter.js";
 
 /**
  * BeatEditor — three zones, phone-first
@@ -457,7 +458,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
 
           <div style={st.tempoRow}>
             <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>{t("tempo.bpm")}</span>
-            <input className="kc-range" type="range" min={40} max={200} value={bpm}
+            <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
               onChange={(e) => setBpm(Number(e.target.value))}
               style={{ "--fill": fillPct + "%", flex: 1 }} aria-label={t("tempo.title")} />
           </div>

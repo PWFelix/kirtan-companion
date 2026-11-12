@@ -24,7 +24,7 @@
 // Tempo bounds. They live here rather than in useTransport so that pure data
 // modules can clamp a BPM without importing React, Tone.js and the engine.
 // useTransport re-exports them, so its documented surface is unchanged.
-export const MIN_BPM = 40, MAX_BPM = 200;
+export const MIN_BPM = 40, MAX_BPM = 500;
 
 export const sumGroups = (groups) => groups.reduce((a, b) => a + b, 0);
 

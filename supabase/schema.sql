@@ -154,7 +154,7 @@ create table if not exists public.shipped_beats (
   heading             text not null,
   name                text not null,
   note                text not null default '',
-  bpm                 integer not null check (bpm between 40 and 200),
+  bpm                 integer not null check (bpm between 40 and 500),
   groups              integer[] not null check (cardinality(groups) between 1 and 32),
   cpq                 integer not null check (cpq between 1 and 12),
   -- { "dayan": "X-OO…", "bayan": "…", "kartal": "…" } in the share format's
