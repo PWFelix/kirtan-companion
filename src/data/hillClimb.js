@@ -8,8 +8,8 @@
  * numbers as the apps (HillClimb.kt / HillClimb.swift).
  */
 
-/** BPM added per step. Small steps: a learner should barely notice each one. */
-export const CLIMB_STEPS = [1, 2, 3, 5, 10];
+/** BPM added per step: steps a learner can feel, from a nudge to a real climb. */
+export const CLIMB_STEPS = [5, 10, 15, 20, 25];
 /** Seconds between steps. */
 export const CLIMB_INTERVALS = [30, 60, 120, 180, 300, 600];
 export const DEFAULT_CLIMB_STEP = 5;
