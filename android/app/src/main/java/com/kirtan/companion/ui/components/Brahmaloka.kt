@@ -16,6 +16,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
@@ -94,14 +103,20 @@ private val Ember = Color(0xFFB8471A)
 /**
  * The tempo slider: 40–200, or zoomed out to 40–500 in Brahmaloka — same width,
  * the thumb moves. Screens put the ✦ badge (the way back) by the BPM number, never
- * in the slider's row, so the slider never loses width or pushes its row off screen. Holding the thumb at 200
- * for [BRAHMA_HOLD_MS] calls [onUnlock], with a glow swelling round the thumb
- * while you hold so it is clear something is coming.
+ * in the slider's row, so the slider never loses width or pushes its row off screen.
  *
- * KEYED ON THE MODE so the slider is rebuilt when the range changes. That ends
- * the drag in progress — which is the point: the finger is still pressed at the
- * right-hand end, and a live drag on the new 40–500 range would fling the
- * tempo to ~490 on its next move.
+ * A GRAB SLIDER, not Material's: touching anywhere on it grabs the thumb where it
+ * is, and the drag moves it RELATIVE to that. Material's slider jumps the value to
+ * the touch point, so in Brahmaloka a tap left of the thumb landed below 200 and
+ * threw you out. Here a tap changes nothing.
+ *
+ * THE BUILD-UP. Holding at 200 (in the normal range) pushes against the end: over
+ * [BRAHMA_HOLD_MS] the slider shakes harder, a glow swells round the thumb and
+ * haptic ticks speed up, then it breaks through into Brahmaloka. That is the
+ * feedback that you are pushing through something — and what makes it findable.
+ *
+ * The drag is applied as DELTAS on the range in force, so when the range zooms
+ * out mid-drag the finger simply carries on at the new scale — no fling to ~490.
  */
 @Composable
 internal fun BpmSlider(
@@ -112,44 +127,114 @@ internal fun BpmSlider(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    Box(modifier) {
-    key(brahmaloka) {
-        val range = tempoRange(brahmaloka)
-        val source = remember { MutableInteractionSource() }
-        val dragged by source.collectIsDraggedAsState()
-        val pressed by source.collectIsPressedAsState()
-        val charging = enabled && !brahmaloka && bpm >= NORMAL_MAX_BPM && (dragged || pressed)
-        val unlock by rememberUpdatedState(onUnlock)
-        val glow = remember { Animatable(0f) }
-        LaunchedEffect(charging) {
-            if (!charging) {
-                glow.snapTo(0f)
-                return@LaunchedEffect
-            }
-            launch { glow.animateTo(1f, tween(BRAHMA_HOLD_MS.toInt(), easing = FastOutLinearInEasing)) }
-            delay(BRAHMA_HOLD_MS)
-            unlock()
+    val range = tempoRange(brahmaloka)
+    val span = (range.last - range.first).toFloat()
+    val currentBpm by rememberUpdatedState(bpm)
+    val currentRange by rememberUpdatedState(range)
+    val change by rememberUpdatedState(onChange)
+    val unlock by rememberUpdatedState(onUnlock)
+    var held by remember { mutableStateOf(false) }
+    // The unrounded value under the finger, so slow drags still accumulate.
+    var dragValue by remember { mutableFloatStateOf(bpm.toFloat()) }
+
+    val charging = enabled && held && !brahmaloka && bpm >= NORMAL_MAX_BPM
+    val build = remember { Animatable(0f) }
+    val view = LocalView.current
+    LaunchedEffect(charging) {
+        if (!charging) {
+            build.animateTo(0f, tween(150))
+            return@LaunchedEffect
         }
-        KcSlider(
-            value = bpm.coerceIn(range.first, range.last).toFloat(),
-            onValueChange = { onChange(it.roundToInt()) },
-            valueRange = range.first.toFloat()..range.last.toFloat(),
-            enabled = enabled,
-            accent = if (brahmaloka) Fire else PaletteToken.CLAY.color,
-            interactionSource = source,
-            modifier = Modifier.fillMaxWidth().drawBehind {
-                val g = glow.value
-                if (g <= 0f) return@drawBehind
-                // Charging only happens at 200, so the thumb is at the right end.
-                val c = Offset(size.width - 10.dp.toPx(), size.height / 2)
-                val r = (14 + 26 * g).dp.toPx()
-                drawCircle(
-                    Brush.radialGradient(listOf(Gold.copy(alpha = 0.75f * g), Fire.copy(alpha = 0.35f * g), Color.Transparent), c, r),
-                    radius = r, center = c,
-                )
-            },
-        )
+        launch { build.animateTo(1f, tween(BRAHMA_HOLD_MS.toInt(), easing = FastOutLinearInEasing)) }
+        // Ticks that quicken as the pressure builds: 220ms apart down to ~40ms.
+        launch {
+            while (true) {
+                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                delay((220 - 180 * build.value).toLong().coerceAtLeast(40))
+            }
+        }
+        delay(BRAHMA_HOLD_MS)
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        unlock()
     }
+    // The shake: a fast wobble whose amplitude grows with the build-up.
+    var phase by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(charging) {
+        while (charging) withFrameNanos { phase = (it / 1_000_000L % 100_000L).toFloat() }
+    }
+    val density = LocalDensity.current
+    val accent = if (brahmaloka) Fire else PaletteToken.CLAY.color
+    val fraction = ((bpm.coerceIn(range.first, range.last) - range.first) / span).coerceIn(0f, 1f)
+    val label = stringResource(R.string.tempo_title)
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .alpha(if (enabled) 1f else 0.5f)
+            .graphicsLayer {
+                val b = build.value
+                if (b > 0f) {
+                    val amp = with(density) { (1f + 5f * b * b).dp.toPx() }
+                    translationX = amp * kotlin.math.sin(phase * 0.09f)
+                    translationY = amp * 0.4f * kotlin.math.sin(phase * 0.13f + 1f)
+                    rotationZ = 0.8f * b * kotlin.math.sin(phase * 0.07f)
+                }
+            }
+            .semantics {
+                contentDescription = label
+                progressBarRangeInfo = ProgressBarRangeInfo(
+                    bpm.toFloat(), range.first.toFloat()..range.last.toFloat(), steps = 0,
+                )
+                if (enabled) setProgress { v -> onChange(v.roundToInt()); true }
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    held = true
+                    dragValue = currentBpm.toFloat()
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val c = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!c.pressed) break
+                            val dx = c.position.x - c.previousPosition.x
+                            if (dx != 0f) {
+                                val r = currentRange
+                                val trackPx = size.width - 2 * 12.dp.toPx()
+                                dragValue = (dragValue + dx / trackPx * (r.last - r.first))
+                                    .coerceIn(r.first.toFloat(), r.last.toFloat())
+                                val v = dragValue.roundToInt()
+                                if (v != currentBpm) change(v)
+                                c.consume()
+                            }
+                        }
+                    } finally {
+                        held = false
+                    }
+                }
+            },
+    ) {
+        val pad = 12.dp.toPx()
+        val cy = size.height / 2
+        val track = 6.dp.toPx()
+        val x = pad + fraction * (size.width - 2 * pad)
+        val b = build.value
+        drawLine(PaletteToken.HEAD_SUNKEN.color, Offset(pad, cy), Offset(size.width - pad, cy), track, StrokeCap.Round)
+        drawLine(accent, Offset(pad, cy), Offset(x, cy), track, StrokeCap.Round)
+        if (b > 0f) {
+            val r = (14 + 30 * b).dp.toPx()
+            drawCircle(
+                Brush.radialGradient(listOf(Gold.copy(alpha = 0.8f * b), Fire.copy(alpha = 0.4f * b), Color.Transparent), Offset(x, cy), r),
+                radius = r, center = Offset(x, cy),
+            )
+        }
+        val thumb = (if (held) 12 else 11).dp.toPx()
+        drawCircle(Color.Black.copy(alpha = 0.12f), thumb + 1.dp.toPx(), Offset(x, cy + 1.dp.toPx()))
+        drawCircle(PaletteToken.HEAD.color, thumb, Offset(x, cy))
+        drawCircle(accent, thumb, Offset(x, cy), style = Stroke(2.dp.toPx()))
     }
 }
 

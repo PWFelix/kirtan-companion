@@ -12,8 +12,10 @@ class BrahmalokaTest {
         assertEquals(40..500, tempoRange(true))
     }
 
-    @Test fun below200AlwaysLeaves() {
-        assertFalse(brahmalokaFor(199, true))
+    @Test fun below200StaysInBrahmaloka() {
+        // The slider must not resize under the finger; only the ✦ badge leaves.
+        assertTrue(brahmalokaFor(199, true))
+        assertTrue(brahmalokaFor(40, true))
         assertFalse(brahmalokaFor(120, false))
     }
 
