@@ -188,6 +188,10 @@ function HomeView({
           </button>
         </div>
         <div style={st.bpmEntryTop}>
+          {/* Big jumps either side of the number: the wheel and keyboard are for
+              precision, ±10 for "a lot faster/slower" in one tap. */}
+          <button onClick={() => { bpmFocusRef.current = false; nudgeBpm(-10); }}
+            disabled={bpm <= MIN_BPM} style={{ ...st.bpmJump, opacity: bpm <= MIN_BPM ? 0.35 : 1 }}>−10</button>
           {/* select-all on focus so the first keystroke replaces the value
               (open at 140, type 8 → "8", type 0 → "80"); capped at 3 digits. */}
           <input type="text" inputMode="numeric" maxLength={3} value={bpmDraft}
@@ -196,6 +200,8 @@ function HomeView({
             onChange={(e) => setBpmDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
             aria-label={t("tempo.inBpm")} style={st.bpmInput} />
+          <button onClick={() => { bpmFocusRef.current = false; nudgeBpm(10); }}
+            style={st.bpmJump}>+10</button>
         </div>
         <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>{t("tempo.bpm")}</span>
         <div style={st.wheelWrap}>
@@ -534,6 +540,7 @@ const st = {
   // ── Tempo-entry sheet ──
   sheetConfirm: { flexShrink: 0, width: 44, height: 44, margin: "-6px -6px 0 0", borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", cursor: "pointer", display: "grid", placeItems: "center" },
   bpmEntryTop: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", marginTop: "var(--space-4)" },
+  bpmJump: { flexShrink: 0, minWidth: 64, height: 48, borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", color: "var(--syahi)", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: 18, fontWeight: 700, cursor: "pointer" },
   bpmInput: { width: 120, textAlign: "center", border: "none", background: "transparent", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "2.75rem", fontWeight: 600, color: "var(--syahi)", outline: "none", padding: 0, MozAppearance: "textfield" },
   wheelWrap: { position: "relative", marginTop: "var(--space-5)" },
   wheelBand: { position: "absolute", left: 0, right: 0, top: "50%", height: 40, transform: "translateY(-50%)", borderRadius: 12, background: "var(--head-sunken)", pointerEvents: "none" },
