@@ -124,6 +124,8 @@ internal fun BeatEditorScreen(
     val scope = rememberCoroutineScope()
 
     var draft by remember { mutableStateOf(EditorDraft.from(initialBeat)) }
+    // The editor's own Brahmaloka mode: a beat saved above 200 opens in it.
+    var brahmaloka by remember { mutableStateOf(draft.bpm > com.kirtan.companion.data.NORMAL_MAX_BPM) }
     // The author's tags. A copy starts with the original's, as a suggestion.
     var tags by remember { mutableStateOf(initialBeat?.tags.orEmpty()) }
     var tagsOpen by remember { mutableStateOf(false) }
@@ -317,7 +319,19 @@ internal fun BeatEditorScreen(
                 onFeel = { feelOpen = true },
                 onLength = { add -> draft = if (add) draft.addGroup() else draft.removeGroup() },
                 onResolution = { draft = draft.setResolution(it) },
-                onBpm = { draft = draft.setBpm(it) },
+                onBpm = {
+                    draft = draft.setBpm(it)
+                    brahmaloka = com.kirtan.companion.data.brahmalokaFor(it, brahmaloka)
+                },
+                brahmaloka = brahmaloka,
+                onUnlock = {
+                    brahmaloka = true
+                    transport.celebrateBrahmaloka()
+                },
+                onLeave = {
+                    brahmaloka = false
+                    draft = draft.setBpm(draft.bpm.coerceAtMost(com.kirtan.companion.data.NORMAL_MAX_BPM))
+                },
             )
 
             saveError?.let { message ->
@@ -734,6 +748,9 @@ private fun ControlsZone(
     onLength: (Boolean) -> Unit,
     onResolution: (Int) -> Unit,
     onBpm: (Int) -> Unit,
+    brahmaloka: Boolean,
+    onUnlock: () -> Unit,
+    onLeave: () -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
 
@@ -822,12 +839,14 @@ private fun ControlsZone(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
             )
-            KcSlider(
-                value = draft.bpm.toFloat(),
-                onValueChange = { onBpm(it.toInt().coerceIn(MIN_BPM, MAX_BPM)) },
-                valueRange = MIN_BPM.toFloat()..MAX_BPM.toFloat(),
+            com.kirtan.companion.ui.components.BpmSlider(
+                bpm = draft.bpm,
+                brahmaloka = brahmaloka,
+                onChange = { onBpm(it.coerceIn(MIN_BPM, MAX_BPM)) },
+                onUnlock = onUnlock,
                 modifier = Modifier.weight(1f),
             )
+            if (brahmaloka) com.kirtan.companion.ui.components.BrahmalokaBadge(onLeave = onLeave)
         }
     }
 }

@@ -37,6 +37,9 @@
     <string name="beats_play_this">Play this beat</string>
     <string name="beats_start">Start</string>
     <string name="beats_start_named">Start · %1$s</string>
+    <string name="brahma_caption">A day of Brahmā is a thousand ages.</string>
+    <string name="brahma_leave">Leave Brahmaloka time (back to 40–200 BPM)</string>
+    <string name="brahma_title">Brahmaloka time</string>
     <string name="cat_builtin">Built in</string>
     <string name="cat_community">From the community</string>
     <string name="cat_custom">Your beats</string>

@@ -13,6 +13,8 @@ import com.kirtan.companion.container
 import com.kirtan.companion.data.DEFAULT_BEAT
 import com.kirtan.companion.data.MAX_BPM
 import com.kirtan.companion.data.MIN_BPM
+import com.kirtan.companion.data.NORMAL_MAX_BPM
+import com.kirtan.companion.data.brahmalokaFor
 import com.kirtan.companion.data.TUNE_MAX_CENTS
 import com.kirtan.companion.data.TUNE_MIN_CENTS
 import com.kirtan.companion.data.clampEqDb
@@ -59,6 +61,10 @@ data class TransportState(
      * to sync the display for. Drives the one-time banner on the playing screen.
      */
     val syncPrompt: OutputRoute? = null,
+    /** Brahmaloka time: the tempo slider's high range (see data/Meter.kt). */
+    val brahmaloka: Boolean = false,
+    /** Counts unlocks; the overlay plays once each time it changes. */
+    val burstKey: Int = 0,
 ) {
     /** The display delay in force for the current output. */
     val displayDelayMs: Int get() = settings.displayDelay(route.key)
@@ -124,8 +130,16 @@ class TransportViewModel(
      */
     fun getPhase(): Double = engine.getPhase()
 
+    /**
+     * The tempo the app was closed at (capped at 200, see SessionPrefs), applied
+     * by the first [loadBeat] of the restored beat in place of its suggested
+     * tempo. Null once used, or when there is nothing to restore.
+     */
+    private var restoreBpm: Int? = container.session.bpm
+    private val restoreBeatId: String? = container.session.beatId
+
     /** Authoritative tempo, mutated synchronously so rapid ± taps stack. */
-    private var bpm: Int = _state.value.bpm
+    private var bpm: Int = restoreBpm ?: _state.value.bpm
     private var tempoLocked: Boolean = false
 
     /**
@@ -313,12 +327,44 @@ class TransportViewModel(
     fun changeBpm(value: Int) {
         bpm = value.coerceIn(MIN_BPM, MAX_BPM)
         engine.setBpm(bpm)
-        _state.value = _state.value.copy(bpm = bpm)
+        val s = _state.value
+        _state.value = s.copy(bpm = bpm, brahmaloka = brahmalokaFor(bpm, s.brahmaloka))
+        container.session.saveBpm(bpm)
     }
 
-    fun nudgeBpm(delta: Int) = changeBpm(bpm + delta)
+    /** Clamp to what the slider reaches now: 200, or 500 in Brahmaloka. */
+    private fun clampToMode(value: Int): Int =
+        value.coerceIn(MIN_BPM, if (_state.value.brahmaloka) MAX_BPM else NORMAL_MAX_BPM)
 
-    fun commitBpm(value: Int) = changeBpm(value.coerceIn(MIN_BPM, MAX_BPM))
+    /** + at the top of the normal range opens Brahmaloka, like holding the slider there. */
+    fun nudgeBpm(delta: Int) {
+        if (delta > 0 && !_state.value.brahmaloka && bpm >= NORMAL_MAX_BPM) unlockBrahmaloka()
+        else changeBpm(clampToMode(bpm + delta))
+    }
+
+    fun commitBpm(value: Int) = changeBpm(clampToMode(value))
+
+    /**
+     * Open Brahmaloka time: the high range, plus the storm (the overlay in
+     * KirtanApp watches [TransportState.burstKey]) and its thunder.
+     */
+    fun unlockBrahmaloka() {
+        if (_state.value.brahmaloka) return
+        _state.value = _state.value.copy(brahmaloka = true)
+        celebrateBrahmaloka()
+    }
+
+    /** The storm and thunder alone — the editor keeps its own mode but shares the weather. */
+    fun celebrateBrahmaloka() {
+        _state.value = _state.value.copy(burstKey = _state.value.burstKey + 1)
+        com.kirtan.companion.ui.components.Rumble.play()
+    }
+
+    /** The badge's way out: back to 40–200, at its top. */
+    fun leaveBrahmaloka() {
+        _state.value = _state.value.copy(brahmaloka = false)
+        changeBpm(bpm.coerceAtMost(NORMAL_MAX_BPM))
+    }
 
     /**
      * "Keep this speed while I change beats mid-kirtan." A locked tempo makes
@@ -360,7 +406,7 @@ class TransportViewModel(
             return
         }
         val avgGap = gaps.average()
-        if (avgGap > 0) changeBpm((60_000.0 / avgGap).roundToInt())
+        if (avgGap > 0) changeBpm(clampToMode((60_000.0 / avgGap).roundToInt()))
     }
 
     // ── Mixer ──────────────────────────────────────────────────────────────
@@ -484,8 +530,14 @@ class TransportViewModel(
         engine.setBeat(beat)
         container.currentBeatName.value = beat.name
         _state.value = _state.value.copy(beatName = beat.name)
-        if (!tempoLocked && beat.id != loadedBeatId) changeBpm(beat.bpm)
+        val restore = restoreBpm?.takeIf { loadedBeatId == null && beat.id == restoreBeatId }
+        restoreBpm = null
+        when {
+            restore != null -> changeBpm(restore)
+            !tempoLocked && beat.id != loadedBeatId -> changeBpm(beat.bpm)
+        }
         loadedBeatId = beat.id
+        beat.id?.let(container.session::saveBeat)
     }
 
     /**

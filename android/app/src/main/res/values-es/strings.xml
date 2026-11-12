@@ -31,6 +31,9 @@
     <string name="beats_play_this">Tocar este ritmo</string>
     <string name="beats_start">Empezar</string>
     <string name="beats_start_named">Empezar · %1$s</string>
+    <string name="brahma_caption">Un día de Brahmā dura mil eras.</string>
+    <string name="brahma_leave">Salir del tiempo de Brahmaloka (volver a 40–200 BPM)</string>
+    <string name="brahma_title">Tiempo de Brahmaloka</string>
     <string name="cat_builtin">Incluidos</string>
     <string name="cat_community">De la comunidad</string>
     <string name="cat_custom">Tus ritmos</string>

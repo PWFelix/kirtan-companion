@@ -89,6 +89,11 @@ class AppContainer(private val appContext: Context) {
     val localBeats: BeatsProvider by lazy { LocalBeatsProvider(store) }
 
     /** The user's private tags, per beat id, on this device. */
+    /** The last loaded beat and tempo — see [com.kirtan.companion.storage.SessionPrefs]. */
+    val session: com.kirtan.companion.storage.SessionPrefs by lazy {
+        com.kirtan.companion.storage.SessionPrefs(appContext)
+    }
+
     val privateTags: com.kirtan.companion.storage.PrivateTags by lazy {
         com.kirtan.companion.storage.PrivateTags(appContext)
     }

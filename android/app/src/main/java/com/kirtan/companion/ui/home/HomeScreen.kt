@@ -61,6 +61,8 @@ import com.kirtan.companion.ui.Wordmark
 import com.kirtan.companion.ui.components.HairlineIconButton
 import com.kirtan.companion.ui.components.KcSheet
 import com.kirtan.companion.ui.components.KcSlider
+import com.kirtan.companion.ui.components.BpmSlider
+import com.kirtan.companion.ui.components.BrahmalokaBadge
 import com.kirtan.companion.ui.components.PrimaryButton
 import com.kirtan.companion.ui.components.SecondaryButton
 import com.kirtan.companion.ui.components.SectionLabel
@@ -207,6 +209,9 @@ internal fun HomeScreen(
                         sheet = HomeSheet.TEMPO
                     },
                     onSliderChange = { transport.changeBpm(it.toInt()) },
+                    brahmaloka = state.brahmaloka,
+                    onUnlock = { transport.unlockBrahmaloka() },
+                    onLeave = { transport.leaveBrahmaloka() },
                     onToggleLock = { transport.setTempoLocked(!state.settings.tempoLocked) },
                     onTapTempo = { transport.tapTempo() },
                     onOpenMixer = { sheet = HomeSheet.MIXER },
@@ -251,6 +256,8 @@ internal fun HomeScreen(
 
         HomeSheet.TEMPO -> TempoSheet(
             bpm = state.bpm,
+            brahmaloka = state.brahmaloka,
+            onUnlock = { transport.unlockBrahmaloka() },
             draft = bpmDraft,
             onDraftChange = { draft ->
                 bpmDraft = draft
@@ -353,6 +360,9 @@ private fun TransportControls(
     onNudge: (Int) -> Unit,
     onOpenTempo: () -> Unit,
     onSliderChange: (Float) -> Unit,
+    brahmaloka: Boolean,
+    onUnlock: () -> Unit,
+    onLeave: () -> Unit,
     onToggleLock: () -> Unit,
     onTapTempo: () -> Unit,
     onOpenMixer: () -> Unit,
@@ -426,13 +436,15 @@ private fun TransportControls(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(dimens.space3),
         ) {
-            KcSlider(
-                value = bpm.toFloat(),
-                onValueChange = onSliderChange,
-                valueRange = MIN_BPM.toFloat()..MAX_BPM.toFloat(),
+            BpmSlider(
+                bpm = bpm,
+                brahmaloka = brahmaloka,
+                onChange = { onSliderChange(it.toFloat()) },
+                onUnlock = onUnlock,
                 enabled = !tempoLocked,
                 modifier = Modifier.weight(1f),
             )
+            if (brahmaloka) BrahmalokaBadge(onLeave = onLeave)
             HairlineIconButton(
                 icon = if (tempoLocked) KcIcons.LockClosed else KcIcons.LockOpen,
                 contentDescription = if (tempoLocked) stringResource(R.string.tempo_unlock) else stringResource(R.string.tempo_lock),
@@ -744,6 +756,8 @@ private fun PanelToggle(
 @Composable
 private fun TempoSheet(
     bpm: Int,
+    brahmaloka: Boolean,
+    onUnlock: () -> Unit,
     draft: String,
     onDraftChange: (String) -> Unit,
     onCommit: () -> Unit,
@@ -805,10 +819,11 @@ private fun TempoSheet(
                 letterSpacing = 1.sp,
             )
 
-            KcSlider(
-                value = bpm.toFloat(),
-                onValueChange = { onDraftChange(it.toInt().toString()) },
-                valueRange = MIN_BPM.toFloat()..MAX_BPM.toFloat(),
+            BpmSlider(
+                bpm = bpm,
+                brahmaloka = brahmaloka,
+                onChange = { onDraftChange(it.toString()) },
+                onUnlock = onUnlock,
             )
         }
     }

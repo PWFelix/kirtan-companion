@@ -36,6 +36,36 @@ const val MAX_BPM = 500
 
 fun clampBpm(bpm: Int): Int = bpm.coerceIn(MIN_BPM, MAX_BPM)
 
+/**
+ * Brahmaloka time. The tempo slider normally spans [MIN_BPM]..[NORMAL_MAX_BPM], so
+ * the tempos people actually chant at get real resolution under a thumb. Holding
+ * it at [NORMAL_MAX_BPM] for [BRAHMA_HOLD_MS] unlocks the high range
+ * ([BRAHMA_FLOOR_BPM]..[MAX_BPM]); going below [NORMAL_MAX_BPM] locks it again. The
+ * floor sits just under 200 so the same slider can drag you back out. Same rules
+ * as the web's data/meter.js.
+ */
+const val NORMAL_MAX_BPM = 200
+const val BRAHMA_FLOOR_BPM = 190
+const val BRAHMA_HOLD_MS = 900L
+
+/** The slider's range for the current mode. */
+fun tempoRange(brahmaloka: Boolean): IntRange =
+    if (brahmaloka) BRAHMA_FLOOR_BPM..MAX_BPM else MIN_BPM..NORMAL_MAX_BPM
+
+/**
+ * The mode a BPM puts you in, given the mode you were in: below 200 is always the
+ * normal range; above 200 is only reachable from Brahmaloka (or by loading a beat
+ * that fast); exactly 200 keeps whatever you had.
+ */
+fun brahmalokaFor(bpm: Int, was: Boolean): Boolean = when {
+    bpm < NORMAL_MAX_BPM -> false
+    bpm > NORMAL_MAX_BPM -> true
+    else -> was
+}
+
+/** A tempo restored at launch: every launch starts outside Brahmaloka. */
+fun restoredBpm(bpm: Int): Int = bpm.coerceIn(MIN_BPM, NORMAL_MAX_BPM)
+
 fun sumGroups(groups: List<Int>): Int = groups.sum()
 
 /**

@@ -85,7 +85,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             allBeats.collect { beats ->
                 val current = _selectedBeat.value
                 when {
-                    current == null -> _selectedBeat.value = beats.firstOrNull()
+                    // First fill: the beat loaded last time, if it still exists.
+                    current == null -> _selectedBeat.value =
+                        container.session.beatId?.let { id -> beats.firstOrNull { it.id == id } }
+                            ?: beats.firstOrNull()
                     // A beat that vanished (deleted, or filtered out) falls back
                     // to the head of the list.
                     beats.none { it.id == current.id } -> _selectedBeat.value = beats.firstOrNull()

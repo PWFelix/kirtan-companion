@@ -247,6 +247,8 @@ internal fun KirtanApp(
         return
     }
 
+    // Brahmaloka time's storm plays over everything, the shake included.
+    com.kirtan.companion.ui.components.BrahmalokaStage(transportState.burstKey) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -408,6 +410,7 @@ internal fun KirtanApp(
                 onRemoved = { pendingShippedRemove = null },
             )
         }
+    }
     }
 }
 

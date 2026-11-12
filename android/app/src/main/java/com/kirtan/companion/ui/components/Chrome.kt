@@ -271,9 +271,11 @@ internal fun KcSlider(
     accent: Color = PaletteToken.CLAY.color,
     enabled: Boolean = true,
     onValueChangeFinished: (() -> Unit)? = null,
+    interactionSource: androidx.compose.foundation.interaction.MutableInteractionSource? = null,
 ) {
     val dimens = KirtanTheme.dimens
     Slider(
+        interactionSource = interactionSource ?: remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
         value = value,
         onValueChange = onValueChange,
         onValueChangeFinished = onValueChangeFinished,
