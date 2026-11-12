@@ -290,6 +290,12 @@ final class TransportViewModel {
         publish(s)
     }
 
+    /// Remember Learn's hill-climb choice (BPM per step, seconds between steps).
+    func setHillClimb(step: Int, seconds: Int) {
+        var s = settings; s.hillClimbStep = step; s.hillClimbSeconds = seconds
+        publish(s)
+    }
+
     func setFeel(_ feel: Feel) {
         engine.setFeel(feel)
         var s = settings; s.feel = feel

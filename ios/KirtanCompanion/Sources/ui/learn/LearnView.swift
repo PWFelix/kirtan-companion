@@ -18,6 +18,14 @@ struct LearnView: View {
         return list.isEmpty ? container.library.allBeats : list
     }
     @State private var pickerOpen = false
+    // Hill climb. On/off is per session (a lesson never speeds up unasked); the step
+    // and interval are remembered in prefs, so turning it back on offers the last choice.
+    @State private var climbOn = false
+    @State private var climbLeft = HillClimb.defaultIntervalSec
+    @State private var climbSheet = false
+    private var climbStep: Int { transport.settings.hillClimbStep }
+    private var climbEvery: Int { transport.settings.hillClimbSeconds }
+    private var ceiling: Int { tempoRange(brahmaloka: transport.brahmaloka).upperBound }
     private var beat: Beat? { transport.loadedBeat ?? beats.first }
 
     var body: some View {
@@ -38,6 +46,7 @@ struct LearnView: View {
                     engine: transport.engineHandle
                 )
                 controls(beat)
+                if climbOn { climbStatus }
             } else {
                 Text(String(localized: "Pick a beat on Home to learn it here.", bundle: .strings))
                     .foregroundStyle(Palette.syahiSoft)
@@ -52,8 +61,34 @@ struct LearnView: View {
         // Screenshot hook: `-kirtanLearnKartal` opens Learn on the kartal highway.
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("-kirtanLearnKartal") { transport.setLearnKartal(true) }
+            // `-kirtanClimb` opens the hill-climb sheet; `-kirtanClimbOn` turns it on.
+            if ProcessInfo.processInfo.arguments.contains("-kirtanClimb") { climbSheet = true }
+            if ProcessInfo.processInfo.arguments.contains("-kirtanClimbOn") { climbLeft = climbEvery; climbOn = true }
         }
         #endif
+        // The countdown runs on PLAYING time: pausing holds it, and Play carries on.
+        .task(id: ClimbKey(on: climbOn, playing: transport.playing, step: climbStep, every: climbEvery)) {
+            guard climbOn, transport.playing else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                if HillClimb.atTop(transport.bpm, ceiling: ceiling) { continue }
+                climbLeft -= 1
+                if climbLeft <= 0 {
+                    transport.changeBpm(HillClimb.next(transport.bpm, step: climbStep, ceiling: ceiling))
+                    climbLeft = climbEvery
+                }
+            }
+        }
+        .sheet(isPresented: $climbSheet) {
+            HillClimbSheet(step: climbStep, seconds: climbEvery, onCancel: { climbSheet = false }) { step, seconds in
+                transport.setHillClimb(step: step, seconds: seconds)
+                climbLeft = seconds
+                climbOn = true
+                climbSheet = false
+            }
+            .presentationDetents([.medium])
+        }
         .sheet(isPresented: $pickerOpen) {
             BeatPickerSheet(container: container) { pickerOpen = false }
                 .presentationDetents([.medium, .large])
@@ -128,19 +163,51 @@ struct LearnView: View {
             Text("\(transport.bpm) BPM")
                 .font(.headline)
                 .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(Palette.syahi)
             iconButton("plus", String(localized: "Faster", bundle: .strings)) { transport.nudgeBpm(5) }
             Spacer()
+            // Off: opens the choice (last one pre-selected). On: one tap turns it off.
+            Button { if climbOn { climbOn = false } else { climbSheet = true } } label: {
+                Image(systemName: "stairs")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(climbOn ? Palette.onClay : Palette.syahiSoft)
+                    .frame(width: 44, height: 44)
+                    .background(climbOn ? Palette.clay : .clear, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(climbOn ? Palette.clay : Palette.rule, lineWidth: 1))
+            }
+            .accessibilityLabel(climbOn
+                ? String(localized: "Hill climb is on. Tap to turn it off", bundle: .strings)
+                : String(localized: "Hill climb", bundle: .strings))
+            .accessibilityAddTraits(climbOn ? .isSelected : [])
             Button { transport.togglePlay(beat) } label: {
                 Label(transport.playing ? String(localized: "Pause", bundle: .strings) : String(localized: "Play", bundle: .strings),
                       systemImage: transport.playing ? "pause.fill" : "play.fill")
                     .font(.headline)
-                    .frame(width: 130, height: 48)
+                    .frame(width: 112, height: 48)
                     .background(Palette.clay, in: RoundedRectangle(cornerRadius: 14))
                     .foregroundStyle(Palette.onClay)
             }
             .disabled(!transport.ready)
         }
+    }
+
+    private var climbStatus: some View {
+        let every = HillClimbSheet.intervalLabel(climbEvery)
+        let text: String
+        if HillClimb.atTop(transport.bpm, ceiling: ceiling) {
+            text = String(localized: "Reached the top of the range: \(transport.bpm) BPM", bundle: .strings)
+        } else if transport.playing {
+            text = String(localized: "Climbing +\(climbStep) BPM every \(every) · next in \(HillClimb.clock(climbLeft))", bundle: .strings)
+        } else {
+            text = String(localized: "Climbing +\(climbStep) BPM every \(every) · paused until you play", bundle: .strings)
+        }
+        return Text(text)
+            .font(.caption.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(Palette.clay)
+            .frame(maxWidth: .infinity)
     }
 
     private func iconButton(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
@@ -159,6 +226,100 @@ struct LearnView: View {
         let index = beats.firstIndex { $0.id == beat?.id } ?? 0
         let next = beats[((index + delta) % beats.count + beats.count) % beats.count]
         transport.loadBeat(next)
+    }
+}
+
+private struct ClimbKey: Equatable {
+    let on: Bool
+    let playing: Bool
+    let step: Int
+    let every: Int
+}
+
+/// The hill-climb choice: N BPM every X. Start turns it on; Cancel leaves it off.
+private struct HillClimbSheet: View {
+    let onCancel: () -> Void
+    let onAccept: (Int, Int) -> Void
+    @State private var step: Int
+    @State private var seconds: Int
+
+    init(step: Int, seconds: Int, onCancel: @escaping () -> Void, onAccept: @escaping (Int, Int) -> Void) {
+        _step = State(initialValue: step)
+        _seconds = State(initialValue: seconds)
+        self.onCancel = onCancel
+        self.onAccept = onAccept
+    }
+
+    static func intervalLabel(_ s: Int) -> String {
+        s < 60 ? String(localized: "\(s) s", bundle: .strings) : String(localized: "\(s / 60) min", bundle: .strings)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(String(localized: "Hill climb", bundle: .strings))
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(Palette.syahi)
+            Text(String(localized: "Speed up a little at a time while you play, starting from the tempo you're at now.", bundle: .strings))
+                .font(.subheadline)
+                .foregroundStyle(Palette.syahiSoft)
+            label(String(localized: "Go up by", bundle: .strings))
+            chips(HillClimb.steps, selected: step, text: { String(localized: "+\($0) BPM", bundle: .strings) }) { step = $0 }
+            label(String(localized: "Every", bundle: .strings))
+            chips(HillClimb.intervalsSec, selected: seconds, text: Self.intervalLabel) { seconds = $0 }
+            HStack(spacing: 8) {
+                Button(action: onCancel) {
+                    Text(String(localized: "Cancel", bundle: .strings))
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .foregroundStyle(Palette.syahi)
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.rule, lineWidth: 1))
+                }
+                Button { onAccept(step, seconds) } label: {
+                    Label(String(localized: "Start climbing", bundle: .strings), systemImage: "stairs")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(Palette.clay, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(Palette.onClay)
+                }
+            }
+            .padding(.top, 14)
+        }
+        .padding(22)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Palette.head.ignoresSafeArea())
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.bold))
+            .tracking(1)
+            .foregroundStyle(Palette.syahiSoft)
+            .padding(.top, 8)
+    }
+
+    private func chips(_ values: [Int], selected: Int, text: @escaping (Int) -> String, pick: @escaping (Int) -> Void) -> some View {
+        // Rows of three: "+20 BPM" is too wide for five abreast on a phone.
+        let rows = stride(from: 0, to: values.count, by: 3).map { Array(values[$0..<min($0 + 3, values.count)]) }
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(rows, id: \.self) { row in
+                HStack(spacing: 8) {
+                    ForEach(row, id: \.self) { v in
+                        Button { pick(v) } label: {
+                            Text(text(v))
+                                .font(.caption.weight(.bold))
+                                .lineLimit(1)
+                                .fixedSize()
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: 36)
+                                .foregroundStyle(v == selected ? Palette.onClay : Palette.syahi)
+                                .background(v == selected ? Palette.clay : .clear, in: Capsule())
+                                .overlay(Capsule().strokeBorder(v == selected ? Palette.clay : Palette.rule, lineWidth: 1))
+                        }
+                        .accessibilityAddTraits(v == selected ? .isSelected : [])
+                    }
+                }
+            }
+        }
     }
 }
 

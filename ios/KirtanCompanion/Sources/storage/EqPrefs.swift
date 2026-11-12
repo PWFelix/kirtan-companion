@@ -69,6 +69,11 @@ struct EqPrefsSnapshot: Equatable {
     var learnLeftHanded: Bool = false
     /// Learn teaches the karatalas' part rather than the mridanga's.
     var learnKartal: Bool = false
+    /// Learn's hill climb, as last accepted: BPM per step and seconds between steps
+    /// (data/HillClimb.swift). Only the CHOICE is kept; whether it's on is per
+    /// session, so a lesson never starts speeding up unasked.
+    var hillClimbStep: Int = HillClimb.defaultStep
+    var hillClimbSeconds: Int = HillClimb.defaultIntervalSec
     /// Display delay in ms per output device, keyed by `OutputRoute.key`. A device
     /// with no entry plays at 0: the phone's own latency figure is trusted until
     /// the user says otherwise (Settings → Sync sound and display).
@@ -182,6 +187,8 @@ enum EqPrefsCodec {
     private static let keyFeel = "feel"
     private static let keyLearnLeftHanded = "learnLeftHanded"
     private static let keyLearnKartal = "learnKartal"
+    private static let keyHillClimbStep = "hillClimbStep"
+    private static let keyHillClimbSeconds = "hillClimbSeconds"
     private static let keyDisplayDelays = "displayDelays"
     private static let keySyncPrompted = "syncPrompted"
     private static let keyDayan = "dayan"
@@ -208,6 +215,8 @@ enum EqPrefsCodec {
             (keyFeel, .string(snapshot.feel.rawValue)),
             (keyLearnLeftHanded, .bool(snapshot.learnLeftHanded)),
             (keyLearnKartal, .bool(snapshot.learnKartal)),
+            (keyHillClimbStep, .int(snapshot.hillClimbStep)),
+            (keyHillClimbSeconds, .int(snapshot.hillClimbSeconds)),
             (keyDisplayDelays, .object(snapshot.displayDelays.keys.sorted().map {
                 JPair(key: $0, value: .int(snapshot.displayDelays[$0]!))
             })),
@@ -244,6 +253,8 @@ enum EqPrefsCodec {
             feel: obj.element(keyFeel)?.asString().flatMap(Feel.init(rawValue:)) ?? .off,
             learnLeftHanded: boolOf(obj.element(keyLearnLeftHanded), false),
             learnKartal: boolOf(obj.element(keyLearnKartal), false),
+            hillClimbStep: HillClimb.step(of: intOf(obj.element(keyHillClimbStep))),
+            hillClimbSeconds: HillClimb.interval(of: intOf(obj.element(keyHillClimbSeconds))),
             displayDelays: displayDelaysOf(obj.element(keyDisplayDelays)),
             syncPrompted: Set((obj.element(keySyncPrompted)?.asArray() ?? []).compactMap { $0.asString() }),
             dayan: endOf(obj.element(keyDayan)),
@@ -319,6 +330,11 @@ enum EqPrefsCodec {
             out[pair.key] = min(max(Int(raw.rounded()), EqPrefsSnapshot.displayDelayMinMs), EqPrefsSnapshot.displayDelayMaxMs)
         }
         return out
+    }
+
+    private static func intOf(_ element: JValue?) -> Int? {
+        guard let raw = element?.asNumber(), raw.isFinite else { return nil }
+        return Int(raw.rounded())
     }
 
     private static func boolOf(_ element: JValue?, _ fallback: Bool) -> Bool {

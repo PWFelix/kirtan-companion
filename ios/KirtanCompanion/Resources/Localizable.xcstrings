@@ -399,6 +399,16 @@
         }
       }
     },
+    "%lld min" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld min"
+          }
+        }
+      }
+    },
     "%lld ms earlier" : {
       "localizations" : {
         "es" : {
@@ -419,12 +429,32 @@
         }
       }
     },
+    "%lld s" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld s"
+          }
+        }
+      }
+    },
     "+ Add" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "+ Añadir"
+          }
+        }
+      }
+    },
+    "+%lld BPM" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lld BPM"
           }
         }
       }
@@ -1059,6 +1089,26 @@
         }
       }
     },
+    "Climbing +%lld BPM every %@ · next in %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subiendo +%lld BPM cada %@ · siguiente en %@"
+          }
+        }
+      }
+    },
+    "Climbing +%lld BPM every %@ · paused until you play" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subiendo +%lld BPM cada %@ · en pausa hasta que toques"
+          }
+        }
+      }
+    },
     "Close" : {
       "localizations" : {
         "es" : {
@@ -1409,6 +1459,16 @@
         }
       }
     },
+    "Every" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada"
+          }
+        }
+      }
+    },
     "Every install gets this beat on its next launch. Which section of Built in should it appear under?" : {
       "localizations" : {
         "es" : {
@@ -1529,12 +1589,42 @@
         }
       }
     },
+    "Go up by" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subir"
+          }
+        }
+      }
+    },
     "Headphones" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Auriculares"
+          }
+        }
+      }
+    },
+    "Hill climb" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subida gradual"
+          }
+        }
+      }
+    },
+    "Hill climb is on. Tap to turn it off" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La subida gradual está activada. Toca para desactivarla"
           }
         }
       }
@@ -2491,6 +2581,16 @@
         }
       }
     },
+    "Reached the top of the range: %lld BPM" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Llegaste al tope del rango: %lld BPM"
+          }
+        }
+      }
+    },
     "Remove %@ for everyone?" : {
       "localizations" : {
         "es" : {
@@ -2927,6 +3027,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sonido"
+          }
+        }
+      }
+    },
+    "Speed up a little at a time while you play, starting from the tempo you're at now." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acelera poco a poco mientras tocas, empezando por el tempo actual."
+          }
+        }
+      }
+    },
+    "Start climbing" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empezar a subir"
           }
         }
       }
