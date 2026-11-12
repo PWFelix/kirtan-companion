@@ -1,5 +1,6 @@
 package com.kirtan.companion.ui.editor
 
+import com.kirtan.companion.ui.components.PillChip
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -315,6 +316,7 @@ internal fun BeatEditorScreen(
                 onPreview = ::togglePreview,
                 onFeel = { feelOpen = true },
                 onLength = { add -> draft = if (add) draft.addGroup() else draft.removeGroup() },
+                onResolution = { draft = draft.setResolution(it) },
                 onBpm = { draft = draft.setBpm(it) },
             )
 
@@ -730,10 +732,10 @@ private fun ControlsZone(
     onPreview: () -> Unit,
     onFeel: () -> Unit,
     onLength: (Boolean) -> Unit,
+    onResolution: (Int) -> Unit,
     onBpm: (Int) -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
-    val canRemove = draft.groups.size > draft.meter.unit.size
 
     Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
         Row(
@@ -780,11 +782,11 @@ private fun ControlsZone(
                     icon = KcIcons.Back,
                     contentDescription = stringResource(R.string.editor_remove_group),
                     onClick = { onLength(false) },
-                    enabled = canRemove,
+                    enabled = draft.canRemoveBeat,
                     size = 40.dp,
                 )
                 Text(
-                    text = pluralStringResource(R.plurals.beat_cells, draft.steps, draft.steps),
+                    text = pluralStringResource(R.plurals.editor_beat_count, draft.beatCount, draft.beatCount),
                     color = PaletteToken.SYAHI.color,
                     fontSize = 13.4.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -793,10 +795,13 @@ private fun ControlsZone(
                     icon = KcIcons.ChevronRight,
                     contentDescription = stringResource(R.string.editor_add_group),
                     onClick = { onLength(true) },
+                    enabled = draft.canAddBeat,
                     size = 40.dp,
                 )
             }
         }
+
+        ResolutionRow(draft = draft, onResolution = onResolution)
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -849,3 +854,49 @@ private fun meterSig(preset: MeterPreset): String = when (preset.id) {
     "dbl" -> stringResource(R.string.meter_sig_dbl)
     else -> preset.sig
 }
+
+/**
+ * The second lever: how finely each beat is divided. A simple meter shows cells
+ * per beat (1–8); an odd meter shows a multiplier on its own grouping, so 7/8
+ * stays 2+2+3 in shape. Changing it keeps the rhythm (see
+ * [EditorDraft.setResolution]); options that would pass 64 cells are greyed.
+ */
+@Composable
+private fun ResolutionRow(draft: EditorDraft, onResolution: (Int) -> Unit) {
+    val dimens = KirtanTheme.dimens
+    val lever = draft.resolution
+    Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
+        Text(
+            text = stringResource(if (lever.multiplier) R.string.editor_resolution else R.string.editor_cells_per_beat)
+                .uppercase(),
+            color = PaletteToken.SYAHI_SOFT.color,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
+            lever.options.forEach { option ->
+                PillChip(
+                    label = if (lever.multiplier) "×$option" else option.toString(),
+                    selected = option == lever.current,
+                    enabled = option == lever.current || draft.resolutionFits(option),
+                    onClick = { onResolution(option) },
+                    modifier = Modifier.widthIn(min = 44.dp),
+                )
+            }
+        }
+        draft.resampleReport?.let { report ->
+            val parts = buildList {
+                if (report.moved > 0) add(pluralStringResource(R.plurals.editor_resample_moved, report.moved, report.moved))
+                if (report.dropped > 0) add(pluralStringResource(R.plurals.editor_resample_dropped, report.dropped, report.dropped))
+                add(stringResource(R.string.editor_resample_undo))
+            }
+            Text(
+                text = parts.joinToString(" "),
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
+            )
+        }
+    }
+}
+

@@ -1,5 +1,6 @@
 package com.kirtan.companion.ui.editor
 
+import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.Bols
 import com.kirtan.companion.data.labelsFromGroups
 import com.kirtan.companion.data.model.Beat
@@ -51,6 +52,16 @@ val METERS: List<MeterPreset> = listOf(
     MeterPreset("78", "Seven-eight", "7/8 · 2+2+3", listOf(2, 2, 3), listOf(2, 2, 3), 2),
 )
 
+/** The preset at k× its resolution: every group and cpq multiplied by [k]. */
+fun MeterPreset.scaled(k: Int): MeterPreset =
+    if (k == 1) this else copy(bar = bar.map { it * k }, unit = unit.map { it * k }, cpq = cpq * k)
+
+/** The largest whole factor shared by every group and cpq (1 when there is none). */
+fun resolutionFactor(groups: List<Int>, cpq: Int): Int {
+    tailrec fun gcd(a: Int, b: Int): Int = if (b == 0) a else gcd(b, a % b)
+    return groups.fold(cpq) { acc, g -> gcd(acc, g) }.coerceAtLeast(1)
+}
+
 /** Does [arr] consist of whole repetitions of [pattern]? */
 internal fun repeats(pattern: List<Int>, arr: List<Int>): Boolean {
     if (arr.isEmpty() || arr.size % pattern.size != 0) return false
@@ -68,8 +79,17 @@ fun meterFor(groups: List<Int>, cpq: Int): MeterPreset {
         METERS.firstOrNull { it.cpq == cpq && it.unit.size == 1 && it.unit[0] == cpq }
             ?.let { return it }
     }
-    if (cpq == 2 && repeats(listOf(3, 3), groups)) return METERS.first { it.id == "68" }
-    if (cpq == 2 && repeats(listOf(2, 2, 3), groups)) return METERS.first { it.id == "78" }
+    // Odd meters at a finer resolution (6/8 ×2 is [6,6] at cpq 4) are still that
+    // meter: divide the common factor out, match, and scale the preset back up so
+    // ± keeps adding a whole 3+3 or 2+2+3 cycle.
+    val k = resolutionFactor(groups, cpq)
+    val base = groups.map { it / k }
+    if (cpq / k == 2) {
+        for (id in listOf("68", "78")) {
+            val preset = METERS.first { it.id == id }
+            if (repeats(preset.unit, base)) return preset.scaled(k)
+        }
+    }
     return MeterPreset(
         id = "custom",
         label = "Custom",
@@ -163,8 +183,28 @@ fun padSetFor(instrument: EditInstrument): List<PadSpec> = when (instrument) {
 fun PadSpec.sounds(): List<Pair<LaneId, Boolean>> =
     write.mapNotNull { (lane, stroke) -> stroke?.let { lane to (it == Stroke.OPEN) } }
 
-/** What an undo entry restores: the three patterns and where the cursor was. */
-data class DraftSnapshot(val lanes: Map<LaneId, List<Stroke?>>, val cursor: Int)
+/**
+ * What an undo entry restores: the patterns, the cursor, and the grid's shape.
+ * Shape is null for pad edits (which never change it) and set by a resolution
+ * change, so undoing one restores the old grid along with the hits it moved.
+ */
+data class DraftSnapshot(
+    val lanes: Map<LaneId, List<Stroke?>>,
+    val cursor: Int,
+    val groups: List<Int>? = null,
+    val meter: MeterPreset? = null,
+)
+
+/**
+ * The resolution lever. In a SIMPLE meter (every beat the same, one beat per
+ * quarter) it is literally cells per beat; in an odd meter (6/8, 7/8, anything
+ * whose groups differ from cpq) it is a multiplier on the meter's own grouping,
+ * so 7/8's 2+2+3 becomes 4+4+6 and keeps its shape.
+ */
+data class ResolutionLever(val multiplier: Boolean, val current: Int, val options: List<Int>)
+
+/** What a resolution change did to the hits, for the notice under the grid. */
+data class ResampleReport(val moved: Int, val dropped: Int)
 
 /**
  * The whole draft. Immutable: every operation returns a new draft, which is what
@@ -180,18 +220,114 @@ data class EditorDraft(
     val cursor: Int,
     val instrument: EditInstrument = EditInstrument.MRDANGA,
     val undo: List<DraftSnapshot> = emptyList(),
+    /** Set by the last resolution change while any hit moved; cleared by the next edit. */
+    val resampleReport: ResampleReport? = null,
 ) {
     val cpq: Int get() = meter.cpq
     val steps: Int get() = groups.sum()
     val beatsPerBar: Double get() = steps.toDouble() / cpq
     val labels: List<String> get() = labelsFromGroups(groups)
 
-    /** The zoom shows at most 8 cells at once, matching the main strip's width. */
-    val zoomCells: Int get() = min(steps, 8)
-    val pageCount: Int get() = ceil(steps.toDouble() / zoomCells).toInt()
-    val page: Int get() = if (zoomCells > 0) cursor / zoomCells else 0
-    val windowStart: Int get() = page * zoomCells
-    val windowEnd: Int get() = min(windowStart + zoomCells, steps)
+    /**
+     * The zoom's pages: whole beats packed up to 8 cells (the main strip's width),
+     * so a page never starts mid-beat. A single beat wider than 8 (12 cells at
+     * 6/8 ×2…) gets a page to itself.
+     */
+    val pages: List<IntRange> get() {
+        val out = mutableListOf<IntRange>()
+        var start = 0
+        var end = 0
+        for (g in groups) {
+            if (end > start && end - start + g > ZOOM_CELLS) {
+                out += start until end
+                start = end
+            }
+            end += g
+        }
+        if (end > start) out += start until end
+        return out
+    }
+    val pageCount: Int get() = pages.size
+    val page: Int get() = pages.indexOfFirst { cursor in it }.coerceAtLeast(0)
+    val windowStart: Int get() = pages.getOrNull(page)?.first ?: 0
+    val windowEnd: Int get() = pages.getOrNull(page)?.let { it.last + 1 } ?: steps
+    val zoomCells: Int get() = windowEnd - windowStart
+
+    /** ± is refused past 64 cells: every app version rejects a longer beat. */
+    val canAddBeat: Boolean get() = steps + meter.unit.sum() <= ShareCodec.MAX_STEPS
+    val canRemoveBeat: Boolean get() = groups.size > meter.unit.size
+
+    /** How many beats the bar has — one per numbered group. */
+    val beatCount: Int get() = groups.size
+
+    val resolution: ResolutionLever get() {
+        if (groups.isNotEmpty() && groups.all { it == cpq }) {
+            return ResolutionLever(false, cpq, (SIMPLE_RESOLUTIONS + cpq).distinct().sorted())
+        }
+        val k = resolutionFactor(groups, cpq)
+        return ResolutionLever(true, k, (MULTIPLIERS + k).distinct().sorted())
+    }
+
+    /** Whether [option] fits: the format caps beats at 64 cells and 12 per beat. */
+    fun resolutionFits(option: Int): Boolean {
+        val (newGroups, _) = reshape(option)
+        return newGroups.sum() <= ShareCodec.MAX_STEPS && newGroups.max() <= ShareCodec.MAX_GROUP_CELLS
+    }
+
+    /** Groups and cpq the grid would have at [option] on the resolution lever. */
+    private fun reshape(option: Int): Pair<List<Int>, Int> {
+        val lever = resolution
+        return if (!lever.multiplier) {
+            List(groups.size) { option } to option
+        } else {
+            groups.map { it / lever.current * option } to cpq / lever.current * option
+        }
+    }
+
+    /**
+     * Change the resolution, KEEPING THE RHYTHM: every hit stays at its moment in
+     * the bar, landing on the nearest new cell. Going finer by a whole factor
+     * loses nothing; going coarser (or 2 → 3) moves hits that fall between new
+     * cells, and when two hits in a lane land on one cell the nearer one wins.
+     * Undo restores the old grid exactly.
+     */
+    fun setResolution(option: Int): EditorDraft {
+        if (option == resolution.current || !resolutionFits(option)) return this
+        val (newGroups, newCpq) = reshape(option)
+        val newSteps = newGroups.sum()
+        var moved = 0
+        var dropped = 0
+        val newLanes = lanes.mapValues { (_, cells) ->
+            val out = arrayOfNulls<Stroke>(newSteps)
+            val error = DoubleArray(newSteps) { Double.MAX_VALUE }
+            cells.forEachIndexed { j, stroke ->
+                if (stroke == null) return@forEachIndexed
+                val exact = j.toDouble() * newCpq / cpq
+                // The bar loops, so a hit that rounds past the end is the next downbeat.
+                val target = kotlin.math.floor(exact + 0.5).toInt() % newSteps
+                val err = kotlin.math.abs(exact - kotlin.math.round(exact))
+                if (j * newCpq % cpq != 0) moved++
+                if (out[target] != null) {
+                    dropped++
+                    if (err >= error[target]) return@forEachIndexed
+                }
+                out[target] = stroke
+                error[target] = err
+            }
+            out.toList()
+        }
+        val scaledMeter = meterFor(newGroups, newCpq).let {
+            if (it.id == "custom") it.copy(unit = meter.unit.map { u -> u * newCpq / cpq }) else it
+        }
+        return copy(
+            groups = newGroups,
+            meter = scaledMeter,
+            lanes = newLanes,
+            cursor = (cursor * newCpq / cpq).coerceIn(0, newSteps - 1),
+            undo = (undo + DraftSnapshot(lanes, cursor, groups, meter)).takeLast(UNDO_LIMIT),
+            resampleReport = if (moved > 0 || dropped > 0) ResampleReport(moved, dropped) else null,
+        )
+    }
 
     val canUndo: Boolean get() = undo.isNotEmpty()
 
@@ -216,7 +352,14 @@ data class EditorDraft(
 
     fun undoLast(): EditorDraft {
         val prev = undo.lastOrNull() ?: return this
-        return copy(lanes = prev.lanes, cursor = prev.cursor, undo = undo.dropLast(1))
+        return copy(
+            lanes = prev.lanes,
+            cursor = prev.cursor,
+            groups = prev.groups ?: groups,
+            meter = prev.meter ?: meter,
+            undo = undo.dropLast(1),
+            resampleReport = null,
+        )
     }
 
     // ── Meter and length ───────────────────────────────────────────────────
@@ -227,11 +370,13 @@ data class EditorDraft(
      * OLD length, so restoring one after a resize would write past the end.
      */
     fun addGroup(): EditorDraft {
+        if (!canAddBeat) return this
         val pad = List(meter.unit.sum()) { null as Stroke? }
         return copy(
             groups = groups + meter.unit,
             lanes = lanes.mapValues { (_, cells) -> cells + pad },
             undo = emptyList(),
+            resampleReport = null,
         )
     }
 
@@ -244,6 +389,7 @@ data class EditorDraft(
             lanes = lanes.mapValues { (_, cells) -> cells.dropLast(drop) },
             cursor = min(cursor, steps - drop - 1).coerceAtLeast(0),
             undo = emptyList(),
+            resampleReport = null,
         )
     }
 
@@ -253,6 +399,7 @@ data class EditorDraft(
      * silently relabel the user's rhythm rather than preserve it.
      */
     fun selectMeter(preset: MeterPreset): EditorDraft = copy(
+        resampleReport = null,
         meter = preset,
         groups = preset.bar.toList(),
         lanes = LaneId.ORDERED.associateWith { List(preset.bar.sum()) { null as Stroke? } },
@@ -270,8 +417,8 @@ data class EditorDraft(
         setCursor(((fraction.coerceIn(0f, 1f) * steps).toInt()).coerceAtMost(steps - 1))
 
     fun setPagePage(delta: Int): EditorDraft {
-        val target = (windowStart + delta * zoomCells).coerceIn(0, (steps - 1).coerceAtLeast(0))
-        return setCursor(target)
+        val target = pages.getOrNull((page + delta).coerceIn(0, pageCount - 1)) ?: return this
+        return setCursor(target.first)
     }
 
     /**
@@ -288,6 +435,7 @@ data class EditorDraft(
             updated[lane] = cells
         }
         return withHistory.copy(
+            resampleReport = null,
             lanes = updated,
             cursor = (withHistory.cursor + 1).mod(steps.coerceAtLeast(1)),
         )
@@ -361,6 +509,11 @@ data class EditorDraft(
 
     companion object {
         const val UNDO_LIMIT = 60
+        const val ZOOM_CELLS = 8
+        /** Cells-per-beat choices for a simple meter; the lever greys any that would pass 64 cells. */
+        val SIMPLE_RESOLUTIONS = listOf(1, 2, 3, 4, 6, 8)
+        /** Multipliers offered for an odd meter. */
+        val MULTIPLIERS = listOf(1, 2, 3)
 
         /** A blank draft, or one seeded from an existing beat. */
         fun from(beat: Beat?): EditorDraft {

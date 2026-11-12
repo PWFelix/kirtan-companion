@@ -401,4 +401,94 @@ class EditorDraftTest {
         assertTrue(pads.getValue("rest").sounds().isEmpty())
         assertTrue(padSetFor(EditInstrument.KARTAL).first { it.rest }.sounds().isEmpty())
     }
+
+    // ── Resolution lever ───────────────────────────────────────────────────
+
+    private fun withDayan(draft: EditorDraft, vararg hits: Int): EditorDraft {
+        val cells = MutableList<Stroke?>(draft.steps) { null }
+        hits.forEach { cells[it] = Stroke.OPEN }
+        return draft.copy(lanes = draft.lanes + (LaneId.DAYAN to cells))
+    }
+
+    private fun dayanHits(draft: EditorDraft) =
+        draft.pattern(LaneId.DAYAN).withIndex().filter { it.value != null }.map { it.index }
+
+    @Test
+    fun `a simple meter offers cells per beat, an odd meter a multiplier`() {
+        val std = EditorDraft.from(null).resolution
+        assertFalse(std.multiplier)
+        assertEquals(2, std.current)
+        assertEquals(listOf(1, 2, 3, 4, 6, 8), std.options)
+
+        val seven = EditorDraft.from(null).selectMeter(METERS.first { it.id == "78" }).resolution
+        assertTrue(seven.multiplier)
+        assertEquals(1, seven.current)
+        assertEquals(listOf(1, 2, 3), seven.options)
+    }
+
+    @Test
+    fun `going finer keeps every hit at its moment and the beat count`() {
+        val draft = withDayan(EditorDraft.from(null), 0, 3, 5).setResolution(4)
+        assertEquals(listOf(4, 4, 4, 4), draft.groups)
+        assertEquals(4, draft.cpq)
+        assertEquals(4, draft.beatCount)
+        assertEquals(listOf(0, 6, 10), dayanHits(draft))
+        assertNull(draft.resampleReport) // nothing moved
+        assertEquals("dbl", draft.meter.id)
+    }
+
+    @Test
+    fun `going coarser snaps to the nearest cell and reports what was lost`() {
+        val fine = withDayan(EditorDraft.from(null).setResolution(4), 0, 1, 2, 4)
+        val coarse = fine.setResolution(2)
+        assertEquals(listOf(2, 2, 2, 2), coarse.groups)
+        // 0 stays, 1 (a sixteenth) rounds onto 1 along with 2, 4 lands on 2.
+        assertEquals(listOf(0, 1, 2), dayanHits(coarse))
+        assertEquals(ResampleReport(moved = 1, dropped = 1), coarse.resampleReport)
+    }
+
+    @Test
+    fun `undo restores the grid a resolution change replaced`() {
+        val before = withDayan(EditorDraft.from(null).setResolution(4), 1, 3)
+        val after = before.setResolution(3).undoLast()
+        assertEquals(before.groups, after.groups)
+        assertEquals(before.cpq, after.cpq)
+        assertEquals(dayanHits(before), dayanHits(after))
+    }
+
+    @Test
+    fun `an odd meter keeps its shape under the multiplier`() {
+        val seven = withDayan(EditorDraft.from(null).selectMeter(METERS.first { it.id == "78" }), 0, 4, 6)
+        val doubled = seven.setResolution(2)
+        assertEquals(listOf(4, 4, 6), doubled.groups)
+        assertEquals(4, doubled.cpq)
+        assertEquals(listOf(0, 8, 12), dayanHits(doubled))
+        assertEquals("78", doubled.meter.id)
+        assertEquals(2, doubled.resolution.current)
+        // ± still adds a whole 2+2+3 cycle, at the new resolution.
+        assertEquals(listOf(4, 4, 6, 4, 4, 6), doubled.addGroup().groups)
+        // And a saved ×2 seven-eight reopens as seven-eight.
+        assertEquals("78", meterFor(listOf(4, 4, 6), 4).id)
+    }
+
+    @Test
+    fun `options past 64 cells are refused, and so is a 65th cell from plus`() {
+        var draft = EditorDraft.from(null)
+        repeat(12) { draft = draft.addGroup() } // 16 beats of 2
+        assertEquals(32, draft.steps)
+        assertTrue(draft.resolutionFits(4))
+        assertFalse(draft.resolutionFits(6))
+        assertEquals(draft, draft.setResolution(8))
+        draft = draft.setResolution(4)
+        assertFalse(draft.canAddBeat)
+        assertEquals(64, draft.addGroup().steps)
+    }
+
+    @Test
+    fun `pages hold whole beats`() {
+        var draft = EditorDraft.from(null).setResolution(3) // 4 beats of 3
+        assertEquals(listOf(0 until 6, 6 until 12), draft.pages)
+        draft = draft.setPagePage(1)
+        assertEquals(6, draft.windowStart)
+    }
 }

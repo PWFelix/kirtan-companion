@@ -120,8 +120,10 @@
     <string name="doing_your_beats">tus ritmos</string>
     <string name="doing_your_playlists">tus listas</string>
     <string name="doing_your_settings">tus ajustes</string>
-    <string name="editor_add_group">Añadir un grupo</string>
+    <string name="editor_add_group">Añadir un tiempo</string>
+    <string name="editor_beats">Tiempos</string>
     <string name="editor_builtin_copy_note">Los ritmos incluidos se quedan como están. Al guardar, tu versión se añade a tu biblioteca y empieza a sonar.</string>
+    <string name="editor_cells_per_beat">Celdas por tiempo</string>
     <string name="editor_clear">Borrar</string>
     <string name="editor_community_copy_note">El ritmo de la comunidad se queda como está. Al guardar, tu versión se añade a Tus ritmos; podrás compartirla cuando el ritmo sea distinto.</string>
     <string name="editor_default_name">Ritmo personalizado</string>
@@ -133,7 +135,9 @@
     <string name="editor_page_range">%1$d–%2$d de %3$d</string>
     <string name="editor_prev_page">Página anterior</string>
     <string name="editor_preview">Vista previa</string>
-    <string name="editor_remove_group">Quitar un grupo</string>
+    <string name="editor_remove_group">Quitar un tiempo</string>
+    <string name="editor_resample_undo">Deshacer recupera la cuadrícula anterior.</string>
+    <string name="editor_resolution">Resolución</string>
     <string name="editor_rest">Silencio</string>
     <string name="editor_save">Guardar ritmo</string>
     <string name="editor_save_copy">Guardar como mi versión</string>
@@ -426,6 +430,21 @@
         <item quantity="one">Votar (%1$d voto)</item>
         <item quantity="many">Votar (%1$d votos)</item>
         <item quantity="other">Votar (%1$d votos)</item>
+    </plurals>
+    <plurals name="editor_beat_count">
+        <item quantity="one">%1$d tiempo</item>
+        <item quantity="many">%1$d tiempos</item>
+        <item quantity="other">%1$d tiempos</item>
+    </plurals>
+    <plurals name="editor_resample_dropped">
+        <item quantity="one">%1$d se descartó al coincidir con otro.</item>
+        <item quantity="many">%1$d se descartaron al coincidir con otros.</item>
+        <item quantity="other">%1$d se descartaron al coincidir con otros.</item>
+    </plurals>
+    <plurals name="editor_resample_moved">
+        <item quantity="one">%1$d golpe se movió a la celda más cercana.</item>
+        <item quantity="many">%1$d golpes se movieron a la celda más cercana.</item>
+        <item quantity="other">%1$d golpes se movieron a la celda más cercana.</item>
     </plurals>
     <plurals name="import_add_list_q">
         <item quantity="one">¿Añadir %1$d ritmo y la lista «%2$s»?</item>

@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -47,7 +48,13 @@ import com.kirtan.companion.data.PaletteToken
 
 /** A selectable pill, the shape every tag and filter uses. */
 @Composable
-internal fun PillChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun PillChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
     val dimens = KirtanTheme.dimens
     val shape = RoundedCornerShape(dimens.radiusPill)
     Box(
@@ -56,7 +63,13 @@ internal fun PillChip(label: String, selected: Boolean, onClick: () -> Unit, mod
             .clip(shape)
             .background(if (selected) PaletteToken.CLAY.color else Color.Transparent)
             .border(BorderStroke(dimens.hairline, if (selected) PaletteToken.CLAY.color else KirtanTheme.colors.rule), shape)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            )
+            .alpha(if (enabled) 1f else 0.35f)
             .padding(horizontal = dimens.space3),
         contentAlignment = Alignment.Center,
     ) {

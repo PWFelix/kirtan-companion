@@ -126,8 +126,10 @@
     <string name="doing_your_beats">your beats</string>
     <string name="doing_your_playlists">your playlists</string>
     <string name="doing_your_settings">your settings</string>
-    <string name="editor_add_group">Add a group</string>
+    <string name="editor_add_group">Add a beat</string>
+    <string name="editor_beats">Beats</string>
     <string name="editor_builtin_copy_note">Built-in beats stay as they are. Saving adds your version to your library and plays it.</string>
+    <string name="editor_cells_per_beat">Cells per beat</string>
     <string name="editor_clear">Clear</string>
     <string name="editor_community_copy_note">The community beat stays as it is. Saving adds your version to Your beats; you can share it once the rhythm differs.</string>
     <string name="editor_default_name">Custom Beat</string>
@@ -139,7 +141,9 @@
     <string name="editor_page_range">%1$d–%2$d of %3$d</string>
     <string name="editor_prev_page">Previous page</string>
     <string name="editor_preview">Preview</string>
-    <string name="editor_remove_group">Remove a group</string>
+    <string name="editor_remove_group">Remove a beat</string>
+    <string name="editor_resample_undo">Undo restores the old grid.</string>
+    <string name="editor_resolution">Resolution</string>
     <string name="editor_rest">Rest</string>
     <string name="editor_save">Save beat</string>
     <string name="editor_save_copy">Save as my version</string>
@@ -424,6 +428,18 @@
     <plurals name="community_upvote">
         <item quantity="one">Upvote (%1$d vote)</item>
         <item quantity="other">Upvote (%1$d votes)</item>
+    </plurals>
+    <plurals name="editor_beat_count">
+        <item quantity="one">%1$d beat</item>
+        <item quantity="other">%1$d beats</item>
+    </plurals>
+    <plurals name="editor_resample_dropped">
+        <item quantity="one">%1$d dropped where two landed together.</item>
+        <item quantity="other">%1$d dropped where two landed together.</item>
+    </plurals>
+    <plurals name="editor_resample_moved">
+        <item quantity="one">%1$d hit moved to the nearest cell.</item>
+        <item quantity="other">%1$d hits moved to the nearest cell.</item>
     </plurals>
     <plurals name="import_add_list_q">
         <item quantity="one">Add %1$d beat and the list “%2$s”?</item>
