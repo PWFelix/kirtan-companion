@@ -123,6 +123,52 @@
         }
       }
     },
+    "%lld beats in the bar" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld beat"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld beats"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld tiempo"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld tiempos"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld tiempos"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld beats in the cycle" : {
       "localizations" : {
         "en" : {
@@ -261,6 +307,98 @@
         }
       }
     },
+    "%lld dropped where two landed together." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld dropped where two landed together."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld dropped where two landed together."
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld se descartó al coincidir con otro."
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld se descartaron al coincidir con otros."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld se descartaron al coincidir con otros."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld hits moved to the nearest cell." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld hit moved to the nearest cell."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld hits moved to the nearest cell."
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld golpe se movió a la celda más cercana."
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld golpes se movieron a la celda más cercana."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld golpes se movieron a la celda más cercana."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld ms earlier" : {
       "localizations" : {
         "es" : {
@@ -301,42 +439,12 @@
         }
       }
     },
-    "12 (triplets)" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "12 (tresillos)"
-          }
-        }
-      }
-    },
-    "16 (sixteenths)" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "16 (semicorcheas)"
-          }
-        }
-      }
-    },
     "2 · Line up" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "2 · Alinear"
-          }
-        }
-      }
-    },
-    "8 (eighths)" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "8 (corcheas)"
           }
         }
       }
@@ -367,6 +475,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Acciones para %@"
+          }
+        }
+      }
+    },
+    "Add a beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir un tiempo"
           }
         }
       }
@@ -857,6 +975,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cancelar"
+          }
+        }
+      }
+    },
+    "Cells per beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Celdas por tiempo"
           }
         }
       }
@@ -1547,6 +1675,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zurdo · dayan a la izquierda"
+          }
+        }
+      }
+    },
+    "Length" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duración"
           }
         }
       }
@@ -2293,6 +2431,16 @@
         }
       }
     },
+    "Remove a beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar un tiempo"
+          }
+        }
+      }
+    },
     "Remove for everyone" : {
       "localizations" : {
         "es" : {
@@ -2363,6 +2511,16 @@
         }
       }
     },
+    "Resolution" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resolución"
+          }
+        }
+      }
+    },
     "Rest" : {
       "localizations" : {
         "es" : {
@@ -2389,6 +2547,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rupak"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar"
+          }
+        }
+      }
+    },
+    "Save as my version" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar como mi versión"
           }
         }
       }
@@ -3331,6 +3509,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transición"
+          }
+        }
+      }
+    },
+    "Undo" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deshacer"
           }
         }
       }

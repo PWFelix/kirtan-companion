@@ -35,6 +35,16 @@ struct NavigationShell: View {
     /// The editor opens full-screen over the shell and returns here on save/cancel. Nil
     /// when closed; otherwise what it is editing (new, yours, a fork, or for everyone).
     @State private var editorMode: BeatEditorView.EditorMode?
+
+    /// DEBUG: `-kirtanEditor` opens a new beat in the editor a moment after launch, for
+    /// screenshots (presenting the cover during the first layout pass draws it half-built).
+    private func openDebugEditor() async {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-kirtanEditor") else { return }
+        try? await Task.sleep(for: .seconds(1))
+        editorMode = .new
+        #endif
+    }
     /// The sync screen, opened from the Bluetooth banner over whatever tab is up.
     @State private var syncOpen = false
     /// The language picked in Settings ("" = system). Keying the tree on it re-renders
@@ -59,6 +69,7 @@ struct NavigationShell: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             Palette.head.ignoresSafeArea()
+                .task { await openDebugEditor() }
 
             content
 

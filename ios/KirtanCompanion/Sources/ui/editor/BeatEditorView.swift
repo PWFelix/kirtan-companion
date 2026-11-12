@@ -49,8 +49,8 @@ struct BeatEditorView: View {
     // ── The draft. All of it means nothing outside this view. ──
     @State private var name = String(localized: "New beat", bundle: .strings)
     @State private var bpm = 120
-    @State private var beatsPerBar = 4.0
-    @State private var cellsPerGroup = 2
+    /// The grid's shape: beats, cells per beat, and what ± adds. See EditorShape.
+    @State private var shape = EditorMeter.all[0].shape
     @State private var dayan: [Stroke?] = Array(repeating: nil, count: 8)
     @State private var bayan: [Stroke?] = Array(repeating: nil, count: 8)
     @State private var kartal: [Stroke?] = Array(repeating: nil, count: 8)
@@ -61,10 +61,9 @@ struct BeatEditorView: View {
     @State private var cellSize: CGFloat = 32
     /// The cell size when the current pinch began, so `magnification` scales relative to it.
     @State private var magnifyBase: CGFloat?
-    /// A seeded beat's own meter, kept verbatim until the user picks a preset. The presets
-    /// are uniform bars; a beat like matan (16 groups of 3) would be silently re-metered by
-    /// the nearest preset, so an edit that never touched the meter must not change it.
-    @State private var keptMeter: KeptMeter?
+    /// The grid and hits before the last resolution change, while its notice shows:
+    /// the editor has no general undo, so this one change gets its own.
+    @State private var lastResample: (shape: EditorShape, lanes: [[Stroke?]], report: ResampleReport)?
     @State private var seeded = false
     @State private var saving = false
     @State private var saveError: String?
@@ -72,15 +71,8 @@ struct BeatEditorView: View {
     @State private var tags: [String] = []
     @State private var pickingTags = false
 
-    private struct KeptMeter: Equatable {
-        let groups: [Int]
-        let beatsPerBar: Double
-        let steps: Int
-        let cellsPerGroup: Int
-    }
-
-    /// Whole cells in the bar: the meter (beats) × the subdivision (cells per beat).
-    private var steps: Int { keptMeter?.steps ?? max(1, Int(beatsPerBar.rounded()) * cellsPerGroup) }
+    /// Whole cells in the bar: the beats × the cells in each.
+    private var steps: Int { shape.steps }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -91,6 +83,8 @@ struct BeatEditorView: View {
                     nameField
                     tagsLine
                     meterRow
+                    lengthRow
+                    resolutionRow
                     grid
                     pads
                     saveRow
@@ -99,6 +93,8 @@ struct BeatEditorView: View {
             }
             .background(Palette.head.ignoresSafeArea())
         }
+        // Opaque: the editor floats over the shell, whose title otherwise shows through.
+        .background(Palette.head.ignoresSafeArea())
         .onAppear(perform: seed)
         .alert(String(localized: "Not saved", bundle: .strings), isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button(String(localized: "OK", bundle: .strings), role: .cancel) { saveError = nil }
@@ -122,19 +118,13 @@ struct BeatEditorView: View {
         dayan = lane(.dayan)
         bayan = lane(.bayan)
         kartal = lane(.kartal)
+        // The beat's own grouping, verbatim: a beat like matan (16 groups of 3) must not be
+        // re-metered by an edit that never touched the meter.
         let groups = groupsFor(beat)
-        let preset = MeterPreset.allCases.first {
-            $0.beatsPerBar == beat.beatsPerBar && $0.cellsPerGroup == beat.cellsPerGroup
-                && Int($0.beatsPerBar.rounded()) * $0.cellsPerGroup == n
-                && groups == Array(repeating: $0.cellsPerGroup, count: Int($0.beatsPerBar.rounded()))
-        }
-        if let preset {
-            beatsPerBar = preset.beatsPerBar
-            cellsPerGroup = preset.cellsPerGroup
+        if groups.reduce(0, +) == n {
+            shape = EditorShape.seeded(groups: groups, cpq: cpqFor(beat))
         } else {
-            beatsPerBar = beat.beatsPerBar
-            cellsPerGroup = beat.cellsPerGroup
-            keptMeter = KeptMeter(groups: groups, beatsPerBar: beat.beatsPerBar, steps: n, cellsPerGroup: beat.cellsPerGroup)
+            shape = EditorShape.seeded(groups: [n], cpq: cpqFor(beat))
         }
     }
 
@@ -177,10 +167,10 @@ struct BeatEditorView: View {
         HStack(spacing: 12) {
             control(String(localized: "Meter", bundle: .strings)) {
                 Picker(String(localized: "Meter", bundle: .strings), selection: meterBinding) {
-                    if let keptMeter {
-                        Text(String(localized: "As written (\(keptMeter.steps))", bundle: .strings)).tag(MeterPreset?.none)
+                    if EditorMeter.matching(shape) == nil {
+                        Text(String(localized: "As written (\(steps))", bundle: .strings)).tag(EditorMeter?.none)
                     }
-                    ForEach(meters, id: \.label) { m in Text(m.label).tag(MeterPreset?.some(m)) }
+                    ForEach(EditorMeter.all) { m in Text(m.label).tag(EditorMeter?.some(m)) }
                 }
                 .pickerStyle(.menu)
             }
@@ -201,18 +191,93 @@ struct BeatEditorView: View {
         .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private var meters: [MeterPreset] { MeterPreset.allCases }
-
-    private var meterBinding: Binding<MeterPreset?> {
+    private var meterBinding: Binding<EditorMeter?> {
         Binding(
-            get: { keptMeter != nil ? nil : MeterPreset.matching(beatsPerBar: beatsPerBar, cellsPerGroup: cellsPerGroup) },
+            get: { EditorMeter.matching(shape) },
             set: { choice in
                 guard let preset = choice else { return }
-                keptMeter = nil
-                beatsPerBar = preset.beatsPerBar
-                setCellsPerGroup(preset.cellsPerGroup)
+                setShape(preset.shape)
             }
         )
+    }
+
+    /// Lever one: how many beats. ± adds or removes one beat (a whole cycle in 6/8, 7/8).
+    private var lengthRow: some View {
+        control(String(localized: "Length", bundle: .strings)) {
+            HStack(spacing: 14) {
+                Button { setShape(shape.removingBeat()) } label: { Image(systemName: "minus.circle") }
+                    .disabled(!shape.canRemoveBeat)
+                    .accessibilityLabel(String(localized: "Remove a beat", bundle: .strings))
+                Text(String(localized: "\(shape.beatCount) beats in the bar", bundle: .strings))
+                    .font(.footnote.monospacedDigit())
+                Button { setShape(shape.addingBeat()) } label: { Image(systemName: "plus.circle") }
+                    .disabled(!shape.canAddBeat)
+                    .accessibilityLabel(String(localized: "Add a beat", bundle: .strings))
+            }
+        }
+    }
+
+    /// Lever two: how finely each beat is divided. Cells per beat in a simple meter, a
+    /// multiplier in an odd one (7/8 stays 2+2+3). Keeps the rhythm; options past 64
+    /// cells are disabled.
+    private var resolutionRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(shape.isMultiplier ? String(localized: "Resolution", bundle: .strings) : String(localized: "Cells per beat", bundle: .strings))
+                .font(.caption).foregroundStyle(Palette.syahiSoft)
+            HStack(spacing: 8) {
+                ForEach(shape.resolutionOptions, id: \.self) { option in
+                    let selected = option == shape.resolution
+                    Button { changeResolution(to: option) } label: {
+                        Text(shape.isMultiplier ? "×\(option)" : "\(option)")
+                            .font(.footnote.weight(.bold))
+                            .frame(minWidth: 40, minHeight: 34)
+                            .foregroundStyle(selected ? Palette.onClay : Palette.syahi)
+                            .background(selected ? Palette.clay : Color.clear, in: Capsule())
+                            .overlay(Capsule().strokeBorder(selected ? Palette.clay : Palette.rule, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!selected && shape.atResolution(option) == nil)
+                    .opacity(selected || shape.atResolution(option) != nil ? 1 : 0.35)
+                }
+            }
+            if let last = lastResample {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(resampleMessage(last.report))
+                        .font(.caption).foregroundStyle(Palette.syahiSoft)
+                    Spacer()
+                    Button(String(localized: "Undo", bundle: .strings)) {
+                        shape = last.shape
+                        dayan = last.lanes[0]; bayan = last.lanes[1]; kartal = last.lanes[2]
+                        lastResample = nil
+                        setCursor(lane: cursor.lane, step: cursor.step)
+                    }
+                    .font(.caption.weight(.bold))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func resampleMessage(_ report: ResampleReport) -> String {
+        var parts: [String] = []
+        if report.moved > 0 { parts.append(String(localized: "\(report.moved) hits moved to the nearest cell.", bundle: .strings)) }
+        if report.dropped > 0 { parts.append(String(localized: "\(report.dropped) dropped where two landed together.", bundle: .strings)) }
+        return parts.joined(separator: " ")
+    }
+
+    /// Re-grid at a new resolution, keeping every hit at its moment in the bar.
+    private func changeResolution(to option: Int) {
+        guard option != shape.resolution, let next = shape.atResolution(option) else { return }
+        var report = ResampleReport(moved: 0, dropped: 0)
+        let before = (shape: shape, lanes: [dayan, bayan, kartal])
+        dayan = resample(dayan, fromCpq: shape.cpq, toCpq: next.cpq, steps: next.steps, report: &report)
+        bayan = resample(bayan, fromCpq: shape.cpq, toCpq: next.cpq, steps: next.steps, report: &report)
+        kartal = resample(kartal, fromCpq: shape.cpq, toCpq: next.cpq, steps: next.steps, report: &report)
+        cursor.step = min(cursor.step * next.cpq / shape.cpq, next.steps - 1)
+        shape = next
+        lastResample = report == ResampleReport(moved: 0, dropped: 0) ? nil : (before.shape, before.lanes, report)
     }
 
     // MARK: the paintable grid
@@ -230,6 +295,9 @@ struct BeatEditorView: View {
                 }
                 .frame(width: 46, alignment: .leading)
 
+                // One row per lane, stacked beside the label column (they were in the
+                // outer HStack, which laid bayan and kartal out to the RIGHT of dayan).
+                VStack(spacing: 8) {
                 ForEach(LaneId.ordered.indices, id: \.self) { laneIndex in
                     let lane = LaneId.ordered[laneIndex]
                     HStack(spacing: 8) {
@@ -246,6 +314,7 @@ struct BeatEditorView: View {
                     }
                     .frame(height: cellSize)
                     .background(Palette.headWorn.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                }
                 }
             }
             .padding(4)
@@ -303,10 +372,12 @@ struct BeatEditorView: View {
                 bayan = Array(repeating: nil, count: steps)
                 kartal = Array(repeating: nil, count: steps)
             } label: {
+                // Icon only: the pads need the row's width in longer languages.
                 Label("Clear", systemImage: "trash")
-                    .font(.footnote.weight(.medium))
+                    .labelStyle(.iconOnly)
+                    .font(.body.weight(.medium))
                     .foregroundStyle(Palette.danger)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 8)
             }
         }
@@ -321,8 +392,9 @@ struct BeatEditorView: View {
                 Image(systemName: symbol)
                     .foregroundStyle(stroke.map { Palette.stroke($0, laneId: .dayan) } ?? Palette.faint)
                 Text(title).font(.footnote.weight(selected ? .semibold : .regular))
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(selected ? Palette.clay.opacity(0.2) : Palette.headWorn)
             .overlay(
@@ -352,7 +424,8 @@ struct BeatEditorView: View {
                 save()
             } label: {
                 // A fork never changes the built-in: say so, or Save looks inert.
-                Label(isFork ? "Save as my version" : "Save", systemImage: "checkmark")
+                Label(isFork ? String(localized: "Save as my version", bundle: .strings) : String(localized: "Save", bundle: .strings),
+                      systemImage: "checkmark")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Palette.onClay)
                     .frame(maxWidth: .infinity)
@@ -388,9 +461,9 @@ struct BeatEditorView: View {
             note: keepsIdentity ? (seed?.note ?? "") : "",
             bpm: bpm,
             steps: steps,
-            beatsPerBar: keptMeter?.beatsPerBar ?? beatsPerBar,
-            cellsPerGroup: keptMeter?.cellsPerGroup ?? cellsPerGroup,
-            groups: keptMeter?.groups ?? Array(repeating: cellsPerGroup, count: max(1, Int(beatsPerBar.rounded()))),
+            beatsPerBar: shape.beatsPerBar,
+            cellsPerGroup: shape.groups.allSatisfy { $0 == shape.groups.first } ? (shape.groups.first ?? shape.cpq) : shape.cpq,
+            groups: shape.groups,
             description: keepsIdentity ? seed?.description : nil,
             lanePatterns: patterns,
             group: keepsIdentity ? seed?.group : nil
@@ -473,9 +546,13 @@ struct BeatEditorView: View {
         }
     }
 
-    private func setCellsPerGroup(_ value: Int) {
-        cellsPerGroup = value
+    /// Change the shape by length or meter: cells are kept from the start and padded or
+    /// cut at the end (only a resolution change re-times them).
+    private func setShape(_ next: EditorShape) {
+        shape = next
+        lastResample = nil
         let n = steps
+        setCursor(lane: cursor.lane, step: cursor.step)
         dayan = resized(dayan, to: n)
         bayan = resized(bayan, to: n)
         kartal = resized(kartal, to: n)
@@ -527,23 +604,29 @@ private struct EditorCell: View {
     }
 }
 
-/// A named meter: the pulse count per bar and the subdivision within each pulse.
-private struct MeterPreset: Identifiable, Hashable {
-    let beatsPerBar: Double
-    let cellsPerGroup: Int
+/// A meter the picker offers. Each is seeded at its plainest resolution; the
+/// resolution lever refines it afterwards.
+private struct EditorMeter: Identifiable, Hashable {
     let label: String
-    var id: String { "\(beatsPerBar)-\(cellsPerGroup)" }
+    let shape: EditorShape
+    var id: String { label }
 
-    static let allCases: [MeterPreset] = [
-        .init(beatsPerBar: 4, cellsPerGroup: 1, label: "4/4"),
-        .init(beatsPerBar: 4, cellsPerGroup: 2, label: String(localized: "8 (eighths)", bundle: .strings)),
-        .init(beatsPerBar: 4, cellsPerGroup: 3, label: String(localized: "12 (triplets)", bundle: .strings)),
-        .init(beatsPerBar: 4, cellsPerGroup: 4, label: String(localized: "16 (sixteenths)", bundle: .strings)),
-        .init(beatsPerBar: 3, cellsPerGroup: 2, label: "6 (3/4)"),
+    static func == (a: EditorMeter, b: EditorMeter) -> Bool { a.label == b.label }
+    func hash(into h: inout Hasher) { h.combine(label) }
+
+    static let all: [EditorMeter] = [
+        .init(label: "4/4", shape: EditorShape(groups: [2, 2, 2, 2], cpq: 2, unit: [2])),
+        .init(label: "3/4", shape: EditorShape(groups: [2, 2, 2], cpq: 2, unit: [2])),
+        .init(label: "6/8 · 3+3", shape: EditorShape(groups: [3, 3], cpq: 2, unit: [3, 3])),
+        .init(label: "7/8 · 2+2+3", shape: EditorShape(groups: [2, 2, 3], cpq: 2, unit: [2, 2, 3])),
     ]
 
-    static func matching(beatsPerBar: Double, cellsPerGroup: Int) -> MeterPreset {
-        allCases.first { $0.beatsPerBar == beatsPerBar && $0.cellsPerGroup == cellsPerGroup }
-            ?? allCases[1]
+    /// The preset this shape is, at any resolution — or nil for a shape no preset
+    /// produces (a longer bar, matan's 16 groups of 3…).
+    static func matching(_ shape: EditorShape) -> EditorMeter? {
+        all.first { m in
+            m.shape.resolutionOptions.contains { m.shape.atResolution($0)?.groups == shape.groups && m.shape.atResolution($0)?.cpq == shape.cpq }
+                || (!m.shape.isMultiplier && !shape.isMultiplier && shape.groups.count == m.shape.groups.count)
+        }
     }
 }
