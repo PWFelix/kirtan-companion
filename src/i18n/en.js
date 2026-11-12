@@ -165,8 +165,8 @@ export default {
   "editor.save": "Save beat",
   "editor.saving": "Saving…",
   "editor.stopPreview": "■ Stop",
-  "editor.switchToDrum": "tap the drum row to switch",
-  "editor.switchToKartal": "tap the kartal row to switch",
+  "editor.cellN": "Cell {n}",
+  "editor.tapAnyCell": "tap any cell to change row",
   "editor.undo": "↶ Undo",
 
   "group.Building up": "Building up",

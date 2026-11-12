@@ -164,8 +164,8 @@ export default {
   "editor.save": "Guardar ritmo",
   "editor.saving": "Guardando…",
   "editor.stopPreview": "■ Detener",
-  "editor.switchToDrum": "toca la fila del tambor para cambiar",
-  "editor.switchToKartal": "toca la fila de kartal para cambiar",
+  "editor.cellN": "Celda {n}",
+  "editor.tapAnyCell": "toca cualquier celda para cambiar de fila",
   "editor.undo": "↶ Deshacer",
 
   "group.Building up": "Para subir",

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import BeatStrip from "./BeatStrip.jsx";
 import { labelsFromGroups } from "./data/stepLabels.js";
-import { BOLS, COMBO_BOLS } from "./data/bols.js";
+import { BOLS } from "./data/bols.js";
 import { t, tOr } from "./i18n/index.js";
 import { tagLine } from "./data/tags.js";
 import { TagPicker } from "./ui/TagPicker.jsx";
@@ -19,14 +19,14 @@ import { MAX_STEPS } from "./data/shareCodec.js";
  * 1. OVERVIEW  — a mini BeatStrip of the WHOLE beat with a draggable frame
  *    showing which page the zoom is on; doubles as the live visualiser.
  * 2. ZOOM      — one page of cells, magnified, the lanes aligned in a column
- *    (the two mridanga heads, plus the karatalas when present). The CURSOR is
- *    a column; tapping a cell moves it AND picks the instrument the pads
- *    write: a dayan or bayan cell means the mrdanga, a kartal cell the
- *    karatalas. The editor opens on the mrdanga; the other instrument's rows
- *    dim, and the pads carry a heading, so the switch is never a mystery.
- * 3. PADS      — one pad per enterable stroke (from data/bols.js). Tapping a
- *    pad writes the cursor column (or one lane when isolated), SOUNDS the
- *    sample(s), and advances the cursor.
+ *    (the two mridanga heads and the karatalas). Editing is CELL-DRIVEN: the
+ *    cursor is one cell (a lane and a step). Tapping any cell selects it, and
+ *    the pads become that row's strokes.
+ * 3. PADS      — the selected row's palette (data/bols.js): its open and
+ *    closed strokes plus Rest. Tapping a pad writes the selected cell, SOUNDS
+ *    the stroke, and advances to the next cell along the same row, so a row
+ *    can be typed in one go. A two-hand bol (Da, Gi...) is simply both drum
+ *    rows filled in the same column.
  *
  * The three zones sit in one scrolling region so a viewport too short for all
  * of them scrolls instead of overflowing; the title, Save and the nav bar are
@@ -98,16 +98,6 @@ function dotStyle(v, color, size) {
   return { width: 4, height: 4, borderRadius: "50%", background: "var(--rule)" };
 }
 
-// Top/bottom mark PAIR — used on the both-hands pads (top = dayan, bottom = bayan).
-function StrokeMark({ dayan, bayan, size = 12 }) {
-  return (
-    <span aria-hidden="true" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-      <span style={dotStyle(dayan, "var(--lane-dayan)", size)} />
-      <span style={dotStyle(bayan, "var(--lane-bayan)", size)} />
-    </span>
-  );
-}
-
 function PencilIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -119,32 +109,15 @@ function PencilIcon() {
 
 const soundName = (end, v) => (v === "O" ? `${end}_open` : v === "X" ? `${end}_closed` : null);
 
-// Pad palettes keyed by instrument. Each pad's `write` names exactly the
-// lanes it touches. The mrdanga set covers every dayan/bayan combination, so
-// any column can be written whole — no need to edit one head on its own.
-/** The instrument a lane belongs to: the two heads are one mrdanga. */
-const instrumentOf = (lane) => (lane === "kartal" ? "kartal" : "mrdanga");
+// The editable rows, top to bottom.
+const ROWS = [["dayan", "Dayan"], ["bayan", "Bayan"], ["kartal", "Kartal"]];
 
-const PAD_SETS = {
-  mrdanga: [
-    { key: "ta",   label: BOLS.dayan.O,      write: { dayan: "O",  bayan: null } },
-    { key: "te",   label: BOLS.dayan.X,      write: { dayan: "X",  bayan: null } },
-    { key: "ge",   label: BOLS.bayan.O,      write: { dayan: null, bayan: "O"  } },
-    { key: "khe",  label: BOLS.bayan.X,      write: { dayan: null, bayan: "X"  } },
-    { key: "da",   label: COMBO_BOLS["O+O"], write: { dayan: "O",  bayan: "O"  } },
-    { key: "gi",   label: COMBO_BOLS["X+O"], write: { dayan: "X",  bayan: "O"  } },
-    { key: "tk",   label: COMBO_BOLS["O+X"], write: { dayan: "O",  bayan: "X"  } },
-    { key: "tek",  label: COMBO_BOLS["X+X"], write: { dayan: "X",  bayan: "X"  } },
-    { key: "rest", label: "Rest",            write: { dayan: null, bayan: null }, rest: true },
-  ],
-  // Ring, damped, rest. No combo pads: the cymbal isn't struck together with
-  // a drum head under one bol.
-  kartal: [
-    { key: "kch", label: BOLS.kartal.O, write: { kartal: "O" } },
-    { key: "kdm", label: BOLS.kartal.X, write: { kartal: "X" } },
-    { key: "rk",  label: "Rest",        write: { kartal: null }, rest: true },
-  ],
-};
+/** The palette for a row: its open stroke, its closed stroke, and Rest. */
+const padsFor = (lane) => [
+  { key: lane + "O", label: BOLS[lane].O, value: "O" },
+  { key: lane + "X", label: BOLS[lane].X, value: "X" },
+  { key: lane + "-", label: "Rest", value: null, rest: true },
+];
 
 function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [groups, setGroups] = useState(() => seedGroups(initialBeat));
@@ -165,8 +138,9 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
   const [cursor, setCursor] = useState(0);
-  // Which instrument the pads write: "mrdanga" | "kartal". Set by tapping a row.
-  const [instrument, setInstrument] = useState("mrdanga");
+  // The row the cursor is on — the cursor is a CELL (cursorLane, cursor). It
+  // picks the pads' palette. Set by tapping any cell.
+  const [cursorLane, setCursorLane] = useState("dayan");
   const [feelOpen, setFeelOpen] = useState(false);
   // The author's tags, published with the beat (data/tags.js).
   const [tags, setTags] = useState(() => initialBeat?.tags ?? []);
@@ -204,7 +178,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const undoRef = useRef([]);
   const [canUndo, setCanUndo] = useState(false);
   function pushUndo() {
-    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor });
+    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor, cursorLane });
     setResampleReport(null);
     if (undoRef.current.length > 60) undoRef.current.shift();
     setCanUndo(true);
@@ -213,6 +187,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     const prev = undoRef.current.pop();
     if (!prev) return;
     setDayan(prev.dayan); setBayan(prev.bayan); setKartal(prev.kartal); setCursor(prev.cursor);
+    if (prev.cursorLane) setCursorLane(prev.cursorLane);
     // A resolution change's entry also carries the grid shape it replaced.
     if (prev.groups) { setGroups(prev.groups); setMeter(prev.meter); }
     setResampleReport(null);
@@ -291,16 +266,13 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setFeelOpen(false);
   }
 
-  // One setter per authorable lane — lets tapPad write any lane a pad names
-  // (a pad only ever writes the lanes in its `write`) without a branch each.
+  // One setter per authorable lane, so tapPad writes the cursor's row without a branch each.
   const laneSetters = { dayan: setDayan, bayan: setBayan, kartal: setKartal };
+  /** Write the pad into the selected cell, sound it, and step along the same row. */
   function tapPad(pad) {
     pushUndo();
-    const w = pad.write;
-    for (const lane of Object.keys(w)) {
-      laneSetters[lane]?.((p) => { const c = [...p]; c[cursor] = w[lane]; return c; });
-      if (!previewing) { const n = soundName(lane, w[lane]); if (n) engine.playStroke(n); }
-    }
+    laneSetters[cursorLane]((p) => { const c = [...p]; c[cursor] = pad.value; return c; });
+    if (!previewing) { const n = soundName(cursorLane, pad.value); if (n) engine.playStroke(n); }
     setCursor((c) => (c + 1) % steps);
   }
 
@@ -414,7 +386,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           )}
         </div>
 
-        {/* ── ZOOM: one magnified page; the cursor is a column ── */}
+        {/* ── ZOOM: one magnified page; the cursor is a cell ── */}
         <div style={st.zoom}>
           <div style={st.zoomHead}>
             <button onClick={() => setCursor(pages[Math.max(0, page - 1)][0])}
@@ -431,28 +403,31 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
                 <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
               ))}
             </div>
-            {[["dayan", "Dayan", dayan], ["bayan", "Bayan", bayan], ["kartal", "Kartal", kartal]].map(([end, label, arr]) => {
-              const rowInstrument = instrumentOf(end);
-              const pick = (i) => { setCursor(i); setInstrument(rowInstrument); };
+            {ROWS.map(([end, label]) => {
+              const arr = { dayan, bayan, kartal }[end];
+              const onRow = end === cursorLane;
+              const pick = (i) => { setCursor(i); setCursorLane(end); };
               return (
-                <div key={end} style={{ opacity: rowInstrument === instrument ? 1 : 0.4 }}>
+                <div key={end}>
                   <button onClick={() => pick(cursor)}
-                    aria-pressed={rowInstrument === instrument}
-                    style={{ ...st.laneLabel, color: `var(--lane-${end})` }}>
+                    aria-pressed={onRow}
+                    style={{ ...st.laneLabel, color: `var(--lane-${end})`, fontWeight: onRow ? 800 : 400 }}>
                     {label}
                   </button>
                   <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
                     {arr.slice(windowStart, windowEnd).map((v, j) => {
                       const i = windowStart + j;
-                      const isCursor = i === cursor;
+                      const isCursor = onRow && i === cursor;
                       const lit = previewing && i === step;
                       return (
-                        <button key={end + i} onClick={() => pick(i)}
+                        <button key={end + i} onClick={() => pick(i)} aria-current={isCursor || undefined}
                           aria-label={v ? t("editor.cell", { lane: end, n: i + 1, bol: BOLS[end]?.[v] ?? v }) : t("editor.cellEmpty", { lane: end, n: i + 1 })}
                           style={{ ...st.zoomCell,
                             borderColor: isCursor ? "var(--clay)" : "var(--rule)",
                             borderWidth: isCursor ? 2 : 1,
-                            background: lit ? "var(--head-sunken)" : "var(--head)" }}>
+                            // The cursor's column, faintly, on the other rows: where the
+                            // other hands fall at the same moment.
+                            background: lit ? "var(--head-sunken)" : (!onRow && i === cursor) ? "var(--head-worn)" : "var(--head)" }}>
                           <span aria-hidden="true"
                             style={dotStyle(v, `var(--lane-${end})`, 18)} />
                         </button>
@@ -467,30 +442,19 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
 
         {/* ── PADS ── */}
         <div style={st.padsHead}>
-          {instrument === "kartal" ? "Kartal" : "Mrdanga"}{" "}
-          <span style={st.padsHint}>
-            · {t(instrument === "kartal" ? "editor.switchToDrum" : "editor.switchToKartal")}
-          </span>
+          <span style={{ color: `var(--lane-${cursorLane})` }}>{ROWS.find(([l]) => l === cursorLane)[1]}</span>
+          {" · "}{t("editor.cellN", { n: cursor + 1 })}{" "}
+          <span style={st.padsHint}>· {t("editor.tapAnyCell")}</span>
         </div>
         <div style={st.pads}>
-          {PAD_SETS[instrument].map((pad) => {
-            const w = pad.write;
-            const both = "dayan" in w && "bayan" in w;
-            // Isolated pads write exactly one lane; colour the dot from it.
-            const soleLane = Object.keys(w)[0];
-            return (
-              <button key={pad.key} onClick={() => tapPad(pad)}
-                aria-label={pad.rest ? t("editor.rest") : pad.label}
-                style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
-                <span style={st.padLabel}>{pad.rest ? t("editor.rest") : pad.label}</span>
-                {!pad.rest && (both
-                  ? <StrokeMark dayan={w.dayan} bayan={w.bayan} size={9} />
-                  : <span aria-hidden="true"
-                      style={dotStyle(w[soleLane], `var(--lane-${soleLane})`, 11)} />
-                )}
-              </button>
-            );
-          })}
+          {padsFor(cursorLane).map((pad) => (
+            <button key={pad.key} onClick={() => tapPad(pad)}
+              aria-label={pad.rest ? t("editor.rest") : pad.label}
+              style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
+              <span style={st.padLabel}>{pad.rest ? t("editor.rest") : pad.label}</span>
+              {!pad.rest && <span aria-hidden="true" style={dotStyle(pad.value, `var(--lane-${cursorLane})`, 11)} />}
+            </button>
+          ))}
         </div>
 
         {/* ── Controls ── */}
