@@ -8,6 +8,8 @@ import { TagPicker } from "./ui/TagPicker.jsx";
 import { MAX_NAME_LEN, clampName } from "./data/names.js";
 import { closedMarkBackground } from "./data/strokes.js";
 import { MIN_BPM, MAX_BPM } from "./data/meter.js";
+import { leverFor, reshape, resample, pagesFor, resolutionFactor } from "./data/resolution.js";
+import { MAX_STEPS } from "./data/shareCodec.js";
 
 /**
  * BeatEditor — three zones, phone-first
@@ -64,8 +66,17 @@ function meterFor(groups, cpq) {
     const m = METERS.find((x) => x.cpq === cpq && x.unit.length === 1 && x.unit[0] === cpq);
     if (m) return m;
   }
-  if (cpq === 2 && repeats([3, 3], groups)) return METERS.find((m) => m.id === "68");
-  if (cpq === 2 && repeats([2, 2, 3], groups)) return METERS.find((m) => m.id === "78");
+  // Odd meters at a finer resolution (6/8 ×2 is [6,6] at cpq 4) are still that
+  // meter: divide the common factor out, match, and scale the preset back up so
+  // ± keeps adding a whole 3+3 or 2+2+3 cycle.
+  const k = resolutionFactor(groups, cpq);
+  const base = groups.map((g) => g / k);
+  if (cpq / k === 2) {
+    for (const id of ["68", "78"]) {
+      const m = METERS.find((x) => x.id === id);
+      if (repeats(m.unit, base)) return k === 1 ? m : { ...m, bar: m.bar.map((x) => x * k), unit: m.unit.map((x) => x * k), cpq: cpq };
+    }
+  }
   return { id: "custom", label: "Custom", sig: "", unit: uniform ? [groups[0]] : [...groups], cpq };
 }
 
@@ -164,13 +175,20 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const beatsPerBar = steps / cpq;
   const labels = labelsFromGroups(groups);
 
-  // The zoom shows up to 8 cells at once (matching the main strip). Pages
-  // tile the beat in fixed 8-cell windows; the visible one holds the cursor.
-  const zoomCells = Math.min(steps, 8);
-  const pageCount = Math.ceil(steps / zoomCells);
-  const page = Math.floor(cursor / zoomCells);
-  const windowStart = page * zoomCells;
-  const windowEnd = Math.min(windowStart + zoomCells, steps);
+  // The zoom shows up to 8 cells at once (matching the main strip). Pages hold
+  // whole beats, so one never starts mid-beat; the visible one holds the cursor.
+  const pages = pagesFor(groups);
+  const pageCount = pages.length;
+  const page = Math.max(0, pages.findIndex(([a, b]) => cursor >= a && cursor < b));
+  const [windowStart, windowEnd] = pages[page] ?? [0, steps];
+  const zoomCells = windowEnd - windowStart;
+
+  // The two levers: beats (±, capped so the beat stays within 64 cells) and resolution.
+  const canAddBeat = steps + sum(meter.unit) <= MAX_STEPS;
+  const canRemoveBeat = groups.length > meter.unit.length;
+  const lever = leverFor(groups, cpq);
+  // What the last resolution change moved or dropped, shown until the next edit.
+  const [resampleReport, setResampleReport] = useState(null);
 
   const previewBeat = { id: "preview", name: name || t("editor.preview"), note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan, kartal };
   const beatRef = useRef(previewBeat);
@@ -181,6 +199,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const [canUndo, setCanUndo] = useState(false);
   function pushUndo() {
     undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor });
+    setResampleReport(null);
     if (undoRef.current.length > 60) undoRef.current.shift();
     setCanUndo(true);
   }
@@ -188,9 +207,37 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     const prev = undoRef.current.pop();
     if (!prev) return;
     setDayan(prev.dayan); setBayan(prev.bayan); setKartal(prev.kartal); setCursor(prev.cursor);
+    // A resolution change's entry also carries the grid shape it replaced.
+    if (prev.groups) { setGroups(prev.groups); setMeter(prev.meter); }
+    setResampleReport(null);
     setCanUndo(undoRef.current.length > 0);
   }
-  function resetUndo() { undoRef.current = []; setCanUndo(false); }
+  function resetUndo() { undoRef.current = []; setCanUndo(false); setResampleReport(null); }
+
+  /**
+   * Change the resolution, KEEPING THE RHYTHM: every hit stays at its moment in
+   * the bar on the nearest new cell (see data/resolution.js). Undoable — the
+   * undo entry carries the old grid shape along with the old hits.
+   */
+  function changeResolution(option) {
+    if (option === lever.current) return;
+    const next = reshape(groups, cpq, meter.unit, option);
+    if (!next) return;
+    if (previewing) { engine.stop(); setPreviewing(false); }
+    const n = sum(next.groups);
+    const report = { moved: 0, dropped: 0 };
+    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor, groups, meter });
+    if (undoRef.current.length > 60) undoRef.current.shift();
+    setCanUndo(true);
+    setDayan(resample(dayan, cpq, next.cpq, n, report));
+    setBayan(resample(bayan, cpq, next.cpq, n, report));
+    setKartal(resample(kartal, cpq, next.cpq, n, report));
+    const found = meterFor(next.groups, next.cpq);
+    setMeter(found.id === "custom" ? { ...found, unit: next.unit } : found);
+    setGroups(next.groups);
+    setCursor(Math.min(n - 1, Math.floor((cursor * next.cpq) / cpq)));
+    setResampleReport(report.moved || report.dropped ? report : null);
+  }
 
   useEffect(() => {
     const onStep = (s) => setStep(s);
@@ -207,6 +254,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const getPhase = () => engine.getPhase();
 
   function addGroup() {
+    if (!canAddBeat) return;
     const u = meter.unit, pad = Array(sum(u)).fill(null);
     setGroups((g) => [...g, ...u]);
     setDayan((p) => [...p, ...pad]);
@@ -353,11 +401,11 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
         {/* ── ZOOM: one magnified page; the cursor is a column ── */}
         <div style={st.zoom}>
           <div style={st.zoomHead}>
-            <button onClick={() => setCursor(Math.max(0, windowStart - zoomCells))}
+            <button onClick={() => setCursor(pages[Math.max(0, page - 1)][0])}
               disabled={page === 0} aria-label={t("editor.prevPage")}
               style={{ ...st.pageBtn, opacity: page === 0 ? 0.3 : 1 }}>‹</button>
             <span style={st.zoomLabel}>{t("editor.pageRange", { from: windowStart + 1, to: windowEnd, total: steps })}</span>
-            <button onClick={() => setCursor(Math.min(steps - 1, windowStart + zoomCells))}
+            <button onClick={() => setCursor(pages[Math.min(pageCount - 1, page + 1)][0])}
               disabled={page >= pageCount - 1} aria-label={t("editor.nextPage")}
               style={{ ...st.pageBtn, opacity: page >= pageCount - 1 ? 0.3 : 1 }}>›</button>
           </div>
@@ -448,12 +496,41 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
             </button>
             {/* Length: add/remove one unit of the current meter. */}
             <div style={st.lengthRow}>
-              <button onClick={removeGroup} disabled={groups.length <= meter.unit.length}
-                style={{ ...st.groupBtn, opacity: groups.length <= meter.unit.length ? 0.4 : 1 }}
+              <button onClick={removeGroup} disabled={!canRemoveBeat}
+                style={{ ...st.groupBtn, opacity: canRemoveBeat ? 1 : 0.4 }}
                 aria-label={t("editor.removeGroup")}>−</button>
-              <span style={st.lengthLabel}>{t("beat.cells", { n: steps })}</span>
-              <button onClick={addGroup} style={st.groupBtn} aria-label={t("editor.addGroup")}>+</button>
+              <span style={st.lengthLabel}>{t("editor.beatCount", { n: groups.length })}</span>
+              <button onClick={addGroup} disabled={!canAddBeat}
+                style={{ ...st.groupBtn, opacity: canAddBeat ? 1 : 0.4 }}
+                aria-label={t("editor.addGroup")}>+</button>
             </div>
+          </div>
+
+          {/* Resolution: cells per beat (or ×N for odd meters). Keeps the rhythm. */}
+          <div style={st.resBlock}>
+            <span style={st.resLabel}>{lever.multiplier ? t("editor.resolution") : t("editor.cellsPerBeat")}</span>
+            <div style={st.resRow} role="radiogroup" aria-label={lever.multiplier ? t("editor.resolution") : t("editor.cellsPerBeat")}>
+              {lever.options.map((o) => {
+                const selected = o === lever.current;
+                const ok = selected || reshape(groups, cpq, meter.unit, o) != null;
+                return (
+                  <button key={o} role="radio" aria-checked={selected} disabled={!ok}
+                    onClick={() => changeResolution(o)}
+                    style={{ ...st.resChip, ...(selected ? st.resChipOn : null), opacity: ok ? 1 : 0.35 }}>
+                    {lever.multiplier ? `×${o}` : o}
+                  </button>
+                );
+              })}
+            </div>
+            {resampleReport && (
+              <p style={st.resNote} role="status">
+                {[
+                  resampleReport.moved ? t("editor.resampleMoved", { n: resampleReport.moved }) : null,
+                  resampleReport.dropped ? t("editor.resampleDropped", { n: resampleReport.dropped }) : null,
+                  t("editor.resampleUndo"),
+                ].filter(Boolean).join(" ")}
+              </p>
+            )}
           </div>
 
           <div style={st.tempoRow}>
@@ -551,6 +628,14 @@ const st = {
   feelBtn: { flex: 1, minHeight: 46, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 },
   feelName: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, color: "var(--ink-primary)" },
   feelCaret: { fontSize: "0.7rem", color: "var(--syahi-soft)" },
+  resBlock: { display: "flex", flexDirection: "column", gap: 8 },
+  resLabel: { fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
+  resRow: { display: "flex", gap: 8, flexWrap: "wrap" },
+  resChip: { minWidth: 44, height: 36, padding: "0 12px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi)", fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  // Full `border`, not borderColor: React drops a removed longhand without restoring
+  // the shorthand, which left previously selected chips with a dark border.
+  resChipOn: { background: "var(--clay)", border: "1px solid var(--clay)", color: "var(--on-clay)" },
+  resNote: { margin: 0, fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)" },
   lengthRow: { flexShrink: 0, display: "flex", alignItems: "center", gap: 8 },
   groupBtn: { flexShrink: 0, width: 44, height: 46, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontSize: 24, fontWeight: 700, cursor: "pointer", display: "grid", placeItems: "center" },
   lengthLabel: { minWidth: 54, textAlign: "center", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, color: "var(--syahi-soft)" },
