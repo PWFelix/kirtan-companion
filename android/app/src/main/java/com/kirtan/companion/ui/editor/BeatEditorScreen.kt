@@ -814,19 +814,27 @@ private fun ControlsZone(
             horizontalArrangement = Arrangement.spacedBy(dimens.space3),
         ) {
             Text(
-                text = draft.bpm.toString(),
+                text = draft.bpm.toString().padStart(3, ' '),
                 color = PaletteToken.SYAHI.color,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
                 style = TextStyle(fontFeatureSettings = "tnum"),
             )
-            Text(
-                text = stringResource(R.string.tempo_bpm),
-                color = PaletteToken.SYAHI_SOFT.color,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-            )
+            // One fixed slot for "BPM" or, in Brahmaloka, the ✦ way back: the
+            // slider beside it keeps its width either way.
+            Box(Modifier.width(44.dp), contentAlignment = Alignment.CenterStart) {
+                if (brahmaloka) {
+                    com.kirtan.companion.ui.components.BrahmalokaBadge(onLeave = onLeave)
+                } else {
+                    Text(
+                        text = stringResource(R.string.tempo_bpm),
+                        color = PaletteToken.SYAHI_SOFT.color,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                    )
+                }
+            }
             com.kirtan.companion.ui.components.BpmSlider(
                 bpm = draft.bpm,
                 brahmaloka = brahmaloka,
@@ -834,7 +842,6 @@ private fun ControlsZone(
                 onUnlock = onUnlock,
                 modifier = Modifier.weight(1f),
             )
-            if (brahmaloka) com.kirtan.companion.ui.components.BrahmalokaBadge(onLeave = onLeave)
         }
     }
 }

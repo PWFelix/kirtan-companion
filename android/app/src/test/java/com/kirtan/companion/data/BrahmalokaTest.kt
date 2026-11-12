@@ -9,7 +9,7 @@ class BrahmalokaTest {
 
     @Test fun normalRangeTopsOutAt200() {
         assertEquals(40..200, tempoRange(false))
-        assertEquals(190..500, tempoRange(true))
+        assertEquals(40..500, tempoRange(true))
     }
 
     @Test fun below200AlwaysLeaves() {

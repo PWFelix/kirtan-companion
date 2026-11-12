@@ -17,6 +17,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -91,13 +92,15 @@ private val Fire = Color(0xFFD9541E)
 private val Ember = Color(0xFFB8471A)
 
 /**
- * The tempo slider: 40–200, or 190–500 in Brahmaloka. Holding the thumb at 200
+ * The tempo slider: 40–200, or zoomed out to 40–500 in Brahmaloka — same width,
+ * the thumb moves. Screens put the ✦ badge (the way back) by the BPM number, never
+ * in the slider's row, so the slider never loses width or pushes its row off screen. Holding the thumb at 200
  * for [BRAHMA_HOLD_MS] calls [onUnlock], with a glow swelling round the thumb
  * while you hold so it is clear something is coming.
  *
  * KEYED ON THE MODE so the slider is rebuilt when the range changes. That ends
  * the drag in progress — which is the point: the finger is still pressed at the
- * right-hand end, and a live drag on the new 190–500 range would fling the
+ * right-hand end, and a live drag on the new 40–500 range would fling the
  * tempo to ~490 on its next move.
  */
 @Composable
@@ -109,6 +112,7 @@ internal fun BpmSlider(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    Box(modifier) {
     key(brahmaloka) {
         val range = tempoRange(brahmaloka)
         val source = remember { MutableInteractionSource() }
@@ -133,7 +137,7 @@ internal fun BpmSlider(
             enabled = enabled,
             accent = if (brahmaloka) Fire else PaletteToken.CLAY.color,
             interactionSource = source,
-            modifier = modifier.drawBehind {
+            modifier = Modifier.fillMaxWidth().drawBehind {
                 val g = glow.value
                 if (g <= 0f) return@drawBehind
                 // Charging only happens at 200, so the thumb is at the right end.
@@ -145,6 +149,7 @@ internal fun BpmSlider(
                 )
             },
         )
+    }
     }
 }
 

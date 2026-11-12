@@ -39,18 +39,17 @@ fun clampBpm(bpm: Int): Int = bpm.coerceIn(MIN_BPM, MAX_BPM)
 /**
  * Brahmaloka time. The tempo slider normally spans [MIN_BPM]..[NORMAL_MAX_BPM], so
  * the tempos people actually chant at get real resolution under a thumb. Holding
- * it at [NORMAL_MAX_BPM] for [BRAHMA_HOLD_MS] unlocks the high range
- * ([BRAHMA_FLOOR_BPM]..[MAX_BPM]); going below [NORMAL_MAX_BPM] locks it again. The
- * floor sits just under 200 so the same slider can drag you back out. Same rules
- * as the web's data/meter.js.
+ * it at [NORMAL_MAX_BPM] for [BRAHMA_HOLD_MS] unlocks the high range by ZOOMING OUT:
+ * the slider keeps its size and its left end (40), and its right end becomes
+ * [MAX_BPM], so the thumb slides left to where 200 now sits. Dragging below
+ * [NORMAL_MAX_BPM] zooms back in. Same rules as the web's data/meter.js.
  */
 const val NORMAL_MAX_BPM = 200
-const val BRAHMA_FLOOR_BPM = 190
 const val BRAHMA_HOLD_MS = 900L
 
 /** The slider's range for the current mode. */
 fun tempoRange(brahmaloka: Boolean): IntRange =
-    if (brahmaloka) BRAHMA_FLOOR_BPM..MAX_BPM else MIN_BPM..NORMAL_MAX_BPM
+    if (brahmaloka) MIN_BPM..MAX_BPM else MIN_BPM..NORMAL_MAX_BPM
 
 /**
  * The mode a BPM puts you in, given the mode you were in: below 200 is always the

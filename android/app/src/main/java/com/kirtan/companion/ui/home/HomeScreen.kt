@@ -418,6 +418,12 @@ private fun TransportControls(
                         letterSpacing = 1.sp,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
+                    // The way back out of Brahmaloka sits with the number it changes,
+                    // not beside the slider, so the slider never loses width.
+                    if (brahmaloka) {
+                        Spacer(Modifier.width(6.dp))
+                        BrahmalokaBadge(onLeave = onLeave, modifier = Modifier.padding(bottom = 2.dp))
+                    }
                 }
                 Text(text = "▾", color = PaletteToken.SYAHI_SOFT.color, fontSize = 11.sp)
             }
@@ -445,7 +451,6 @@ private fun TransportControls(
                 enabled = !tempoLocked,
                 modifier = Modifier.weight(1f),
             )
-            if (brahmaloka) BrahmalokaBadge(onLeave = onLeave)
             HairlineIconButton(
                 icon = if (tempoLocked) KcIcons.LockClosed else KcIcons.LockOpen,
                 contentDescription = if (tempoLocked) stringResource(R.string.tempo_unlock) else stringResource(R.string.tempo_lock),
