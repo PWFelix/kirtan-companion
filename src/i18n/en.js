@@ -163,6 +163,8 @@ export default {
   "editor.rename": "Rename beat",
   "editor.rest": "Rest",
   "editor.save": "Save beat",
+  "editor.saveAsNew": "Save as new beat",
+  "editor.copyName": "{name} (copy)",
   "editor.saving": "Saving…",
   "editor.stopPreview": "■ Stop",
   "editor.cellN": "Cell {n}",

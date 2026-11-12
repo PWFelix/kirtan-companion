@@ -162,6 +162,8 @@ export default {
   "editor.rename": "Renombrar ritmo",
   "editor.rest": "Silencio",
   "editor.save": "Guardar ritmo",
+  "editor.saveAsNew": "Guardar como ritmo nuevo",
+  "editor.copyName": "{name} (copia)",
   "editor.saving": "Guardando…",
   "editor.stopPreview": "■ Detener",
   "editor.cellN": "Celda {n}",

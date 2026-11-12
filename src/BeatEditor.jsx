@@ -297,16 +297,19 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
    *    discarded here, so closing on a failed write would throw the user's
    *    work away and leave them only an error message about it.
    */
-  async function handleSave() {
+  async function handleSave(asNew = false) {
     if (saving) return;
     if (previewing) { engine.stop(); setPreviewing(false); }
     const hasAnyHit = dayan.some((c) => c !== null) || bayan.some((c) => c !== null) || kartal.some((c) => c !== null);
     if (!hasAnyHit) { alert(t("editor.needStroke")); return; }
-    const finalName = clampName(name.trim()) || t("editor.defaultName");
+    let finalName = clampName(name.trim()) || t("editor.defaultName");
+    // A variation left with the original's name would be two identical rows.
+    if (asNew && finalName === initialBeat?.name) finalName = clampName(t("editor.copyName", { name: finalName }));
     // No id means "new" — the library mints one on save, and it is now the
     // only place in the app ids come from. Editing an existing custom beat
     // keeps its id and so overwrites in place.
-    const id = initialBeat?.id ?? null;
+    // "Save as new" drops the id, so the original stays as it was.
+    const id = asNew ? null : initialBeat?.id ?? null;
     const uniform = groups.every((g) => g === groups[0]);
     // Only persist a kartal line when the user actually drew one, so a beat
     // with no cymbals stays a two-lane beat (matches beats.js's convention and
@@ -527,7 +530,14 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
       </div>
 
       <div style={st.footer}>
-        <button onClick={handleSave} disabled={saving}
+        {/* Only your own beat has an id here (others arrive as forks), and only
+            it can be saved over — so only it needs the way to make a variation. */}
+        {initialBeat?.id && (
+          <button onClick={() => handleSave(true)} disabled={saving} style={st.saveAsBtn}>
+            {t("editor.saveAsNew")}
+          </button>
+        )}
+        <button onClick={() => handleSave()} disabled={saving}
           style={{ ...st.saveBtn, ...(saving ? st.saveBtnBusy : null) }}>
           {saving ? t("editor.saving") : t("editor.save")}
         </button>
@@ -631,7 +641,8 @@ const st = {
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
 
-  footer: { flexShrink: 0, display: "flex", justifyContent: "flex-end" },
+  footer: { flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: "var(--space-3)" },
+  saveAsBtn: { minHeight: 48, padding: "0 20px", borderRadius: 14, border: "1px solid var(--rule)", background: "transparent", color: "var(--syahi)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 600, cursor: "pointer" },
   saveBtn: { minHeight: 48, padding: "0 28px", borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
   // Dimmed rather than greyed: the button keeps its colour so the press
   // clearly registered, it just isn't pressable again.
