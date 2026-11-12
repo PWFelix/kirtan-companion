@@ -10,8 +10,9 @@ import { closedMarkBackground } from "./data/strokes.js";
 import { tempoRange, brahmalokaFor } from "./data/meter.js";
 import BpmRange from "./ui/BpmRange.jsx";
 import BrahmalokaBurst from "./ui/BrahmalokaBurst.jsx";
-import { leverFor, reshape, resample, pagesFor, resolutionFactor } from "./data/resolution.js";
+import { leverFor, reshape, resample, pagesFor } from "./data/resolution.js";
 import { MAX_STEPS } from "./data/shareCodec.js";
+import { METERS, meterFor, emptyGrid, sum, draftFrom } from "./data/editorDraft.js";
 
 /**
  * BeatEditor — three zones, phone-first
@@ -41,56 +42,6 @@ import { MAX_STEPS } from "./data/shareCodec.js";
  * and the engine handles it.
  */
 
-const emptyGrid = (n) => Array(n).fill(null);
-const sum = (a) => a.reduce((x, y) => x + y, 0);
-
-// Meter/feel presets. `bar` = one bar's groups, `unit` = what +/- Group adds
-// or removes, `cpq` = cells per quarter note (sets timing via beatsPerBar).
-const METERS = [
-  { id: "std",  label: "Standard",    sig: "4/4 · eighths",    bar: [2, 2, 2, 2], unit: [2],       cpq: 2 },
-  { id: "trip", label: "Triplets",    sig: "swing · 12/8",     bar: [3, 3, 3, 3], unit: [3],       cpq: 3 },
-  { id: "dbl",  label: "Double-time", sig: "16ths",            bar: [4, 4, 4, 4], unit: [4],       cpq: 4 },
-  { id: "68",   label: "Six-eight",   sig: "6/8 · 3+3",        bar: [3, 3],       unit: [3, 3],    cpq: 2 },
-  { id: "78",   label: "Seven-eight", sig: "7/8 · 2+2+3",      bar: [2, 2, 3],    unit: [2, 2, 3], cpq: 2 },
-];
-
-// Does `arr` consist of whole repetitions of `pattern`?
-function repeats(pattern, arr) {
-  if (arr.length === 0 || arr.length % pattern.length !== 0) return false;
-  return arr.every((v, i) => v === pattern[i % pattern.length]);
-}
-
-// Recover the meter preset (or a synthesized "custom" one) from a beat's
-// groups + cpq, so editing an existing beat lands on the right picker entry.
-function meterFor(groups, cpq) {
-  const uniform = groups.every((g) => g === groups[0]);
-  if (uniform && groups[0] === cpq) {
-    const m = METERS.find((x) => x.cpq === cpq && x.unit.length === 1 && x.unit[0] === cpq);
-    if (m) return m;
-  }
-  // Odd meters at a finer resolution (6/8 ×2 is [6,6] at cpq 4) are still that
-  // meter: divide the common factor out, match, and scale the preset back up so
-  // ± keeps adding a whole 3+3 or 2+2+3 cycle.
-  const k = resolutionFactor(groups, cpq);
-  const base = groups.map((g) => g / k);
-  if (cpq / k === 2) {
-    for (const id of ["68", "78"]) {
-      const m = METERS.find((x) => x.id === id);
-      if (repeats(m.unit, base)) return k === 1 ? m : { ...m, bar: m.bar.map((x) => x * k), unit: m.unit.map((x) => x * k), cpq: cpq };
-    }
-  }
-  return { id: "custom", label: "Custom", sig: "", unit: uniform ? [groups[0]] : [...groups], cpq };
-}
-
-function seedGroups(b) {
-  if (!b) return [...METERS[0].bar];
-  if (Array.isArray(b.groups)) return [...b.groups];
-  const cpg = b.cellsPerGroup ?? Math.max(1, Math.round(b.steps / (b.beatsPerBar ?? 4)));
-  const beats = Math.max(1, Math.round(b.steps / cpg));
-  return Array(beats).fill(cpg);
-}
-const seedCpq = (b) => (b ? Math.max(1, Math.round(b.steps / (b.beatsPerBar ?? 4))) : 2);
-
 // filled = open, X = closed, faint dot = silent.
 function dotStyle(v, color, size) {
   if (v === "O") return { width: size, height: size, borderRadius: "50%", background: color };
@@ -119,31 +70,34 @@ const padsFor = (lane) => [
   { key: lane + "-", label: "Rest", value: null, rest: true },
 ];
 
-function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
-  const [groups, setGroups] = useState(() => seedGroups(initialBeat));
-  const [meter, setMeter]   = useState(() => meterFor(seedGroups(initialBeat), seedCpq(initialBeat)));
-  const [dayan, setDayan] = useState(initialBeat ? [...initialBeat.dayan] : emptyGrid(sum(seedGroups(initialBeat))));
-  const [bayan, setBayan] = useState(initialBeat ? [...initialBeat.bayan] : emptyGrid(sum(seedGroups(initialBeat))));
-  // Kartal is optional on a beat, so an existing beat may not carry one —
-  // fall back to an empty grid of the same length as the drum lanes.
-  const [kartal, setKartal] = useState(
-    initialBeat?.kartal ? [...initialBeat.kartal] : emptyGrid(sum(seedGroups(initialBeat)))
-  );
-  const [bpm, setBpm]     = useState(initialBeat?.bpm ?? 90);
+function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft, onDraftChange, onDiscard, dirty, nav }) {
+  // The draft lives in App (one session, kept across screens and reloads):
+  // start from it, and report every change back below.
+  const [start] = useState(() => initialDraft ?? draftFrom(initialBeat));
+  const [groups, setGroups] = useState(start.groups);
+  const [meter, setMeter]   = useState(start.meter);
+  const [dayan, setDayan] = useState(start.dayan);
+  const [bayan, setBayan] = useState(start.bayan);
+  const [kartal, setKartal] = useState(start.kartal);
+  const [bpm, setBpm]     = useState(start.bpm);
   // Brahmaloka time, editor-local (the editor's tempo is the draft's, not the
   // transport's). A beat saved above 200 opens already in the high range.
-  const [brahmaloka, setBrahmaloka] = useState(() => (initialBeat?.bpm ?? 90) > 200);
+  const [brahmaloka, setBrahmaloka] = useState(() => start.bpm > 200);
   const [burstKey, setBurstKey] = useState(0);
-  const [name, setName]   = useState(initialBeat?.name ?? "");
+  const [name, setName]   = useState(start.name);
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
-  const [cursor, setCursor] = useState(0);
+  const [cursor, setCursor] = useState(start.cursor ?? 0);
   // The row the cursor is on — the cursor is a CELL (cursorLane, cursor). It
   // picks the pads' palette. Set by tapping any cell.
-  const [cursorLane, setCursorLane] = useState("dayan");
+  const [cursorLane, setCursorLane] = useState(start.cursorLane ?? "dayan");
   const [feelOpen, setFeelOpen] = useState(false);
   // The author's tags, published with the beat (data/tags.js).
-  const [tags, setTags] = useState(() => initialBeat?.tags ?? []);
+  const [tags, setTags] = useState(start.tags ?? []);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  useEffect(() => {
+    onDraftChange?.({ groups, meter, dayan, bayan, kartal, bpm, name, cursor, cursorLane, tags });
+  }, [groups, meter, dayan, bayan, kartal, bpm, name, cursor, cursorLane, tags, onDraftChange]);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const overviewRef = useRef(null);
@@ -358,6 +312,13 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           <button onClick={() => nameInputRef.current?.focus()} aria-label={t("editor.rename")}
             style={st.titlePencil}><PencilIcon /></button>
         </div>
+        {/* Only when there is something to lose; the Editor tab's dot says the
+            same from anywhere else in the app. */}
+        {dirty && (
+          <button onClick={() => setDiscardOpen(true)} style={st.revertBtn}>
+            {t(initialBeat ? "editor.revert" : "editor.startOver")}
+          </button>
+        )}
       </header>
       <button onClick={() => setTagsOpen(true)} style={st.tagsLine} aria-label={t("tags.editAuthor")}>
         <span style={st.tagsLabel}>{t("tags.title")}</span>
@@ -548,6 +509,24 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           selected={tags} onChange={setTags} onClose={() => setTagsOpen(false)} />
       )}
 
+      {discardOpen && (
+        <div style={st.sheetBackdrop} onClick={() => setDiscardOpen(false)}>
+          <div style={st.sheet} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div style={st.sheetHead}>
+              <h2 style={st.sheetTitle}>{t(initialBeat ? "editor.revert" : "editor.startOver")}</h2>
+              <button onClick={() => setDiscardOpen(false)} aria-label={t("common.close")} style={st.sheetClose}>×</button>
+            </div>
+            <p style={st.sheetHint}>
+              {initialBeat ? t("editor.revertBody", { name: initialBeat.name }) : t("editor.startOverBody")}
+            </p>
+            <button style={{ ...st.saveBtn, marginTop: "var(--space-3)" }}
+              onClick={() => { if (previewing) engine.stop(); setDiscardOpen(false); onDiscard?.(); }}>
+              {t(initialBeat ? "editor.revert" : "editor.startOver")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Feel/meter picker sheet */}
       {feelOpen && (
         <div style={st.sheetBackdrop} onClick={() => setFeelOpen(false)}>
@@ -650,6 +629,7 @@ const st = {
 
   sheetBackdrop: { position: "fixed", inset: 0, background: "oklch(0.24 0.02 60 / 0.35)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 10 },
   sheet: { width: "100%", maxWidth: 430, maxHeight: "85dvh", overflowY: "auto", background: "var(--head)", borderRadius: "20px 20px 0 0", padding: "var(--space-5) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column" },
+  revertBtn: { flexShrink: 0, minHeight: 40, padding: "0 var(--space-2)", border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, cursor: "pointer" },
   sheetHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   sheetTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)" },
   sheetClose: { flexShrink: 0, width: 44, height: 44, margin: "-8px -8px 0 0", border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },

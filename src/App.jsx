@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { BEATS } from "./data/beats.js";
 import { useTransport } from "./hooks/useTransport.js";
 import { useBeatLibrary } from "./hooks/useBeatLibrary.js";
@@ -20,6 +20,8 @@ import LearnView from "./views/LearnView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
 import { readShareFromLocation } from "./data/shareCodec.js";
 import { loadSession, saveSession } from "./storage/sessionPrefs.js";
+import { isDirty, loadSession as loadEditorSession, saveSession as saveEditorSession } from "./data/editorDraft.js";
+import UnsavedSheet from "./ui/UnsavedSheet.jsx";
 
 // An inbound share link, read ONCE at module load. Deliberately not in a
 // useState initialiser: StrictMode double-invokes those, and this one has a
@@ -78,10 +80,38 @@ function App() {
   // The last loaded beat comes back on the next visit (storage/sessionPrefs.js).
   // An id that no longer exists falls through to the first beat below.
   const [beatId, setBeatId] = useState(() => loadSession().beatId ?? BEATS[0].id);
-  const [editorInitial, setEditorInitial] = useState(null); // beat to pre-fill, or null for a new beat
-  // Where the editor's Back button returns to, or null when it was opened
-  // from the nav tab (then there's no Back — the nav bar navigates).
-  const [editorReturn, setEditorReturn] = useState(null);
+  // The ONE editor session — { seed, draft, returnTo, key } — held here rather
+  // than in the editor so leaving the screen and coming back finds the draft
+  // as it was, and kept in localStorage while dirty so a reload does too
+  // (data/editorDraft.js). `seed` is the beat it started from (null = new),
+  // `returnTo` where Back goes (null = opened from the nav: no Back), `key`
+  // remounts the editor when the session is replaced.
+  const [editor, setEditor] = useState(() => {
+    const restored = loadEditorSession();
+    return restored ? { ...restored, key: 1 } : null;
+  });
+  // An edit asked for while another has unsaved changes: Keep or Discard.
+  const [pendingOpen, setPendingOpen] = useState(null);
+  const editorDirty = isDirty(editor);
+  useEffect(() => {
+    const id = setTimeout(() => saveEditorSession(editor), 300);
+    return () => clearTimeout(id);
+  }, [editor]);
+  const onDraftChange = useCallback((draft) => setEditor((s) => (s ? { ...s, draft } : s)), []);
+  // Start a session on `seed`, unless it would throw away unsaved work.
+  function beginEdit(seed, returnTo, force = false) {
+    transport.stop();
+    if (!force && editorDirty) {
+      // The same beat again (its pencil tapped twice): resume.
+      if (seed?.id && seed.id === editor.seed?.id) {
+        setEditor((s) => ({ ...s, returnTo }));
+        setView("editor");
+      } else setPendingOpen({ seed, returnTo });
+      return;
+    }
+    setEditor((s) => ({ seed, draft: null, returnTo, key: (s?.key ?? 0) + 1 }));
+    setView("editor");
+  }
 
   const beat = library.allBeats.find(b => b.id === beatId) || library.allBeats[0];
 
@@ -126,10 +156,15 @@ function App() {
   // `returnTo` is the view Back should return to (a drill-in from Beats);
   // null = launched from the nav, so no Back and Close lands Home.
   function openNewBeat(returnTo = null) {
-    transport.stop();
-    setEditorInitial(null);
-    setEditorReturn(returnTo);
-    setView("editor");
+    beginEdit(null, returnTo);
+  }
+  // The nav tab: unsaved work comes back; otherwise a blank draft.
+  function openEditorTab() {
+    if (editorDirty) {
+      transport.stop();
+      setEditor((s) => ({ ...s, returnTo: null }));
+      setView("editor");
+    } else openNewBeat();
   }
   // On a beat (defaults to the loaded one). `returnTo` is the view Back should
   // return to (a drill-in from Home/Beats); null = no Back. Custom beats edit
@@ -159,13 +194,11 @@ function App() {
           description: undefined,
           readOnly: undefined,
         };
-    setEditorInitial(seed);
-    setEditorReturn(returnTo);
-    setView("editor");
+    beginEdit(seed, returnTo);
   }
+  // Back: leaves the draft where it is. Only a save ends the session.
   function closeEditor(to) {
     transport.stop();
-    setEditorInitial(null);
     setView(to);
   }
   async function handleSaveBeat(newBeat) {
@@ -174,7 +207,11 @@ function App() {
     // save failed; the library surfaces the reason on the Beats screen.
     const saved = await library.saveBeat(newBeat);
     // Reflect the saved beat in the engine + main view (engine already stopped).
-    if (saved) selectBeat(saved, "custom");
+    if (saved) {
+      selectBeat(saved, "custom");
+      setEditor(null);
+      saveEditorSession(null);
+    }
     // Handed back so the editor knows whether it may close: it discards the
     // draft on unmount, so it must stay open if this didn't stick.
     return saved;
@@ -210,24 +247,43 @@ function App() {
     return <Splash onBegin={handleBegin} ready={transport.ready && !library.loading} />;
   }
 
+  // Asked when an edit would replace unsaved work.
+  const unsavedSheet = pendingOpen && (
+    <UnsavedSheet name={editor?.draft?.name?.trim()}
+      onKeep={() => { setPendingOpen(null); setView("editor"); }}
+      onDiscard={() => { const p = pendingOpen; setPendingOpen(null); beginEdit(p.seed, p.returnTo, true); }}
+      onDismiss={() => setPendingOpen(null)} />
+  );
+
   // Built once and handed to whichever screen is showing, so the bar is the
   // same element across a navigation and never shifts.
+  // The unsaved-changes sheet rides along with the nav, which every screen
+  // renders, so it can appear over whichever screen asked.
   const bottomNav = (
+    <>
+    {unsavedSheet}
     <BottomNav
       view={view}
       onHome={() => setView("home")}
       onBeats={() => setView("beats")}
-      onEditor={() => openNewBeat()}
+      onEditor={openEditorTab}
+      editorDirty={editorDirty}
       onLearn={() => setView("learn")}
       onSettings={() => setView("settings")}
     />
+    </>
   );
 
-  if (view === "editor") {
+  if (view === "editor" && editor) {
+    // The beat this draft edits was deleted meanwhile: it saves as a new one.
+    const seed = editor.seed?.id && !library.isCustomBeat(editor.seed.id) && !editor.seed.readOnly
+      ? { ...editor.seed, id: null } : editor.seed;
     return (
-      <BeatEditor engine={transport.engine} initialBeat={editorInitial}
+      <BeatEditor key={editor.key} engine={transport.engine} initialBeat={seed}
+        initialDraft={editor.draft} onDraftChange={onDraftChange} dirty={editorDirty}
+        onDiscard={() => setEditor((s) => ({ ...s, draft: null, key: s.key + 1 }))}
         onSave={handleSaveBeat} nav={bottomNav}
-        onBack={editorReturn ? () => closeEditor(editorReturn) : undefined}
+        onBack={editor.returnTo ? () => closeEditor(editor.returnTo) : undefined}
         onClose={() => closeEditor("home")} />
     );
   }

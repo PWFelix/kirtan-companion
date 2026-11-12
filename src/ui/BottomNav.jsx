@@ -41,7 +41,7 @@ import { t } from "../i18n/index.js";
  * one bar is ever on screen, so there is nothing to collide with.
  */
 let lastActive = -1;
-function BottomNav({ view, onHome, onBeats, onEditor, onLearn, onSettings }) {
+function BottomNav({ view, onHome, onBeats, onEditor, onLearn, onSettings, editorDirty = false }) {
   const tabs = [
     { v: "home", label: t("nav.home"), Icon: HomeIcon, onClick: onHome },
     { v: "beats", label: t("nav.beats"), Icon: BeatsIcon, onClick: onBeats },
@@ -97,10 +97,16 @@ function BottomNav({ view, onHome, onBeats, onEditor, onLearn, onSettings }) {
           data-lit={i === pos}
           style={{ ...st.navCell, color: i === pos ? "var(--on-action)" : "var(--ink-secondary)" }}
         >
-          <span className={i === active && arriving ? "kc-nav-icon kc-nav-pop" : "kc-nav-icon"}>
+          <span className={i === active && arriving ? "kc-nav-icon kc-nav-pop" : "kc-nav-icon"}
+            style={{ position: "relative" }}>
             <Icon />
+            {/* The editor holds unsaved changes. On the clay pill it turns
+                light so it still shows. */}
+            {v === "editor" && editorDirty && (
+              <span style={{ ...st.dot, background: i === pos ? "var(--on-action)" : "var(--clay)" }} />
+            )}
           </span>
-          <span style={st.navLabel}>{label}</span>
+          <span style={st.navLabel}>{label}{v === "editor" && editorDirty && <span style={st.srOnly}>{" · " + t("editor.unsavedTitle")}</span>}</span>
         </button>
       ))}
     </nav>
@@ -111,6 +117,8 @@ function BottomNav({ view, onHome, onBeats, onEditor, onLearn, onSettings }) {
 const GAP = 8;
 
 const st = {
+  dot: { position: "absolute", top: -2, right: -4, width: 8, height: 8, borderRadius: "50%" },
+  srOnly: { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" },
   // iOS-style pill wrapping the five buttons. No padding or gap of its own:
   // the cells carry it, so no part of the bar is unclickable. `relative` is
   // what the sliding pill positions against.
