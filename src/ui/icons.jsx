@@ -16,6 +16,16 @@
 // Padlock for the tempo lock — open when free, closed when locked. An icon
 // (not the words Lock/Locked) so the button's size never changes with state,
 // which would resize the flexible slider beside it.
+/** Hill climb: a staircase rising left to right — the tempo going up in steps. */
+export function StairsIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 20h5v-5h5v-5h5V5h3" />
+    </svg>
+  );
+}
+
 export function LockIcon({ locked }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"

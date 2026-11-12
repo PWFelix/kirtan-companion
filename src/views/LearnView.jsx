@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as sh from "../ui/styles.js";
 import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
 import { t } from "../i18n/index.js";
-import { BackIcon, ChevronRightIcon, PlayIcon, PauseIcon } from "../ui/icons.jsx";
+import { BackIcon, ChevronRightIcon, PlayIcon, PauseIcon, StairsIcon } from "../ui/icons.jsx";
+import { CLIMB_STEPS, CLIMB_INTERVALS, climbNext, climbStepOf, climbIntervalOf, climbClock } from "../data/hillClimb.js";
+import { tempoRange } from "../data/meter.js";
 import { TRAIL_STEPS, baseColumns, columnsForInstrument, hasPart, highwayFrame, lookaheadSteps } from "../data/highway.js";
 
 // Left-handed mirror. Only Learn reads it, so it lives here, not in a hook.
@@ -15,6 +17,16 @@ const loadInstrument = () => {
   try { return localStorage.getItem(INSTRUMENT_KEY) === "kartal" ? "kartal" : "mrdanga"; } catch { return "mrdanga"; }
 };
 import { cpqFor } from "../data/meter.js";
+// Hill climb: the last ACCEPTED choice is remembered; on/off is per session, so a
+// lesson never starts speeding up unasked.
+const CLIMB_KEY = "kirtan-learn-hill-climb";
+const loadClimb = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CLIMB_KEY) || "{}");
+    return { step: climbStepOf(raw.step), every: climbIntervalOf(raw.every) };
+  } catch { return { step: climbStepOf(), every: climbIntervalOf() }; }
+};
+const intervalLabel = (s) => (s < 60 ? t("learn.climbSec", { n: s }) : t("learn.climbMin", { n: s / 60 }));
 
 /**
  * LearnView — "falling strokes": the loaded beat as a highway.
@@ -31,7 +43,44 @@ import { cpqFor } from "../data/meter.js";
  */
 function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav }) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const { playing, ready, bpm, nudgeBpm, togglePlay, getPhase } = transport;
+  const { playing, ready, bpm, nudgeBpm, changeBpm, togglePlay, getPhase, brahmaloka } = transport;
+
+  // ── Hill climb ──
+  const [climb, setClimb] = useState(loadClimb);
+  const [climbOn, setClimbOn] = useState(false);
+  const [climbLeft, setClimbLeft] = useState(climb.every);
+  const [climbSheet, setClimbSheet] = useState(false);
+  const ceiling = tempoRange(brahmaloka).max;
+  const climbTop = bpm >= ceiling;
+  const live = useRef({});
+  const leftRef = useRef(climb.every);
+  useEffect(() => { live.current = { bpm, ceiling, changeBpm }; });
+  // The countdown runs on PLAYING time: pausing holds it, and Play carries on.
+  useEffect(() => {
+    if (!climbOn || !playing) return;
+    const id = setInterval(() => {
+      const { bpm: now, ceiling: top } = live.current;
+      if (now >= top) return;
+      // Counted in a ref, not a state updater: updaters must stay pure (strict
+      // mode runs them twice), and this one changes the tempo.
+      const left = leftRef.current - 1;
+      if (left > 0) leftRef.current = left;
+      else {
+        live.current.changeBpm(climbNext(now, climb.step, top));
+        leftRef.current = climb.every;
+      }
+      setClimbLeft(leftRef.current);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [climbOn, playing, climb]);
+  const acceptClimb = (next) => {
+    setClimb(next);
+    try { localStorage.setItem(CLIMB_KEY, JSON.stringify(next)); } catch { /* private mode: session only */ }
+    leftRef.current = next.every;
+    setClimbLeft(next.every);
+    setClimbOn(true);
+    setClimbSheet(false);
+  };
   const [leftHanded, setLeftHanded] = useState(loadLeft);
   const [instrument, setInstrument] = useState(loadInstrument);
   const columns = useMemo(() => columnsForInstrument(instrument, leftHanded), [instrument, leftHanded]);
@@ -95,12 +144,67 @@ function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav })
         <span style={st.bpm}>{bpm} BPM</span>
         <button onClick={() => nudgeBpm(5)} style={st.stepBtn} aria-label={t("common.faster")}>+</button>
         <span style={{ flex: 1 }} />
+        {/* Off: opens the choice (last one pre-selected). On: one tap turns it off. */}
+        <button onClick={() => (climbOn ? setClimbOn(false) : setClimbSheet(true))}
+          style={{ ...st.climbBtn, ...(climbOn ? st.climbOn : null) }}
+          aria-pressed={climbOn} aria-label={climbOn ? t("learn.climbOff") : t("learn.climb")}
+          title={climbOn ? t("learn.climbOff") : t("learn.climb")}>
+          <StairsIcon />
+        </button>
         <button onClick={() => togglePlay(beat)} disabled={!ready} style={st.play}>
           {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
           {playing ? t("common.pause") : t("common.play")}
         </button>
       </div>
+      {climbOn && (
+        <p style={st.climbStatus} aria-live="polite">
+          {climbTop ? t("learn.climbTop", { bpm })
+            : playing ? t("learn.climbStatus", { n: climb.step, every: intervalLabel(climb.every), left: climbClock(climbLeft) })
+            : t("learn.climbPaused", { n: climb.step, every: intervalLabel(climb.every) })}
+        </p>
+      )}
+      {climbSheet && <HillClimbSheet initial={climb} onCancel={() => setClimbSheet(false)} onAccept={acceptClimb} />}
       {nav}
+    </div>
+  );
+}
+
+/** The hill-climb choice: N BPM every X. Start turns it on; Cancel leaves it off. */
+function HillClimbSheet({ initial, onCancel, onAccept }) {
+  const [step, setStep] = useState(initial.step);
+  const [every, setEvery] = useState(initial.every);
+  const chip = (on) => ({ ...st.chip, ...(on ? st.chipOn : null) });
+  return (
+    <div style={sh.sheetBackdrop} onClick={onCancel}>
+      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("learn.climb")} onClick={(e) => e.stopPropagation()}>
+        <div style={sh.sheetHead}>
+          <h2 style={sh.sheetName}>{t("learn.climb")}</h2>
+          <button onClick={onCancel} aria-label={t("common.close")} style={sh.sheetClose}>×</button>
+        </div>
+        <p style={st.climbDesc}>{t("learn.climbDesc")}</p>
+        <div style={st.chipLabel}>{t("learn.climbStep")}</div>
+        <div style={st.chips} role="radiogroup" aria-label={t("learn.climbStep")}>
+          {CLIMB_STEPS.map((n) => (
+            <button key={n} role="radio" aria-checked={n === step} onClick={() => setStep(n)} style={chip(n === step)}>
+              {t("learn.climbBpm", { n })}
+            </button>
+          ))}
+        </div>
+        <div style={st.chipLabel}>{t("learn.climbEvery")}</div>
+        <div style={st.chips} role="radiogroup" aria-label={t("learn.climbEvery")}>
+          {CLIMB_INTERVALS.map((s) => (
+            <button key={s} role="radio" aria-checked={s === every} onClick={() => setEvery(s)} style={chip(s === every)}>
+              {intervalLabel(s)}
+            </button>
+          ))}
+        </div>
+        <div style={st.sheetActions}>
+          <button onClick={onCancel} style={st.cancel}>{t("common.cancel")}</button>
+          <button onClick={() => onAccept({ step, every })} style={{ ...st.play, flex: 1, width: "auto" }}>
+            <StairsIcon size={18} /> {t("learn.climbStart")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -263,8 +367,32 @@ const st = {
   controls: { flexShrink: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
   stepBtn: { ...sh.backBtn, fontSize: 22, fontFamily: "var(--font-body)" },
   bpm: { fontFamily: "var(--font-body)", fontWeight: 600, fontSize: 17, color: "var(--syahi)", minWidth: 80, textAlign: "center" },
+  climbBtn: {
+    ...sh.backBtn, color: "var(--syahi-soft)", display: "grid", placeItems: "center",
+  },
+  climbOn: { background: "var(--clay)", borderColor: "var(--clay)", color: "var(--on-clay)" },
+  climbStatus: {
+    margin: 0, textAlign: "center", fontFamily: "var(--font-body)", fontSize: 12,
+    fontWeight: 600, color: "var(--clay)",
+  },
+  climbDesc: { margin: "var(--space-2) 0 0", fontFamily: "var(--font-body)", fontSize: 13, color: "var(--syahi-soft)" },
+  chipLabel: {
+    marginTop: "var(--space-4)", marginBottom: "var(--space-2)", fontFamily: "var(--font-body)", fontSize: 11,
+    fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)",
+  },
+  chips: { display: "flex", flexWrap: "wrap", gap: 8 },
+  chip: {
+    minHeight: 36, padding: "0 14px", borderRadius: 999, border: "1px solid var(--rule)", background: "transparent",
+    color: "var(--syahi)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12, cursor: "pointer",
+  },
+  chipOn: { background: "var(--clay)", borderColor: "var(--clay)", color: "var(--on-clay)" },
+  sheetActions: { display: "flex", gap: 8, marginTop: "var(--space-5)" },
+  cancel: {
+    flex: 1, minHeight: 48, borderRadius: 14, border: "1px solid var(--rule)", background: "transparent",
+    color: "var(--syahi)", fontFamily: "var(--font-body)", fontWeight: 600, fontSize: 15, cursor: "pointer",
+  },
   play: {
-    width: 140, minHeight: 48, borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)",
+    width: 124, minHeight: 48, borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)",
     display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
     fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 16, cursor: "pointer",
   },
