@@ -8,7 +8,7 @@ import { TagPicker } from "./ui/TagPicker.jsx";
 import { MAX_NAME_LEN, clampName } from "./data/names.js";
 import { closedMarkBackground } from "./data/strokes.js";
 import { tempoRange, brahmalokaFor } from "./data/meter.js";
-import { useBrahmaHold } from "./hooks/useBrahmaHold.js";
+import BpmRange from "./ui/BpmRange.jsx";
 import BrahmalokaBurst from "./ui/BrahmalokaBurst.jsx";
 import { leverFor, reshape, resample, pagesFor, resolutionFactor } from "./data/resolution.js";
 import { MAX_STEPS } from "./data/shareCodec.js";
@@ -337,11 +337,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   }
 
   const range = tempoRange(brahmaloka);
-  const fillPct = ((bpm - range.min) / (range.max - range.min)) * 100;
-  const hold = useBrahmaHold({
-    bpm, brahmaloka,
-    onUnlock: () => { setBrahmaloka(true); setBurstKey((k) => k + 1); engine.rumble(); navigator.vibrate?.([90, 60, 180]); },
-  });
+  const unlockBrahmaloka = () => { setBrahmaloka(true); setBurstKey((k) => k + 1); engine.rumble(); navigator.vibrate?.([90, 60, 180]); };
   function changeBpm(v) {
     setBpm(v);
     setBrahmaloka((was) => brahmalokaFor(v, was));
@@ -515,12 +511,16 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
 
           <div style={st.tempoRow}>
             {/* Three digits' room, so the slider doesn't shift at 100 or 200. */}
-            <span style={{ ...st.bpmNum, minWidth: "3ch", textAlign: "right" }}>{bpm}</span><span style={st.bpmUnit}>{t("tempo.bpm")}</span>
-            <input className={"kc-range" + (brahmaloka ? " kc-brahma" : "") + (hold.charging ? " kc-charging" : "")}
-              type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
-              title={brahmaloka ? t("brahma.badge") : t("brahma.hint")}
-              onChange={hold.guard((e) => changeBpm(Number(e.target.value)))}
-              style={{ "--fill": fillPct + "%", flex: 1 }} aria-label={t("tempo.title")} />
+            <span style={{ ...st.bpmNum, minWidth: "3ch", textAlign: "right" }}>{bpm}</span>{/* One fixed slot: "BPM", or in Brahmaloka the ✦ way back out. */}
+            <span style={{ display: "inline-flex", width: 36, flexShrink: 0, justifyContent: "flex-start" }}>
+              {brahmaloka ? (
+                <button onClick={() => { setBrahmaloka(false); setBpm((b) => Math.min(b, 200)); }}
+                  aria-label={t("brahma.leave")} title={t("brahma.leave")} style={st.brahmaBadge}>✦</button>
+              ) : <span style={st.bpmUnit}>{t("tempo.bpm")}</span>}
+            </span>
+            <BpmRange bpm={bpm} brahmaloka={brahmaloka} min={range.min} max={range.max}
+              onChange={changeBpm} onUnlock={unlockBrahmaloka}
+              title={brahmaloka ? t("brahma.badge") : t("brahma.hint")} ariaLabel={t("tempo.title")} />
           </div>
         </div>
 
@@ -622,6 +622,11 @@ const st = {
   lengthRow: { flexShrink: 0, display: "flex", alignItems: "center", gap: 8 },
   groupBtn: { flexShrink: 0, width: 44, height: 46, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontSize: 24, fontWeight: 700, cursor: "pointer", display: "grid", placeItems: "center" },
   lengthLabel: { minWidth: 54, textAlign: "center", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, color: "var(--syahi-soft)" },
+  brahmaBadge: {
+    width: 32, height: 32, padding: 0, borderRadius: 999, cursor: "pointer",
+    border: "1px solid oklch(0.70 0.17 60)", background: "oklch(0.93 0.07 80)",
+    color: "oklch(0.45 0.14 45)", fontSize: 15, fontWeight: 700, lineHeight: 1,
+  },
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },

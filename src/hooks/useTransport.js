@@ -260,7 +260,7 @@ export function useTransport() {
     brahmaRef.current = on;
     setBrahmaloka(on);
   }
-  // Holding the slider at 200 (hooks/useBrahmaHold) or pressing + there lands here.
+  // Holding the slider at 200 (ui/BpmRange) or pressing + there lands here.
   function unlockBrahmaloka() {
     if (brahmaRef.current) return;
     setMode(true);

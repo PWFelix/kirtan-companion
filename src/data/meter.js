@@ -30,7 +30,8 @@ export const MIN_BPM = 40, MAX_BPM = 500;
 // tempos people actually chant at get real resolution under a thumb. Holding
 // it at NORMAL_MAX_BPM unlocks the high range by ZOOMING OUT: the slider keeps
 // its size and its left end (40) and its right end becomes MAX_BPM, so the thumb
-// slides left to where 200 now sits. Dragging below NORMAL_MAX_BPM zooms back in.
+// slides left to where 200 now sits. It STAYS zoomed out below 200 — the slider
+// never resizes under a finger; only the ✦ badge leaves.
 export const NORMAL_MAX_BPM = 200;
 
 /** The slider's { min, max } for the current mode. */
@@ -38,11 +39,11 @@ export const tempoRange = (brahmaloka) =>
   brahmaloka ? { min: MIN_BPM, max: MAX_BPM } : { min: MIN_BPM, max: NORMAL_MAX_BPM };
 
 /**
- * The mode a BPM puts you in, given the mode you were in: below 200 is always
- * the normal range; above 200 is only reachable from Brahmaloka (or by loading
- * a beat that fast); exactly 200 keeps whatever you had.
+ * The mode a BPM puts you in, given the mode you were in: once in Brahmaloka you
+ * stay (leaving is the ✦ badge's job, so the slider never resizes mid-drag);
+ * outside it, only a tempo above 200 — a loaded fast beat — puts you in.
  */
-export const brahmalokaFor = (bpm, was) => (bpm < NORMAL_MAX_BPM ? false : bpm > NORMAL_MAX_BPM ? true : was);
+export const brahmalokaFor = (bpm, was) => was || bpm > NORMAL_MAX_BPM;
 
 export const sumGroups = (groups) => groups.reduce((a, b) => a + b, 0);
 

@@ -4,7 +4,7 @@ import { EQ_BANDS, EQ_BAND_COUNT, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 import { TUNE_MIN_CENTS, TUNE_MAX_CENTS, END_BASE_FREQ, centsToRate, freqToNoteName } from "../data/tuning.js";
 import { MIN_BPM, MAX_BPM } from "../hooks/useTransport.js";
 import { tempoRange } from "../data/meter.js";
-import { useBrahmaHold } from "../hooks/useBrahmaHold.js";
+import BpmRange from "../ui/BpmRange.jsx";
 import BrahmalokaBurst from "../ui/BrahmalokaBurst.jsx";
 import BeatStrip from "../BeatStrip.jsx";
 import Wordmark from "../Wordmark.jsx";
@@ -122,8 +122,6 @@ function HomeView({
   // The slider spans 40–200, or 190–500 in Brahmaloka time (data/meter.js);
   // holding it at 200 unlocks the high range.
   const range = tempoRange(brahmaloka);
-  const hold = useBrahmaHold({ bpm, brahmaloka, onUnlock: unlockBrahmaloka });
-  const rangeClass = "kc-range" + (brahmaloka ? " kc-brahma" : "") + (hold.charging ? " kc-charging" : "");
   const { isCustomBeat } = library;
 
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -164,7 +162,6 @@ function HomeView({
     setPickerOpen(true);
   }
 
-  const fillPct = ((bpm - range.min) / (range.max - range.min)) * 100;
   const playIcon = playing ? <PauseIcon /> : <PlayIcon />;
   const editLabel = isCustomBeat(beat.id) ? t("home.editBeat") : t("home.customizeBeat");
 
@@ -397,11 +394,10 @@ function HomeView({
           <span style={st.landBadgeAnchor}>
             {brahmaloka && <span style={st.landBadge}>{brahmaBadge}</span>}
           </span>
-          <input className={rangeClass} type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
-            title={brahmaloka ? undefined : t("brahma.hint")}
-            onChange={hold.guard((e) => changeBpm(Number(e.target.value)))} disabled={tempoLocked}
-            style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-            aria-label={t("tempo.title")} />
+          <BpmRange bpm={bpm} brahmaloka={brahmaloka} min={range.min} max={range.max}
+            onChange={changeBpm} onUnlock={unlockBrahmaloka} disabled={tempoLocked}
+            title={brahmaloka ? undefined : t("brahma.hint")} ariaLabel={t("tempo.title")}
+            style={{ minWidth: 90, opacity: tempoLocked ? 0.5 : 1 }} />
           {lockButton}
           <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
           <button onClick={() => setMixerOpen(true)} style={st.landEditBtn} aria-label={t("mixer.title")}
@@ -479,11 +475,10 @@ function HomeView({
             {brahmaBadge}
           </div>
           <div style={st.tempoRow}>
-            <input className={rangeClass} type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
-            title={brahmaloka ? undefined : t("brahma.hint")}
-              onChange={hold.guard((e) => changeBpm(Number(e.target.value)))} disabled={tempoLocked}
-              style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-              aria-label={t("tempo.title")} />
+            <BpmRange bpm={bpm} brahmaloka={brahmaloka} min={range.min} max={range.max}
+              onChange={changeBpm} onUnlock={unlockBrahmaloka} disabled={tempoLocked}
+              title={brahmaloka ? undefined : t("brahma.hint")} ariaLabel={t("tempo.title")}
+              style={{ opacity: tempoLocked ? 0.5 : 1 }} />
             {lockButton}
             <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
           </div>
