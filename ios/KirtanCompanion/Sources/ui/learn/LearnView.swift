@@ -69,14 +69,23 @@ struct LearnView: View {
         // The countdown runs on PLAYING time: pausing holds it, and Play carries on.
         .task(id: ClimbKey(on: climbOn, playing: transport.playing, step: climbStep, every: climbEvery)) {
             guard climbOn, transport.playing else { return }
+            // Handed over a little early so it lands on the 1 nearest the deadline
+            // (HillClimb.leadSeconds); `handed` keeps it to once per step.
+            var handed = false
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
                 if HillClimb.atTop(transport.bpm, ceiling: ceiling) { continue }
                 climbLeft -= 1
+                let lead = HillClimb.leadSeconds(bpm: transport.bpm, beatsPerBar: beat?.beatsPerBar ?? 4)
+                if !handed && climbLeft <= lead {
+                    transport.changeBpmAtBar(HillClimb.next(transport.bpm, step: climbStep, ceiling: ceiling),
+                                             inSeconds: Double(max(0, climbLeft)))
+                    handed = true
+                }
                 if climbLeft <= 0 {
-                    transport.changeBpm(HillClimb.next(transport.bpm, step: climbStep, ceiling: ceiling))
                     climbLeft = climbEvery
+                    handed = false
                 }
             }
         }

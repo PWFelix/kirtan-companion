@@ -233,10 +233,30 @@ final class TransportViewModel {
 
     /// Authoritative tempo, mutated synchronously so rapid ± taps stack.
     func changeBpm(_ value: Int) {
+        barChange?.cancel()
         bpm = clampBpm(value)
         engine.setBpm(bpm)
         brahmaloka = brahmalokaFor(bpm: bpm, was: brahmaloka)
         SessionPrefs.saveBpm(bpm)
+    }
+
+    private var barChange: Task<Void, Never>?
+
+    /// Hill climb's step: the new tempo starts on the 1 nearest `inSeconds` from now
+    /// rather than mid-bar; the display follows when it is heard. Stopped, there's no
+    /// bar to wait for, so it's an ordinary change.
+    func changeBpmAtBar(_ value: Int, inSeconds: Double) {
+        let target = clampBpm(value)
+        guard let wait = engine.setBpmAtBar(target, inSeconds: inSeconds) else { return changeBpm(target) }
+        barChange?.cancel()
+        barChange = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            // Stopped before that bar: the engine dropped it, so must the display.
+            guard let self, !Task.isCancelled, self.playing else { return }
+            self.bpm = target
+            self.brahmaloka = brahmalokaFor(bpm: target, was: self.brahmaloka)
+            SessionPrefs.saveBpm(target)
+        }
     }
 
     /// Clamp to what the slider reaches now: 200, or 500 in Brahmaloka.

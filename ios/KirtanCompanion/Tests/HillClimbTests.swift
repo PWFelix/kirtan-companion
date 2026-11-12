@@ -36,4 +36,29 @@ final class HillClimbTests: XCTestCase {
         XCTAssertEqual(back.hillClimbSeconds, 30)
         XCTAssertEqual(EqPrefsCodec.decode("{}").hillClimbStep, HillClimb.defaultStep)
     }
+
+    func testHandsOverHalfABarPlusASecondEarly() {
+        XCTAssertEqual(HillClimb.leadSeconds(bpm: 60, beatsPerBar: 4), 3)
+        XCTAssertEqual(HillClimb.leadSeconds(bpm: 120, beatsPerBar: 4), 2)
+        XCTAssertEqual(HillClimb.leadSeconds(bpm: 40, beatsPerBar: 3.5), 4)
+    }
+
+    /// Snap to bar: which 1 a tempo change aimed at a moment lands on.
+    func testBarSnapPicksTheNearestDownbeatNeverAPlayedOne() {
+        let sr = 48_000
+        let clock = MusicalClock(sampleRate: sr)
+        clock.setMeter(steps: 8, beatsPerBar: 4)
+        clock.setBpm(60, atFrame: 0) // a 4 s bar, 768 ticks
+        clock.start(atFrame: 0)
+        func s(_ x: Double) -> Int64 { Int64(x * Double(sr)) }
+        let st = clock.snapshot()
+        XCTAssertEqual(st.barTickNear(s(5), now: s(1)), 768, accuracy: 1e-9)   // before
+        XCTAssertEqual(st.barTickNear(s(7), now: s(1)), 1536, accuracy: 1e-9)  // after
+        XCTAssertEqual(st.barTickNear(s(5), now: s(4.5)), 1536, accuracy: 1e-9) // 4 s already played
+        let at = st.frameAt(768)
+        XCTAssertEqual(at, s(4))
+        clock.setBpm(120, atFrame: at)
+        XCTAssertEqual(clock.tickAt(at), 768, accuracy: 1e-6)
+        XCTAssertEqual(clock.frameAt(1536), s(6))
+    }
 }

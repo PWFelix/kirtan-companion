@@ -158,7 +158,25 @@ final class KirtanEngine: BlockRenderer {
     }
 
     func setBpm(_ bpm: Int) {
+        // A direct change overrides one waiting for its bar.
+        startLock.lock(); pendingBarBpm = nil; startLock.unlock()
         clock.setBpm(Double(bpm), atFrame: graph.framesRenderedNow)
+    }
+
+    /// A tempo waiting for its bar line: (absolute tick of that 1, bpm). Under startLock.
+    private var pendingBarBpm: (tick: Double, bpm: Int)?
+
+    /// Change tempo ON THE 1 nearest `inSeconds` from now (Learn's hill climb), so a
+    /// speed-up starts a bar instead of landing mid-phrase. Applied on the audio thread
+    /// at that downbeat's exact frame. Returns the seconds until then (the UI shows the
+    /// new tempo as it is heard), or nil when stopped.
+    func setBpmAtBar(_ bpm: Int, inSeconds: Double) -> Double? {
+        let state = clock.snapshot()
+        guard state.isRunning else { return nil }
+        let now = graph.framesRenderedNow
+        let bar = state.barTickNear(now + Int64(inSeconds * Double(clock.sampleRate)), now: now)
+        startLock.lock(); pendingBarBpm = (bar, bpm); startLock.unlock()
+        return Double(max(0, state.frameAt(bar) - now)) / Double(clock.sampleRate)
     }
 
     /// How much human variation the drum plays with. Takes effect on the next stroke.
@@ -195,7 +213,7 @@ final class KirtanEngine: BlockRenderer {
     func stop() {
         guard isPlaying else { return }
         isPlaying = false
-        startLock.lock(); pendingStart = false; startLock.unlock()
+        startLock.lock(); pendingStart = false; pendingBarBpm = nil; startLock.unlock()
         clock.stop()
         // Voices are left to ring out rather than cut: stopping mid-decay is a
         // click, and a drum allowed to finish sounds like a drum that was stopped.
@@ -279,6 +297,22 @@ final class KirtanEngine: BlockRenderer {
         pendingPads.removeAll(keepingCapacity: true)
         padLock.unlock()
         for key in pads { soundPlayer.play(key, offsetInBlock: 0) }
+
+        // 1b. A tempo waiting for its bar line, if that 1 falls in this block:
+        //     re-anchor exactly there, so the downbeat keeps its place and every
+        //     step after it runs at the new tempo.
+        startLock.lock()
+        let barChange = pendingBarBpm
+        startLock.unlock()
+        if let barChange, clock.isRunning {
+            let at = clock.frameAt(barChange.tick)
+            if at < fromFrame + Int64(count) {
+                clock.setBpm(Double(barChange.bpm), atFrame: max(at, fromFrame))
+                startLock.lock()
+                if pendingBarBpm?.tick == barChange.tick { pendingBarBpm = nil }
+                startLock.unlock()
+            }
+        }
 
         // 2. Sequenced steps falling inside this block.
         if let beat = sequencer.currentBeat, clock.isRunning {

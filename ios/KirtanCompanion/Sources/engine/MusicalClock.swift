@@ -62,6 +62,17 @@ final class MusicalClock {
         func tickAt(_ frame: Int64) -> Double { anchorTick + Double(frame - anchorFrame) / framesPerTick }
         func frameAt(_ tick: Double) -> Int64 { anchorFrame + Int64((tick - anchorTick) * framesPerTick) }
 
+        /// The bar line (absolute tick) nearest `target` — the 1 a change aimed at that
+        /// moment should land on — but never one already behind `now`: a downbeat that
+        /// has sounded can't be changed, so the next one stands in. At the current tempo.
+        func barTickNear(_ target: Int64, now: Int64) -> Double {
+            let tpb = Double(ticksPerBar)
+            var bar = (tickAt(target) / tpb).rounded() * tpb
+            let current = tickAt(now)
+            while bar < current { bar += tpb }
+            return bar
+        }
+
         func phaseAt(_ frame: Int64) -> Double {
             guard isRunning else { return 0 }
             let tpb = Double(ticksPerBar)

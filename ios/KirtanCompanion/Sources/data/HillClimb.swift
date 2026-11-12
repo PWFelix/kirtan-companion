@@ -20,6 +20,15 @@ enum HillClimb {
     static func next(_ bpm: Int, step: Int, ceiling: Int) -> Int { max(bpm, min(bpm + step, ceiling)) }
 
     /// True when another step can't go any higher.
+    /// SNAP TO BAR. A step doesn't land mid-phrase: the new tempo starts on the 1
+    /// nearest the moment the countdown runs out — up to half a bar before or after.
+    /// So it is handed to the engine this many whole seconds BEFORE the deadline (half
+    /// a bar rounded up, plus one for the countdown's own granularity), early enough
+    /// that the nearest 1 is still ahead. The engine picks that 1.
+    static func leadSeconds(bpm: Int, beatsPerBar: Double) -> Int {
+        Int((60.0 / Double(max(1, bpm)) * beatsPerBar / 2).rounded(.up)) + 1
+    }
+
     static func atTop(_ bpm: Int, ceiling: Int) -> Bool { bpm >= ceiling }
 
     /// A remembered step snapped to an offered choice (prefs may hold anything).
