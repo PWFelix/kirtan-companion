@@ -999,6 +999,16 @@
         }
       }
     },
+    "Cell %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Celda %lld"
+          }
+        }
+      }
+    },
     "Cells per beat" : {
       "localizations" : {
         "es" : {
@@ -4041,6 +4051,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Toca"
+          }
+        }
+      }
+    },
+    "tap any cell to change row" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "toca cualquier celda para cambiar de fila"
           }
         }
       }

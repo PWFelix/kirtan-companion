@@ -5,8 +5,9 @@ import SwiftUI
 ///
 /// Ported in spirit from `src/BeatEditor.jsx`. That editor is the most stateful view
 /// in the app; this keeps the same *contract* — a beat in, `onSave(beat)` out, takes
-/// the transport over for preview while open — but with a deliberately simpler paint
-/// model (pick a pad, paint cells) rather than the web's zoom/selection apparatus.
+/// the transport over for preview while open — and the same CELL-DRIVEN entry: tap any
+/// cell to select it, the pads become that row's strokes, and each pad writes the cell
+/// and steps along the row (see data/EditorPads.swift).
 /// Unmounting the view discards the draft for free, which is why the draft lives in
 /// `@State` here and nowhere else.
 struct BeatEditorView: View {
@@ -58,7 +59,6 @@ struct BeatEditorView: View {
     @State private var bayan: [Stroke?] = Array(repeating: nil, count: 8)
     @State private var kartal: [Stroke?] = Array(repeating: nil, count: 8)
     @State private var cursor: (lane: Int, step: Int) = (0, 0)
-    @State private var activePad: Stroke? = .open
     @State private var previewing = false
     /// Grid cell size, rescaled by a pinch. Bounded so it stays tappable on a phone.
     @State private var cellSize: CGFloat = 32
@@ -302,9 +302,10 @@ struct BeatEditorView: View {
         lastResample = report == ResampleReport(moved: 0, dropped: 0) ? nil : (before.shape, before.lanes, report)
     }
 
-    // MARK: the paintable grid
+    // MARK: the grid
 
     private var grid: some View {
+        ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(spacing: 8) {
@@ -328,10 +329,12 @@ struct BeatEditorView: View {
                                 stroke: patternValue(laneIndex, s),
                                 lane: lane,
                                 isCursor: cursor.lane == laneIndex && cursor.step == s,
+                                sameMoment: cursor.lane != laneIndex && cursor.step == s,
                                 size: max(16, cellSize - 2),
                             ) {
-                                applyPad(lane: laneIndex, step: s)
+                                setCursor(lane: laneIndex, step: s)
                             }
+                            .id(laneIndex * 1000 + s)
                         }
                     }
                     .frame(height: cellSize)
@@ -340,6 +343,11 @@ struct BeatEditorView: View {
                 }
             }
             .padding(4)
+        }
+        // Keep the cell being typed into on screen as entry walks along the row.
+        .onChange(of: cursor.step) { _, step in
+            withAnimation { proxy.scrollTo(cursor.lane * 1000 + step) }
+        }
         }
         .simultaneousGesture(magnify)
     }
@@ -366,10 +374,16 @@ struct BeatEditorView: View {
         }
     }
 
-    private func applyPad(lane: Int, step: Int) {
-        setCursor(lane: lane, step: step)
-        setPatternValue(lane: lane, step: step, value: activePad)
+    /// Write the pad into the selected cell, sound it, and step along the same row.
+    private func applyPad(_ pad: EditorPad) {
+        setPatternValue(lane: cursor.lane, step: cursor.step, value: pad.stroke)
+        if let stroke = pad.stroke, !previewing {
+            transport.engineHandle.playStroke(pad.lane, open: stroke == .open)
+        }
+        cursor.step = EditorPads.nextStep(after: cursor.step, steps: steps)
     }
+
+    private var cursorLane: LaneId { LaneId.ordered[cursor.lane] }
 
     private func setPatternValue(lane: Int, step: Int, value: Stroke?) {
         switch LaneId.ordered[lane] {
@@ -383,11 +397,23 @@ struct BeatEditorView: View {
         cursor = (lane: min(max(0, lane), LaneId.ordered.count - 1), step: min(max(0, step), steps - 1))
     }
 
+    /// The selected cell's row's palette, with a heading saying which cell it writes.
     private var pads: some View {
+        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 4) {
+            Text(cursorLane.label.uppercased())
+                .font(.caption.weight(.heavy))
+                .foregroundStyle(Palette.lane(cursorLane))
+            Text("· " + String(localized: "Cell \(cursor.step + 1)", bundle: .strings)
+                 + " · " + String(localized: "tap any cell to change row", bundle: .strings))
+                .font(.caption)
+                .foregroundStyle(Palette.syahiSoft)
+                .lineLimit(1).minimumScaleFactor(0.7)
+        }
         HStack(spacing: 10) {
-            padButton(.open, String(localized: "Open", bundle: .strings), symbol: "circle.fill")
-            padButton(.closed, String(localized: "Closed", bundle: .strings), symbol: "xmark")
-            padButton(nil, String(localized: "Rest", bundle: .strings), symbol: "circle.dotted")
+            ForEach(EditorPads.forLane(cursorLane), id: \.label) { pad in
+                padButton(pad)
+            }
             Spacer()
             Button {
                 dayan = Array(repeating: nil, count: steps)
@@ -403,28 +429,25 @@ struct BeatEditorView: View {
                     .padding(.vertical, 8)
             }
         }
+        }
     }
 
-    private func padButton(_ stroke: Stroke?, _ title: String, symbol: String) -> some View {
-        let selected = activePad == stroke
-        return Button {
-            activePad = stroke
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .foregroundStyle(stroke.map { Palette.stroke($0, laneId: .dayan) } ?? Palette.faint)
-                Text(title).font(.footnote.weight(selected ? .semibold : .regular))
+    private func padButton(_ pad: EditorPad) -> some View {
+        Button { applyPad(pad) } label: {
+            VStack(spacing: 4) {
+                Text(pad.isRest ? String(localized: "Rest", bundle: .strings) : pad.label)
+                    .font(.subheadline.weight(.bold))
                     .lineLimit(1).minimumScaleFactor(0.7)
+                Image(systemName: pad.stroke == .open ? "circle.fill" : pad.stroke == .closed ? "xmark" : "circle.dotted")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(pad.isRest ? Palette.faint : Palette.lane(pad.lane))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(selected ? Palette.clay.opacity(0.2) : Palette.headWorn)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(selected ? Palette.clay : Palette.rule, lineWidth: selected ? 2 : 1)
-            )
-            .foregroundStyle(selected ? Palette.clayDeep : Palette.syahi)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(pad.isRest ? Palette.headSunken : Palette.headWorn, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.rule, lineWidth: 1))
+            .foregroundStyle(Palette.syahi)
         }
+        .buttonStyle(.plain)
     }
 
     private var saveRow: some View {
@@ -591,13 +614,15 @@ private struct EditorCell: View {
     let stroke: Stroke?
     let lane: LaneId
     let isCursor: Bool
+    /// The cursor's column on another row: where the other hands fall at that moment.
+    var sameMoment = false
     var size: CGFloat = 30
     var onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
             RoundedRectangle(cornerRadius: size * 0.2)
-                .fill(stroke == nil ? Palette.headWorn : Palette.lane(lane).opacity(0.18))
+                .fill(stroke == nil ? (sameMoment ? Palette.headSunken : Palette.headWorn) : Palette.lane(lane).opacity(0.18))
                 .frame(width: size, height: size)
                 .overlay {
                     if let stroke {
@@ -606,8 +631,8 @@ private struct EditorCell: View {
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: size * 0.2)
-                        .strokeBorder(isCursor ? Palette.syahi : Palette.rule,
-                                      lineWidth: isCursor ? 2 : 1)
+                        .strokeBorder(isCursor ? Palette.clay : Palette.rule,
+                                      lineWidth: isCursor ? 2.5 : 1)
                 )
         }
         .buttonStyle(.plain)
