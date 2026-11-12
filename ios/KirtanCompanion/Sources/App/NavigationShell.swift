@@ -35,6 +35,27 @@ struct NavigationShell: View {
     /// The editor opens full-screen over the shell and returns here on save/cancel. Nil
     /// when closed; otherwise what it is editing (new, yours, a fork, or for everyone).
     @State private var editorMode: BeatEditorView.EditorMode?
+    /// The ONE draft, kept across closing the editor and (while dirty) across launches.
+    /// `editorMode` above is only whether the editor is showing, and on what.
+    @State private var editorSession: EditorSession? = EditorSessionStore.load()
+    /// An edit asked for while the draft has unsaved changes: Keep or Discard.
+    @State private var pendingEdit: BeatEditorView.EditorMode?
+
+    /// Open the editor on `mode`, unless that would replace unsaved work.
+    private func openEditor(_ mode: BeatEditorView.EditorMode, force: Bool = false) {
+        if !force, let current = editorSession, current.dirty {
+            // The same edit again: resume it.
+            if current.mode == mode { editorMode = current.mode } else { pendingEdit = mode }
+            return
+        }
+        editorSession = EditorSession(mode: mode)
+        editorMode = mode
+    }
+
+    /// The + button: unsaved work comes back; otherwise a blank draft.
+    private func openEditorButton() {
+        if let current = editorSession, current.dirty { editorMode = current.mode } else { openEditor(.new) }
+    }
 
     /// DEBUG: `-kirtanEditor` opens a new beat in the editor a moment after launch, for
     /// screenshots (presenting the cover during the first layout pass draws it half-built).
@@ -42,7 +63,7 @@ struct NavigationShell: View {
         #if DEBUG
         guard ProcessInfo.processInfo.arguments.contains("-kirtanEditor") else { return }
         try? await Task.sleep(for: .seconds(1))
-        editorMode = .new
+        openEditor(.new)
         #endif
     }
     /// The sync screen, opened from the Bluetooth banner over whatever tab is up.
@@ -75,21 +96,28 @@ struct NavigationShell: View {
 
             BottomBar(
                 destination: $destination,
-                onEditor: { editorMode = .new },
+                onEditor: openEditorButton,
+                editorDirty: editorSession?.dirty == true,
             )
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
 
-            if let editorMode {
+            if editorMode != nil, let session = editorSession {
                 Color.clear
                     .onTapGesture { self.editorMode = nil }
                     .ignoresSafeArea()
                 BeatEditorView(
                     container: container,
-                    mode: editorMode,
+                    session: session,
                     onDone: { self.editorMode = nil },
+                    onSaved: {
+                        editorSession = nil
+                        EditorSessionStore.save(nil)
+                        self.editorMode = nil
+                    },
+                    onDiscard: { editorSession = session.fresh() },
                 )
-                .id(editorMode.title + (editorMode.seed?.id ?? ""))
+                .id(ObjectIdentifier(session))
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -117,6 +145,26 @@ struct NavigationShell: View {
         .environment(\.locale, AppLanguage.choice.map(Locale.init(identifier:)) ?? .current)
         .animation(.easeInOut(duration: 0.22), value: editorMode != nil)
         .animation(.easeInOut(duration: 0.2), value: auth.notice)
+        // Kept on disk while dirty, cleared when clean.
+        .onChange(of: editorSession?.draft) { _, _ in EditorSessionStore.save(editorSession) }
+        .confirmationDialog(
+            String(localized: "Unsaved changes", bundle: .strings),
+            isPresented: Binding(get: { pendingEdit != nil }, set: { if !$0 { pendingEdit = nil } }),
+            titleVisibility: .visible,
+        ) {
+            Button(String(localized: "Keep editing", bundle: .strings)) {
+                pendingEdit = nil
+                editorMode = editorSession?.mode
+            }
+            Button(String(localized: "Discard and continue", bundle: .strings), role: .destructive) {
+                if let next = pendingEdit { openEditor(next, force: true) }
+                pendingEdit = nil
+            }
+        } message: {
+            let name = editorSession?.draft.name.trimmingCharacters(in: .whitespaces) ?? ""
+            Text(String(format: String(localized: "You have unsaved changes to %@.", bundle: .strings),
+                        name.isEmpty ? String(localized: "a new beat", bundle: .strings) : name))
+        }
         .sheet(isPresented: $syncOpen) { SyncView(transport: container.transport) }
         // Inbound links and the first-sign-in offer can arrive on any tab.
         .sheet(isPresented: Binding(get: { auth.pendingImport != nil }, set: { if !$0 { auth.pendingImport = nil } })) {
@@ -142,7 +190,7 @@ struct NavigationShell: View {
         case .home:
             HomeView(container: container)
         case .beats:
-            BeatsView(container: container, onEdit: { editorMode = $0 })
+            BeatsView(container: container, onEdit: { openEditor($0) })
         case .learn:
             LearnView(container: container)
         case .settings:
@@ -156,6 +204,8 @@ struct NavigationShell: View {
 struct BottomBar: View {
     @Binding var destination: NavigationShell.Destination
     var onEditor: () -> Void
+    /// The editor holds unsaved changes: a dot on its button, visible from anywhere.
+    var editorDirty = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -168,6 +218,16 @@ struct BottomBar: View {
                     .frame(width: 52, height: 52)
                     .background(Palette.clay)
                     .clipShape(Circle())
+                    .overlay(alignment: .topTrailing) {
+                        if editorDirty {
+                            Circle()
+                                .fill(Palette.syahi)
+                                .overlay(Circle().strokeBorder(Palette.headWorn, lineWidth: 2))
+                                .frame(width: 13, height: 13)
+                                .offset(x: 1, y: -1)
+                                .accessibilityLabel(String(localized: "Unsaved changes", bundle: .strings))
+                        }
+                    }
                     .offset(y: -10)
             }
             item(.learn)

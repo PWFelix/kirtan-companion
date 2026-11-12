@@ -8,42 +8,22 @@ import SwiftUI
 /// the transport over for preview while open — and the same CELL-DRIVEN entry: tap any
 /// cell to select it, the pads become that row's strokes, and each pad writes the cell
 /// and steps along the row (see data/EditorPads.swift).
-/// Unmounting the view discards the draft for free, which is why the draft lives in
-/// `@State` here and nowhere else.
+/// The draft itself is held above the view, in an `EditorSession`, so closing the
+/// editor no longer throws it away: the view starts from the session and writes every
+/// change back. Only a save (`onSaved`) or Revert (`onDiscard`) ends it.
 struct BeatEditorView: View {
     let container: AppContainer
+    let session: EditorSession
     /// What the editor is doing, which decides both the seed and where Save writes.
-    var mode: EditorMode = .new
+    var mode: EditorMode { session.mode }
+    /// Close, keeping the draft.
     var onDone: () -> Void
+    /// The draft is saved: the session is done with.
+    var onSaved: () -> Void
+    /// Back to the session's starting point.
+    var onDiscard: () -> Void
 
-    /// The editor's four jobs. A built-in is never edited in place by a player — it FORKS,
-    /// because it is not theirs; only a maintainer may write it back, for everyone.
-    enum EditorMode: Equatable {
-        /// A blank draft, saved as a new beat.
-        case new
-        /// One of your beats, saved over itself (same id, so playlists keep it).
-        case edit(Beat)
-        /// A built-in, saved as a new beat of your own.
-        case fork(Beat)
-        /// A built-in, written back to `shipped_beats` for every install (maintainers).
-        case everyone(Beat)
-
-        var seed: Beat? {
-            switch self {
-            case .new: return nil
-            case .edit(let b), .fork(let b), .everyone(let b): return b
-            }
-        }
-
-        var title: String {
-            switch self {
-            case .new: return String(localized: "New beat", bundle: .strings)
-            case .edit: return String(localized: "Edit beat", bundle: .strings)
-            case .fork: return String(localized: "Edit a copy", bundle: .strings)
-            case .everyone: return String(localized: "Edit for everyone", bundle: .strings)
-            }
-        }
-    }
+    typealias EditorMode = BeatEditMode
 
     private var transport: TransportViewModel { container.transport }
 
@@ -73,6 +53,7 @@ struct BeatEditorView: View {
     /// The author's tags, published with the beat.
     @State private var tags: [String] = []
     @State private var pickingTags = false
+    @State private var confirmingDiscard = false
 
     /// Whole cells in the bar: the beats × the cells in each.
     private var steps: Int { shape.steps }
@@ -99,6 +80,23 @@ struct BeatEditorView: View {
         // Opaque: the editor floats over the shell, whose title otherwise shows through.
         .background(Palette.head.ignoresSafeArea())
         .onAppear(perform: seed)
+        .onChange(of: snapshot) { _, now in if seeded { session.draft = now } }
+        .confirmationDialog(
+            discardLabel,
+            isPresented: $confirmingDiscard,
+            titleVisibility: .visible,
+        ) {
+            Button(discardLabel, role: .destructive) {
+                if previewing { stopPreview() }
+                onDiscard()
+            }
+        } message: {
+            if let seed = mode.seed {
+                Text(String(format: String(localized: "Throw away your changes and go back to the saved %@?", bundle: .strings), seed.name))
+            } else {
+                Text(String(localized: "Clear this unsaved beat and start again from a blank grid?", bundle: .strings))
+            }
+        }
         .alert(String(localized: "Not saved", bundle: .strings), isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
             Button(String(localized: "OK", bundle: .strings), role: .cancel) { saveError = nil }
         } message: {
@@ -106,30 +104,26 @@ struct BeatEditorView: View {
         }
     }
 
-    /// Load the beat being edited into the draft, once.
+    /// Load the session's draft (seeded from the beat, or as it was left), once.
     private func seed() {
-        guard !seeded, let beat = mode.seed else { return }
+        guard !seeded else { return }
         seeded = true
-        name = beat.name
-        tags = beat.tags
-        bpm = beat.bpm
-        brahmaloka = beat.bpm > NORMAL_MAX_BPM
-        let n = beat.steps
-        func lane(_ id: LaneId) -> [Stroke?] {
-            let cells = beat.pattern(id) ?? []
-            return Array(cells.prefix(n)) + Array(repeating: nil, count: max(0, n - cells.count))
-        }
-        dayan = lane(.dayan)
-        bayan = lane(.bayan)
-        kartal = lane(.kartal)
-        // The beat's own grouping, verbatim: a beat like matan (16 groups of 3) must not be
-        // re-metered by an edit that never touched the meter.
-        let groups = groupsFor(beat)
-        if groups.reduce(0, +) == n {
-            shape = EditorShape.seeded(groups: groups, cpq: cpqFor(beat))
-        } else {
-            shape = EditorShape.seeded(groups: [n], cpq: cpqFor(beat))
-        }
+        let d = session.draft
+        name = d.name
+        tags = d.tags
+        bpm = d.bpm
+        brahmaloka = d.bpm > NORMAL_MAX_BPM
+        shape = d.shape
+        dayan = d.dayan
+        bayan = d.bayan
+        kartal = d.kartal
+        cursor = (min(d.cursorLane, 2), min(d.cursorStep, max(0, d.shape.steps - 1)))
+    }
+
+    /// The draft as the session keeps it.
+    private var snapshot: EditorSnapshot {
+        EditorSnapshot(name: name, bpm: bpm, shape: shape, dayan: dayan, bayan: bayan, kartal: kartal,
+                       tags: tags, cursorLane: cursor.lane, cursorStep: cursor.step)
     }
 
     // MARK: header
@@ -140,6 +134,14 @@ struct BeatEditorView: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Palette.syahi)
             Spacer()
+            // Only when there is something to lose; the editor button's dot says the
+            // same from anywhere else in the app.
+            if session.dirty {
+                Button(discardLabel) { confirmingDiscard = true }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Palette.clay)
+                    .padding(.trailing, 8)
+            }
             Button {
                 if previewing { stopPreview() }
                 onDone()
@@ -575,6 +577,10 @@ struct BeatEditorView: View {
         previewing = false
     }
 
+    private var discardLabel: String {
+        mode.seed == nil ? String(localized: "Start over", bundle: .strings) : String(localized: "Revert", bundle: .strings)
+    }
+
     private var isFork: Bool { if case .fork = mode { return true } else { return false } }
 
     private func save(asNew: Bool = false) {
@@ -602,7 +608,7 @@ struct BeatEditorView: View {
                 }
                 if previewing { transport.stopPreview() }
                 container.transport.loadBeat(beat)
-                onDone()
+                onSaved()
                 return
             }
             let saved = await container.library.saveBeat(beat)
@@ -612,7 +618,7 @@ struct BeatEditorView: View {
                 return
             }
             container.transport.loadBeat(saved)
-            onDone()
+            onSaved()
         }
     }
 
@@ -678,7 +684,7 @@ private struct EditorCell: View {
 
 /// A meter the picker offers. Each is seeded at its plainest resolution; the
 /// resolution lever refines it afterwards.
-private struct EditorMeter: Identifiable, Hashable {
+struct EditorMeter: Identifiable, Hashable {
     let label: String
     let shape: EditorShape
     var id: String { label }

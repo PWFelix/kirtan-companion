@@ -1099,6 +1099,16 @@
         }
       }
     },
+    "Clear this unsaved beat and start again from a blank grid?" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Borrar este ritmo sin guardar y empezar de nuevo con la cuadrícula vacía?"
+          }
+        }
+      }
+    },
     "Climbing +%lld BPM every %@ · next in %@" : {
       "localizations" : {
         "es" : {
@@ -1315,6 +1325,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "¿Eliminar la lista «%@»?"
+          }
+        }
+      }
+    },
+    "Discard and continue" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descartar y continuar"
           }
         }
       }
@@ -1735,6 +1755,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kartals"
+          }
+        }
+      }
+    },
+    "Keep editing" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seguir editando"
           }
         }
       }
@@ -2711,6 +2741,16 @@
         }
       }
     },
+    "Revert" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revertir"
+          }
+        }
+      }
+    },
     "Right-handed · dayan on the right" : {
       "localizations" : {
         "es" : {
@@ -3067,6 +3107,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Empezar a subir"
+          }
+        }
+      }
+    },
+    "Start over" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empezar de nuevo"
           }
         }
       }
@@ -3713,6 +3763,16 @@
         }
       }
     },
+    "Throw away your changes and go back to the saved %@?" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Descartar tus cambios y volver a %@ tal como está guardado?"
+          }
+        }
+      }
+    },
     "Tight" : {
       "localizations" : {
         "es" : {
@@ -3769,6 +3829,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retirar"
+          }
+        }
+      }
+    },
+    "Unsaved changes" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambios sin guardar"
           }
         }
       }
@@ -3909,6 +3979,16 @@
         }
       }
     },
+    "You have unsaved changes to %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tienes cambios sin guardar en %@."
+          }
+        }
+      }
+    },
     "You're signed out, so that couldn't be saved. Sign in and try again." : {
       "localizations" : {
         "es" : {
@@ -3955,6 +4035,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "una producción de World Sankirtan Party"
+          }
+        }
+      }
+    },
+    "a new beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "un ritmo nuevo"
           }
         }
       }
