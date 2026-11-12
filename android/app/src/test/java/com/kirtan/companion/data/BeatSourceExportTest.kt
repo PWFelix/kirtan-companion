@@ -235,7 +235,7 @@ class BeatSourceExportTest {
         // The realistic path: author in the editor, export, paste over a built-in.
         var draft = com.kirtan.companion.ui.editor.EditorDraft.from(null)
         val ta = com.kirtan.companion.ui.editor.padSetFor(
-            com.kirtan.companion.ui.editor.EditInstrument.MRDANGA
+            com.kirtan.companion.data.model.LaneId.DAYAN
         ).first { it.key == "ta" }
         repeat(4) { draft = draft.tapPad(ta) }
 

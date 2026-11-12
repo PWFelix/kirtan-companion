@@ -86,8 +86,9 @@ import com.kirtan.companion.Strings
  *  1. OVERVIEW — a mini strip of the WHOLE beat with a frame showing which page
  *     the zoom is on; drag it to scrub the cursor. Doubles as the live visualiser
  *     while previewing.
- *  2. ZOOM — one page of at most eight cells, magnified, lanes stacked. The cursor
- *     is a COLUMN; tapping a cell moves it AND picks the instrument the pads
+ *  2. ZOOM — one page of at most eight cells, magnified, lanes stacked. Editing
+ *     is CELL-DRIVEN: the cursor is one cell (a row and a step); tapping any cell
+ *     selects it and swaps the pads to that row's strokes.
  *     write (a drum row: the mrdanga; the kartal row: the karatalas). The other
  *     instrument's rows dim, and the pads carry a heading saying how to switch.
  *  3. PADS — one pad per enterable stroke of that instrument. Tapping writes the
@@ -489,7 +490,7 @@ private fun OverviewZone(
     }
 }
 
-/** Zone 2: one magnified page; the cursor is a column. */
+/** Zone 2: one magnified page; the cursor is a cell. */
 @Composable
 private fun ZoomZone(
     draft: EditorDraft,
@@ -551,19 +552,18 @@ private fun ZoomZone(
         }
 
         for (lane in LaneId.ORDERED) {
-            val active = draft.instrument == EditInstrument.of(lane)
+            val onRow = draft.cursorLane == lane
             val laneColor = lane.colorToken.color
             val cells = draft.pattern(lane)
 
             Column(
-                modifier = Modifier.alpha(if (active) 1f else 0.4f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     text = lane.label.uppercase(),
                     color = laneColor,
                     fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = if (onRow) FontWeight.ExtraBold else FontWeight.Normal,
                     letterSpacing = 1.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(dimens.radiusIconButton))
@@ -578,7 +578,10 @@ private fun ZoomZone(
                 Row(modifier = Modifier.fillMaxWidth()) {
                     for (index in window) {
                         val value = cells.getOrElse(index) { null }
-                        val isCursor = index == draft.cursor
+                        val isCursor = onRow && index == draft.cursor
+                        // The cursor's column, faintly, on the other rows: where the
+                        // other hands fall at the same moment.
+                        val sameMoment = !onRow && index == draft.cursor
                         val lit = previewing && index == step
                         Box(
                             modifier = Modifier
@@ -587,8 +590,11 @@ private fun ZoomZone(
                                 .padding(1.dp)
                                 .clip(RoundedCornerShape(dimens.radiusStripCell))
                                 .background(
-                                    if (lit) PaletteToken.HEAD_SUNKEN.color
-                                    else PaletteToken.HEAD.color
+                                    when {
+                                        lit -> PaletteToken.HEAD_SUNKEN.color
+                                        sameMoment -> PaletteToken.HEAD_WORN.color
+                                        else -> PaletteToken.HEAD.color
+                                    }
                                 )
                                 .border(
                                     width = if (isCursor) 2.dp else 1.dp,
@@ -631,26 +637,26 @@ internal fun StrokeDot(value: Stroke?, color: Color, size: androidx.compose.ui.u
     }
 }
 
-/** Zone 3: one pad per enterable stroke for the current edit mode. */
+/** Zone 3: the selected cell's row's palette — its open and closed strokes, and Rest. */
 @Composable
 private fun PadsZone(draft: EditorDraft, onPad: (PadSpec) -> Unit) {
     val dimens = KirtanTheme.dimens
-    val pads = padSetFor(draft.instrument)
-    val kartal = draft.instrument == EditInstrument.KARTAL
+    val pads = padSetFor(draft.cursorLane)
 
     Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
-        // Which instrument the pads write, and how to change it: tapping a row
-        // switches, which would otherwise be invisible.
+        // Which cell the pads write, and how to change it: tapping another cell
+        // swaps the palette, which would otherwise be invisible.
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                text = if (kartal) "KARTAL" else "MRDANGA",
-                color = PaletteToken.SYAHI.color,
+                text = draft.cursorLane.label.uppercase(),
+                color = draft.cursorLane.colorToken.color,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.sp,
             )
             Text(
-                text = "  · " + stringResource(if (kartal) R.string.editor_switch_to_drum else R.string.editor_switch_to_kartal),
+                text = "  · " + stringResource(R.string.editor_cell_n, draft.cursor + 1) +
+                    "  · " + stringResource(R.string.editor_tap_any_cell),
                 color = PaletteToken.SYAHI_SOFT.color,
                 fontSize = 12.sp,
             )
@@ -663,7 +669,6 @@ private fun PadsZone(draft: EditorDraft, onPad: (PadSpec) -> Unit) {
                 for (pad in row) {
                     PadButton(
                         pad = pad,
-                        instrument = draft.instrument,
                         onClick = { onPad(pad) },
                         // weight at the CALL site: it is a RowScope extension.
                         modifier = Modifier.weight(1f),
@@ -679,13 +684,10 @@ private fun PadsZone(draft: EditorDraft, onPad: (PadSpec) -> Unit) {
 @Composable
 private fun PadButton(
     pad: PadSpec,
-    instrument: EditInstrument,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val dimens = KirtanTheme.dimens
-    val both = instrument == EditInstrument.MRDANGA &&
-        pad.write.containsKey(LaneId.DAYAN) && pad.write.containsKey(LaneId.BAYAN)
 
     Column(
         modifier = modifier
@@ -716,22 +718,8 @@ private fun PadButton(
             overflow = TextOverflow.Ellipsis,
         )
         if (!pad.rest) {
-            if (both) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    StrokeDot(pad.write[LaneId.DAYAN], PaletteToken.LANE_DAYAN.color, 9.dp)
-                    StrokeDot(pad.write[LaneId.BAYAN], PaletteToken.LANE_BAYAN.color, 9.dp)
-                }
-            } else {
-                val lane = pad.write.keys.first()
-                StrokeDot(
-                    value = pad.write[lane],
-                    color = lane.colorToken.color,
-                    size = 11.dp,
-                )
-            }
+            val lane = pad.write.keys.first()
+            StrokeDot(value = pad.write[lane], color = lane.colorToken.color, size = 11.dp)
         }
     }
 }

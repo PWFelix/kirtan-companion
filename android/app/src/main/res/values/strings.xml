@@ -132,6 +132,7 @@
     <string name="editor_add_group">Add a beat</string>
     <string name="editor_beats">Beats</string>
     <string name="editor_builtin_copy_note">Built-in beats stay as they are. Saving adds your version to your library and plays it.</string>
+    <string name="editor_cell_n">Cell %1$d</string>
     <string name="editor_cells_per_beat">Cells per beat</string>
     <string name="editor_clear">Clear</string>
     <string name="editor_community_copy_note">The community beat stays as it is. Saving adds your version to Your beats; you can share it once the rhythm differs.</string>
@@ -150,8 +151,7 @@
     <string name="editor_rest">Rest</string>
     <string name="editor_save">Save beat</string>
     <string name="editor_save_copy">Save as my version</string>
-    <string name="editor_switch_to_drum">tap the drum row to switch</string>
-    <string name="editor_switch_to_kartal">tap the kartal row to switch</string>
+    <string name="editor_tap_any_cell">tap any cell to change row</string>
     <string name="editor_undo">Undo</string>
     <string name="err_bad_credentials">That email and password didn\'t match. Try again.</string>
     <string name="err_beat_format">One of your saved beats (\"%1$s\") is in a format this version of the app can\'t read.</string>

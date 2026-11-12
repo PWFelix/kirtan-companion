@@ -154,7 +154,7 @@ class EditorDraftTest {
     @Test
     fun `resizing resets undo because old snapshots have the old length`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA)[0])
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN)[0])
         assertTrue(draft.canUndo)
         draft = draft.addGroup()
         assertFalse("undo must not survive a resize", draft.canUndo)
@@ -165,7 +165,7 @@ class EditorDraftTest {
     @Test
     fun `a pad writes the cursor column and advances it`() {
         var draft = EditorDraft.from(null)
-        val ta = padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" }
+        val ta = padSetFor(LaneId.DAYAN).first { it.key == "ta" }
         draft = draft.tapPad(ta)
 
         assertEquals(Stroke.OPEN, draft.pattern(LaneId.DAYAN)[0])
@@ -174,53 +174,63 @@ class EditorDraftTest {
     }
 
     @Test
-    fun `a combo pad writes both heads in one gesture`() {
+    fun `a two-hand bol is both drum rows filled in one column`() {
         var draft = EditorDraft.from(null)
-        val da = padSetFor(EditInstrument.MRDANGA).first { it.key == "da" }
-        draft = draft.tapPad(da)
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
+        draft = draft.pickCell(LaneId.BAYAN, 0)
+        draft = draft.tapPad(padSetFor(draft.cursorLane).first { it.key == "ge" })
 
         assertEquals(Stroke.OPEN, draft.pattern(LaneId.DAYAN)[0])
         assertEquals(Stroke.OPEN, draft.pattern(LaneId.BAYAN)[0])
+        // Entry carries on along the bayan row.
+        assertEquals(LaneId.BAYAN, draft.cursorLane)
+        assertEquals(1, draft.cursor)
     }
 
     @Test
     fun `the cursor wraps around the end of the beat`() {
         var draft = EditorDraft.from(null).setCursor(7)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "rest" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "rest" })
         assertEquals(0, draft.cursor)
     }
 
     @Test
     fun `a rest pad writes rests, not absences`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "rest" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "rest" })
         assertNull(draft.pattern(LaneId.DAYAN)[1])
-        assertNull(draft.pattern(LaneId.BAYAN)[1])
     }
 
     @Test
-    fun `each instrument's pads write only its own lanes`() {
-        assertEquals(setOf(LaneId.KARTAL), padSetFor(EditInstrument.KARTAL).first().write.keys)
-        // The mrdanga set writes whole columns (both heads) and never the kartal.
-        assertTrue(
-            padSetFor(EditInstrument.MRDANGA).none { it.write.containsKey(LaneId.KARTAL) }
-        )
+    fun `each row's palette is its open, closed and rest, writing only that row`() {
+        assertEquals(listOf("Ta", "Te", "Rest"), padSetFor(LaneId.DAYAN).map { it.label })
+        assertEquals(listOf("Ge", "Khe", "Rest"), padSetFor(LaneId.BAYAN).map { it.label })
+        assertEquals(listOf("Ching", "Chip", "Rest"), padSetFor(LaneId.KARTAL).map { it.label })
+        for (lane in LaneId.ORDERED) {
+            assertTrue(padSetFor(lane).all { it.write.keys == setOf(lane) })
+        }
     }
 
     @Test
-    fun `tapping a row's cell moves the cursor and picks its instrument`() {
+    fun `tapping a cell selects it and entry advances along that row`() {
         var draft = EditorDraft.from(null)
-        assertEquals(EditInstrument.MRDANGA, draft.instrument)
+        assertEquals(LaneId.DAYAN, draft.cursorLane)
         draft = draft.pickCell(LaneId.KARTAL, 3)
-        assertEquals(EditInstrument.KARTAL, draft.instrument)
+        assertEquals(LaneId.KARTAL, draft.cursorLane)
         assertEquals(3, draft.cursor)
-        draft = draft.tapPad(padSetFor(draft.instrument).first { it.key == "kch" })
+        draft = draft.tapPad(padSetFor(draft.cursorLane).first { it.key == "kch" })
+        draft = draft.tapPad(padSetFor(draft.cursorLane).first { it.key == "kdm" })
         assertEquals(Stroke.OPEN, draft.pattern(LaneId.KARTAL)[3])
-        // Either drum row returns to the mrdanga.
-        draft = draft.pickCell(LaneId.BAYAN, 0)
-        assertEquals(EditInstrument.MRDANGA, draft.instrument)
-        assertEquals(0, draft.cursor)
+        assertEquals(Stroke.CLOSED, draft.pattern(LaneId.KARTAL)[4])
+        assertEquals(LaneId.KARTAL, draft.cursorLane)
+        assertEquals(5, draft.cursor)
+        // The drum rows are untouched.
+        assertTrue(draft.pattern(LaneId.DAYAN).all { it == null })
+        // Undo puts the cursor back on the cell, row included.
+        draft = draft.pickCell(LaneId.BAYAN, 0).undoLast()
+        assertEquals(LaneId.KARTAL, draft.cursorLane)
+        assertEquals(4, draft.cursor)
     }
 
     // ── Undo ──────────────────────────────────────────────────────────────
@@ -228,8 +238,8 @@ class EditorDraftTest {
     @Test
     fun `undo restores the patterns and the cursor`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ge" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(LaneId.BAYAN).first { it.key == "ge" })
         assertEquals(2, draft.cursor)
 
         draft = draft.undoLast()
@@ -248,7 +258,7 @@ class EditorDraftTest {
     @Test
     fun `the undo stack is capped`() {
         var draft = EditorDraft.from(null)
-        val ta = padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" }
+        val ta = padSetFor(LaneId.DAYAN).first { it.key == "ta" }
         repeat(EditorDraft.UNDO_LIMIT + 10) { draft = draft.tapPad(ta) }
         assertEquals(EditorDraft.UNDO_LIMIT, draft.undo.size)
     }
@@ -256,7 +266,7 @@ class EditorDraftTest {
     @Test
     fun `clear empties every lane and is undoable`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "da" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
         draft = draft.clearGrid()
 
         for (lane in LaneId.ORDERED) {
@@ -271,7 +281,7 @@ class EditorDraftTest {
     @Test
     fun `changing the feel clears the grid and resets cursor and undo`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
         draft = draft.selectMeter(METERS.first { it.id == "78" })
 
         assertEquals(listOf(2, 2, 3), draft.groups)
@@ -324,7 +334,7 @@ class EditorDraftTest {
     @Test
     fun `a beat with no cymbals stays a two-lane beat`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
         val beat = draft.toBeat(null)
 
         assertFalse(beat.lanePatterns.containsKey(LaneId.KARTAL))
@@ -336,14 +346,14 @@ class EditorDraftTest {
     fun `drawing cymbals adds the kartal lane`() {
         var draft = EditorDraft.from(null)
         draft = draft.pickCell(LaneId.KARTAL, draft.cursor)
-        draft = draft.tapPad(padSetFor(EditInstrument.KARTAL).first { it.key == "kch" })
+        draft = draft.tapPad(padSetFor(LaneId.KARTAL).first { it.key == "kch" })
         assertTrue(draft.toBeat(null).lanePatterns.containsKey(LaneId.KARTAL))
     }
 
     @Test
     fun `an unnamed draft saves as Custom Beat and a new beat has no id`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
         val beat = draft.toBeat(null)
         assertEquals("Custom Beat", beat.name)
         assertNull(beat.id)
@@ -353,7 +363,7 @@ class EditorDraftTest {
     @Test
     fun `an uneven draft persists a fractional bar length`() {
         var draft = EditorDraft.from(null).selectMeter(METERS.first { it.id == "78" })
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
         val beat = draft.toBeat(null)
 
         assertEquals(7, beat.steps)
@@ -366,7 +376,7 @@ class EditorDraftTest {
     @Test
     fun `a uniform draft persists the group size as cellsPerGroup`() {
         var draft = EditorDraft.from(null)
-        draft = draft.tapPad(padSetFor(EditInstrument.MRDANGA).first { it.key == "ta" })
+        draft = draft.tapPad(padSetFor(LaneId.DAYAN).first { it.key == "ta" })
         val beat = draft.toBeat(null)
         assertEquals(2, beat.cellsPerGroup)
         assertEquals(4.0, beat.beatsPerBar, 0.0)
@@ -390,16 +400,12 @@ class EditorDraftTest {
 
     @Test
     fun padsSoundOnlyTheStrokesTheyWriteNeverTheRests() {
-        val pads = padSetFor(EditInstrument.MRDANGA).associateBy { it.key }
+        val pads = padSetFor(LaneId.DAYAN).associateBy { it.key }
         // Ta writes a bayan REST; it must sound the open dayan alone, not a Khe too.
         assertEquals(listOf(LaneId.DAYAN to true), pads.getValue("ta").sounds())
-        assertEquals(listOf(LaneId.BAYAN to false), pads.getValue("khe").sounds())
-        assertEquals(
-            setOf(LaneId.DAYAN to false, LaneId.BAYAN to true),
-            pads.getValue("gi").sounds().toSet(),
-        )
+        assertEquals(listOf(LaneId.BAYAN to false), padSetFor(LaneId.BAYAN).first { it.key == "khe" }.sounds())
         assertTrue(pads.getValue("rest").sounds().isEmpty())
-        assertTrue(padSetFor(EditInstrument.KARTAL).first { it.rest }.sounds().isEmpty())
+        assertTrue(padSetFor(LaneId.KARTAL).first { it.rest }.sounds().isEmpty())
     }
 
     // ── Resolution lever ───────────────────────────────────────────────────

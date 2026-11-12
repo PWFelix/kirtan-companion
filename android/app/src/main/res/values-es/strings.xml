@@ -126,6 +126,7 @@
     <string name="editor_add_group">Añadir un tiempo</string>
     <string name="editor_beats">Tiempos</string>
     <string name="editor_builtin_copy_note">Los ritmos incluidos se quedan como están. Al guardar, tu versión se añade a tu biblioteca y empieza a sonar.</string>
+    <string name="editor_cell_n">Celda %1$d</string>
     <string name="editor_cells_per_beat">Celdas por tiempo</string>
     <string name="editor_clear">Borrar</string>
     <string name="editor_community_copy_note">El ritmo de la comunidad se queda como está. Al guardar, tu versión se añade a Tus ritmos; podrás compartirla cuando el ritmo sea distinto.</string>
@@ -144,8 +145,7 @@
     <string name="editor_rest">Silencio</string>
     <string name="editor_save">Guardar ritmo</string>
     <string name="editor_save_copy">Guardar como mi versión</string>
-    <string name="editor_switch_to_drum">toca la fila del tambor para cambiar</string>
-    <string name="editor_switch_to_kartal">toca la fila de kartal para cambiar</string>
+    <string name="editor_tap_any_cell">toca cualquier celda para cambiar de fila</string>
     <string name="editor_undo">Deshacer</string>
     <string name="err_bad_credentials">Ese correo y esa contraseña no coinciden. Inténtalo de nuevo.</string>
     <string name="err_beat_format">Uno de tus ritmos guardados («%1$s») tiene un formato que esta versión de la app no puede leer.</string>
