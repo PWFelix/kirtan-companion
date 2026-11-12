@@ -284,6 +284,12 @@ final class TransportViewModel {
         publish(s)
     }
 
+    /// Which part Learn teaches: the karatalas', or (false) the mridanga's. Display only.
+    func setLearnKartal(_ kartal: Bool) {
+        var s = settings; s.learnKartal = kartal
+        publish(s)
+    }
+
     func setFeel(_ feel: Feel) {
         engine.setFeel(feel)
         var s = settings; s.feel = feel

@@ -14,18 +14,21 @@ import Foundation
 /// it is the congregation's part, not the mridanga player's.
 enum HighwayColumn: Int, CaseIterable {
     case bayanOpen, bayanClosed, dayanClosed, dayanOpen
+    // The karatalas' highway: the ringing "Ching" and the choked "Chip".
+    case kartalOpen, kartalClosed
 
     var lane: LaneId {
         switch self {
         case .bayanOpen, .bayanClosed: .bayan
         case .dayanOpen, .dayanClosed: .dayan
+        case .kartalOpen, .kartalClosed: .kartal
         }
     }
 
     var stroke: Stroke {
         switch self {
-        case .bayanOpen, .dayanOpen: .open
-        case .bayanClosed, .dayanClosed: .closed
+        case .bayanOpen, .dayanOpen, .kartalOpen: .open
+        case .bayanClosed, .dayanClosed, .kartalClosed: .closed
         }
     }
 
@@ -57,12 +60,37 @@ struct HighwayFrame {
     let currentStep: Int
 }
 
+/// What Learn teaches: the mridanga (four columns, mirrored for a left-handed player)
+/// or the karatalas (two columns; handedness does not apply). Same split as Android's
+/// `LearnInstrument` and the web's `INSTRUMENTS`.
+enum LearnInstrument: CaseIterable {
+    case mrdanga, kartal
+
+    var columns: [HighwayColumn] {
+        switch self {
+        case .mrdanga: [.bayanOpen, .bayanClosed, .dayanClosed, .dayanOpen]
+        case .kartal: [.kartalOpen, .kartalClosed]
+        }
+    }
+
+    var lanes: [LaneId] {
+        var out: [LaneId] = []
+        for c in columns where !out.contains(c.lane) { out.append(c.lane) }
+        return out
+    }
+}
+
 enum Highway {
     /// The columns left to right. allCases is the right-handed layout; a left-handed
     /// player sits the drum the other way round, so it mirrors: dayan on the left,
     /// open strokes still on the outside.
-    static func columns(leftHanded: Bool) -> [HighwayColumn] {
-        leftHanded ? HighwayColumn.allCases.reversed() : HighwayColumn.allCases
+    static func columns(leftHanded: Bool, instrument: LearnInstrument = .mrdanga) -> [HighwayColumn] {
+        instrument == .mrdanga && leftHanded ? instrument.columns.reversed() : instrument.columns
+    }
+
+    /// True when the beat gives `instrument` anything to play.
+    static func hasPart(_ beat: Beat, _ instrument: LearnInstrument) -> Bool {
+        instrument.lanes.contains { lane in beat.pattern(lane)?.contains { $0 != nil } ?? false }
     }
 
     /// How much time the screen shows ahead of the hit line.
@@ -78,7 +106,8 @@ enum Highway {
 
     /// Notes and beat lines visible with the playhead at `position` steps. The beat
     /// loops, so the window wraps past the end of the pattern into the next bar.
-    static func frame(_ beat: Beat, position: Double, lookahead: Double) -> HighwayFrame {
+    static func frame(_ beat: Beat, position: Double, lookahead: Double,
+                      instrument: LearnInstrument = .mrdanga) -> HighwayFrame {
         let steps = beat.steps
         guard steps > 0 else { return HighwayFrame(notes: [], lines: [], currentStep: 0) }
         let now = Int(position.rounded(.down))
@@ -91,7 +120,7 @@ enum Highway {
         for abs in first...last {
             let step = floorMod(abs, steps)
             let rel = Double(abs) - position
-            for lane in [LaneId.bayan, .dayan] {
+            for lane in instrument.lanes {
                 guard let pattern = beat.pattern(lane), step < pattern.count,
                       let stroke = pattern[step],
                       let column = HighwayColumn.of(lane, stroke) else { continue }

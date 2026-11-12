@@ -24,12 +24,17 @@ struct LearnView: View {
         VStack(spacing: 14) {
             if let beat {
                 header(beat)
-                handToggle
+                instrumentSwitch
+                // Handedness is about which side the drum's heads sit; karatalas have none.
+                if instrument == .mrdanga { handToggle }
                 HighwayCanvas(
                     beat: beat,
                     bpm: transport.bpm,
                     playing: transport.playing,
-                    columns: Highway.columns(leftHanded: transport.settings.learnLeftHanded),
+                    instrument: instrument,
+                    emptyMessage: Highway.hasPart(beat, instrument) ? nil
+                        : String(localized: "This beat has no kartal part", bundle: .strings),
+                    columns: Highway.columns(leftHanded: transport.settings.learnLeftHanded, instrument: instrument),
                     engine: transport.engineHandle
                 )
                 controls(beat)
@@ -43,6 +48,12 @@ struct LearnView: View {
         .padding(.bottom, 100) // clear of the floating bottom bar
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.head.ignoresSafeArea())
+        #if DEBUG
+        // Screenshot hook: `-kirtanLearnKartal` opens Learn on the kartal highway.
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-kirtanLearnKartal") { transport.setLearnKartal(true) }
+        }
+        #endif
         .sheet(isPresented: $pickerOpen) {
             BeatPickerSheet(container: container) { pickerOpen = false }
                 .presentationDetents([.medium, .large])
@@ -71,6 +82,31 @@ struct LearnView: View {
             .frame(maxWidth: .infinity)
             iconButton("chevron.right", String(localized: "Next beat", bundle: .strings)) { cycle(1) }
         }
+    }
+
+    private var instrument: LearnInstrument { transport.settings.learnKartal ? .kartal : .mrdanga }
+
+    /// Mrdanga | Kartals: which part the highway teaches. Remembered in settings.
+    private var instrumentSwitch: some View {
+        HStack(spacing: 4) {
+            ForEach(LearnInstrument.allCases, id: \.self) { option in
+                let on = option == instrument
+                Button { transport.setLearnKartal(option == .kartal) } label: {
+                    Text(option == .kartal ? String(localized: "Kartals", bundle: .strings) : String(localized: "Mrdanga", bundle: .strings))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(on ? Palette.syahi : Palette.syahiSoft)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .background(on ? Palette.head : .clear, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(on ? Palette.rule : .clear, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Learn which part", bundle: .strings))
     }
 
     /// Left-handed players sit the drum the other way round; mirror the columns.
@@ -133,6 +169,8 @@ private struct HighwayCanvas: View {
     let beat: Beat
     let bpm: Int
     let playing: Bool
+    let instrument: LearnInstrument
+    let emptyMessage: String?
     let columns: [HighwayColumn]
     let engine: KirtanEngine
 
@@ -147,7 +185,7 @@ private struct HighwayCanvas: View {
 
     private func draw(_ ctx: inout GraphicsContext, size: CGSize, position: Double) {
         let lookahead = Highway.lookaheadSteps(bpm: bpm, cellsPerQuarter: cpqFor(beat))
-        let frame = Highway.frame(beat, position: position, lookahead: lookahead)
+        let frame = Highway.frame(beat, position: position, lookahead: lookahead, instrument: instrument)
         let gap: CGFloat = 6
         let colW = (size.width - gap * CGFloat(columns.count - 1)) / CGFloat(columns.count)
         let labelH: CGFloat = 34
@@ -211,8 +249,10 @@ private struct HighwayCanvas: View {
                      at: CGPoint(x: cx, y: size.height - 6))
         }
 
-        if !playing {
-            let hint = ctx.resolve(Text(String(localized: "Press Play — strokes land on the line", bundle: .strings))
+        // A beat with nothing for this instrument says so, rather than leaving an empty
+        // highway that reads as broken.
+        if !playing || emptyMessage != nil {
+            let hint = ctx.resolve(Text(emptyMessage ?? String(localized: "Press Play — strokes land on the line", bundle: .strings))
                 .font(.system(size: 12)).foregroundStyle(Palette.syahiSoft))
             let s = hint.measure(in: size)
             let center = CGPoint(x: size.width / 2, y: hitY - pxPerStep / 2)

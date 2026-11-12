@@ -6,7 +6,22 @@ final class HighwayTests: XCTestCase {
     private var daspahir: Beat { Beats.beats.first { $0.id == "daspahir_taal" }! }
 
     func testColumnsAreHeadedByTheirBols() {
-        XCTAssertEqual(HighwayColumn.allCases.map(\.bol), ["Ge", "Khe", "Te", "Ta"])
+        XCTAssertEqual(LearnInstrument.mrdanga.columns.map(\.bol), ["Ge", "Khe", "Te", "Ta"])
+        XCTAssertEqual(LearnInstrument.kartal.columns.map(\.bol), ["Ching", "Chip"])
+    }
+
+    func testTheKartalHighwayCarriesOnlyTheKartalLine() {
+        let beat = Beats.beats.first { Highway.hasPart($0, .kartal) }!
+        let frame = Highway.frame(beat, position: 0, lookahead: Double(beat.steps - 1), instrument: .kartal)
+        XCTAssertFalse(frame.notes.isEmpty)
+        XCTAssertTrue(frame.notes.allSatisfy { $0.column.lane == .kartal })
+        let expected = beat.pattern(.kartal)!.prefix(beat.steps).filter { $0 != nil }.count
+        XCTAssertEqual(frame.notes.filter { $0.rel >= 0 && $0.rel < Double(beat.steps) }.count, expected)
+        // The kartal never mirrors: handedness is the drum's.
+        XCTAssertEqual(Highway.columns(leftHanded: true, instrument: .kartal), LearnInstrument.kartal.columns)
+        var s = EqPrefsSnapshot.default; s.learnKartal = true
+        XCTAssertTrue(EqPrefsCodec.decode(EqPrefsCodec.encode(s)).learnKartal)
+        XCTAssertFalse(EqPrefsCodec.decode("{}").learnKartal)
     }
 
     func testANoteSitsOnTheHitLineAtItsStep() {

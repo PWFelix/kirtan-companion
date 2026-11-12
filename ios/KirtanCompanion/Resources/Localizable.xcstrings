@@ -1619,6 +1619,16 @@
         }
       }
     },
+    "Kartals" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kartals"
+          }
+        }
+      }
+    },
     "Keherwa" : {
       "localizations" : {
         "es" : {
@@ -1675,6 +1685,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aprender"
+          }
+        }
+      }
+    },
+    "Learn which part" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qué parte aprender"
           }
         }
       }
@@ -1951,6 +1971,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pasando…"
+          }
+        }
+      }
+    },
+    "Mrdanga" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mrdanga"
           }
         }
       }
@@ -3403,6 +3433,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El ritmo completo viaja dentro del enlace. No se sube nada."
+          }
+        }
+      }
+    },
+    "This beat has no kartal part" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este ritmo no tiene parte de kartal"
           }
         }
       }

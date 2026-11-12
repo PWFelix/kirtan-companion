@@ -67,6 +67,8 @@ struct EqPrefsSnapshot: Equatable {
     var feel: Feel = .off
     /// The Learn highway mirrored for a left-handed player (dayan columns on the left).
     var learnLeftHanded: Bool = false
+    /// Learn teaches the karatalas' part rather than the mridanga's.
+    var learnKartal: Bool = false
     /// Display delay in ms per output device, keyed by `OutputRoute.key`. A device
     /// with no entry plays at 0: the phone's own latency figure is trusted until
     /// the user says otherwise (Settings → Sync sound and display).
@@ -179,6 +181,7 @@ enum EqPrefsCodec {
     private static let keyUiScale = "uiScale"
     private static let keyFeel = "feel"
     private static let keyLearnLeftHanded = "learnLeftHanded"
+    private static let keyLearnKartal = "learnKartal"
     private static let keyDisplayDelays = "displayDelays"
     private static let keySyncPrompted = "syncPrompted"
     private static let keyDayan = "dayan"
@@ -204,6 +207,7 @@ enum EqPrefsCodec {
             (keyUiScale, .number(snapshot.uiScale)),
             (keyFeel, .string(snapshot.feel.rawValue)),
             (keyLearnLeftHanded, .bool(snapshot.learnLeftHanded)),
+            (keyLearnKartal, .bool(snapshot.learnKartal)),
             (keyDisplayDelays, .object(snapshot.displayDelays.keys.sorted().map {
                 JPair(key: $0, value: .int(snapshot.displayDelays[$0]!))
             })),
@@ -239,6 +243,7 @@ enum EqPrefsCodec {
             uiScale: scaleOf(obj.element(keyUiScale)),
             feel: obj.element(keyFeel)?.asString().flatMap(Feel.init(rawValue:)) ?? .off,
             learnLeftHanded: boolOf(obj.element(keyLearnLeftHanded), false),
+            learnKartal: boolOf(obj.element(keyLearnKartal), false),
             displayDelays: displayDelaysOf(obj.element(keyDisplayDelays)),
             syncPrompted: Set((obj.element(keySyncPrompted)?.asArray() ?? []).compactMap { $0.asString() }),
             dayan: endOf(obj.element(keyDayan)),
