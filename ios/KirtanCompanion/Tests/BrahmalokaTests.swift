@@ -8,7 +8,7 @@ final class BrahmalokaTests: XCTestCase {
 
     func testNormalRangeTopsOutAt200() {
         XCTAssertEqual(tempoRange(brahmaloka: false), 40...200)
-        XCTAssertEqual(tempoRange(brahmaloka: true), 190...500)
+        XCTAssertEqual(tempoRange(brahmaloka: true), 40...500)
     }
 
     func testBelow200AlwaysLeaves() {

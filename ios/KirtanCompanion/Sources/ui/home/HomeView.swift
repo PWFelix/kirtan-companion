@@ -110,6 +110,7 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "Choose a beat", bundle: .strings))
                 // Tap the tempo to type it, or jump it by ten (TempoSheet).
+                HStack(spacing: 8) {
                 Button { tempoOpen = true } label: {
                     HStack(spacing: 4) {
                         Text("\(transport.bpm) bpm")
@@ -122,6 +123,12 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .disabled(transport.settings.tempoLocked)
                 .accessibilityLabel(String(localized: "Set tempo", bundle: .strings))
+                // The way out of Brahmaloka sits with the number, not in the slider's
+                // row, so the slider keeps its width when the range zooms out.
+                if transport.brahmaloka {
+                    BrahmalokaBadge { transport.leaveBrahmaloka() }
+                }
+                }
             }
             Spacer()
         }
@@ -160,9 +167,6 @@ struct HomeView: View {
                     onChange: { transport.changeBpm($0) },
                     onUnlock: { transport.unlockBrahmaloka() },
                 )
-                if transport.brahmaloka {
-                    BrahmalokaBadge { transport.leaveBrahmaloka() }
-                }
             }
             tempoButtons
         }

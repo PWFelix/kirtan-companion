@@ -14,13 +14,13 @@ private let gold = Color(hex: 0xF2C14E)
 private let fire = Color(hex: 0xD9541E)
 private let ember = Color(hex: 0xB8471A)
 
-/// The tempo slider: 40–200, or 190–500 in Brahmaloka. Holding the thumb at 200 for
+/// The tempo slider: 40–200, or zoomed out to 40–500 in Brahmaloka (same width, the thumb moves). Holding the thumb at 200 for
 /// `BRAHMA_HOLD_SECONDS` calls `onUnlock`, with a glow swelling behind the thumb
 /// while you hold so it is clear something is coming.
 ///
 /// Identified BY THE MODE so the slider is rebuilt when the range changes. That ends
 /// the drag in progress, which is the point: the finger is still pressed at the
-/// right-hand end, and a live drag on the new 190–500 range would fling the tempo
+/// right-hand end, and a live drag on the new 40–500 range would fling the tempo
 /// to ~490 on its next move.
 struct BpmSlider: View {
     let bpm: Int
