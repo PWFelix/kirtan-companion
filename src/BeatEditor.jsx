@@ -554,7 +554,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
             <input className={"kc-range" + (brahmaloka ? " kc-brahma" : "") + (hold.charging ? " kc-charging" : "")}
               type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
               title={brahmaloka ? t("brahma.badge") : t("brahma.hint")}
-              onChange={(e) => changeBpm(Number(e.target.value))}
+              onChange={hold.guard((e) => changeBpm(Number(e.target.value)))}
               style={{ "--fill": fillPct + "%", flex: 1 }} aria-label={t("tempo.title")} />
           </div>
         </div>

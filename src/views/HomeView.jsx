@@ -387,7 +387,7 @@ function HomeView({
           </button>
           <input className={rangeClass} type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
             title={brahmaloka ? undefined : t("brahma.hint")}
-            onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
+            onChange={hold.guard((e) => changeBpm(Number(e.target.value)))} disabled={tempoLocked}
             style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
             aria-label={t("tempo.title")} />
           {brahmaBadge}
@@ -467,7 +467,7 @@ function HomeView({
           <div style={st.tempoRow}>
             <input className={rangeClass} type="range" min={range.min} max={range.max} value={bpm} {...hold.rangeProps}
             title={brahmaloka ? undefined : t("brahma.hint")}
-              onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
+              onChange={hold.guard((e) => changeBpm(Number(e.target.value)))} disabled={tempoLocked}
               style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
               aria-label={t("tempo.title")} />
             {brahmaBadge}
