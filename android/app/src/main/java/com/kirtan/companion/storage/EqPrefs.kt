@@ -218,6 +218,8 @@ data class EqPrefsSnapshot(
      * wrong side. Off (right-handed) on a fresh install.
      */
     val learnLeftHanded: Boolean = false,
+    /** Learn teaches the karatalas' part rather than the mridanga's. */
+    val learnKartal: Boolean = false,
     /**
      * Display delay in ms for each output device, keyed by
      * [com.kirtan.companion.playback.OutputRoute.key]. A device with no entry
@@ -318,6 +320,7 @@ internal object EqPrefsCodec {
     private const val KEY_UI_SCALE = "uiScale"
     private const val KEY_FEEL = "feel"
     private const val KEY_LEARN_LEFT_HANDED = "learnLeftHanded"
+    private const val KEY_LEARN_KARTAL = "learnKartal"
     private const val KEY_DISPLAY_DELAYS = "displayDelays"
     private const val KEY_SYNC_PROMPTED = "syncPrompted"
     private const val KEY_BANDS = "bands"
@@ -343,6 +346,7 @@ internal object EqPrefsCodec {
         put(KEY_UI_SCALE, snapshot.uiScale)
         put(KEY_FEEL, snapshot.feel.name)
         put(KEY_LEARN_LEFT_HANDED, snapshot.learnLeftHanded)
+        put(KEY_LEARN_KARTAL, snapshot.learnKartal)
         put(KEY_DISPLAY_DELAYS, buildJsonObject {
             for ((key, ms) in snapshot.displayDelays) put(key, ms)
         })
@@ -381,6 +385,7 @@ internal object EqPrefsCodec {
             uiScale = scaleOf(parsed[KEY_UI_SCALE]),
             feel = feelOf(parsed[KEY_FEEL]),
             learnLeftHanded = boolOf(parsed[KEY_LEARN_LEFT_HANDED], false),
+            learnKartal = boolOf(parsed[KEY_LEARN_KARTAL], false),
             displayDelays = displayDelaysOf(parsed[KEY_DISPLAY_DELAYS]),
             syncPrompted = stringSetOf(parsed[KEY_SYNC_PROMPTED]),
             dayan = endOf(parsed[KEY_DAYAN]),

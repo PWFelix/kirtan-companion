@@ -217,7 +217,11 @@
     <string name="import_suggested_bpm">sugerido %1$d BPM</string>
     <string name="import_title">Importar</string>
     <string name="learn_closed">cerrado</string>
+    <string name="learn_instrument">Qué parte aprender</string>
+    <string name="learn_kartal">Kartals</string>
     <string name="learn_left_handed">Zurdo · dayan a la izquierda</string>
+    <string name="learn_mrdanga">Mrdanga</string>
+    <string name="learn_no_kartal">Este ritmo no tiene parte de kartal</string>
     <string name="learn_open">abierto</string>
     <string name="learn_pick_beat">Elige un ritmo en Inicio para aprenderlo aquí.</string>
     <string name="learn_press_play">Pulsa Tocar: los golpes caen sobre la línea</string>

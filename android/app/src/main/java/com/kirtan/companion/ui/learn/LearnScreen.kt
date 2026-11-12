@@ -2,6 +2,16 @@ package com.kirtan.companion.ui.learn
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -142,17 +152,25 @@ internal fun LearnScreen(
         }
 
         val leftHanded = state.settings.learnLeftHanded
-        SecondaryButton(
-            label = if (leftHanded) stringResource(R.string.learn_left_handed) else stringResource(R.string.learn_right_handed),
-            onClick = { transport.setLearnLeftHanded(!leftHanded) },
-            minHeight = 38.dp,
-        )
+        val instrument = if (state.settings.learnKartal) LearnInstrument.KARTAL else LearnInstrument.MRDANGA
+        InstrumentSwitch(instrument = instrument, onPick = { transport.setLearnKartal(it == LearnInstrument.KARTAL) })
+
+        // Handedness is about which side the drum's heads sit; karatalas have none.
+        if (instrument == LearnInstrument.MRDANGA) {
+            SecondaryButton(
+                label = if (leftHanded) stringResource(R.string.learn_left_handed) else stringResource(R.string.learn_right_handed),
+                onClick = { transport.setLearnLeftHanded(!leftHanded) },
+                minHeight = 38.dp,
+            )
+        }
 
         HighwayCanvas(
             beat = beat,
             bpm = state.bpm,
             playing = state.playing,
-            columns = Highway.columnsFor(leftHanded),
+            instrument = instrument,
+            emptyMessage = if (Highway.hasPart(beat, instrument)) null else stringResource(R.string.learn_no_kartal),
+            columns = Highway.columnsFor(leftHanded, instrument),
             getPhase = { transport.getPhase() },
             modifier = Modifier.weight(1f).fillMaxWidth(),
         )
@@ -193,6 +211,41 @@ internal fun LearnScreen(
     }
 }
 
+/** Mrdanga | Kartals: which part the highway teaches. */
+@Composable
+private fun InstrumentSwitch(instrument: LearnInstrument, onPick: (LearnInstrument) -> Unit) {
+    val desc = stringResource(R.string.learn_instrument)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = desc }
+            .background(PaletteToken.HEAD_WORN.color, RoundedCornerShape(14.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for (option in LearnInstrument.entries) {
+            val on = option == instrument
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 38.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (on) PaletteToken.HEAD.color else Color.Transparent)
+                    .border(if (on) 1.dp else 0.dp, if (on) PaletteToken.RULE.color else Color.Transparent, RoundedCornerShape(10.dp))
+                    .selectable(selected = on, role = Role.RadioButton) { onPick(option) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(if (option == LearnInstrument.KARTAL) R.string.learn_kartal else R.string.learn_mrdanga),
+                    color = if (on) PaletteToken.SYAHI.color else PaletteToken.SYAHI_SOFT.color,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
 /**
  * The highway itself. Redraws every display frame while playing, reading the
  * engine's phase inside withFrameNanos — the same technique as the strip's
@@ -204,6 +257,8 @@ private fun HighwayCanvas(
     beat: Beat,
     bpm: Int,
     playing: Boolean,
+    instrument: LearnInstrument,
+    emptyMessage: String?,
     columns: List<HighwayColumn>,
     getPhase: () -> Double,
     modifier: Modifier = Modifier,
@@ -221,7 +276,7 @@ private fun HighwayCanvas(
 
     val measurer = rememberTextMeasurer()
     val lookahead = Highway.lookaheadSteps(bpm, cpqFor(beat))
-    val frame = Highway.frame(beat, position, lookahead)
+    val frame = Highway.frame(beat, position, lookahead, instrument)
 
     val head = PaletteToken.HEAD_WORN.color
     val rule = PaletteToken.RULE.color
@@ -307,8 +362,10 @@ private fun HighwayCanvas(
             drawText(sub, topLeft = Offset(cx - sub.size.width / 2f, size.height - sub.size.height.toFloat()))
         }
 
-        if (!playing) {
-            val hint = measurer.measure(Strings.get(R.string.learn_press_play), TextStyle(color = soft, fontSize = 12.sp))
+        // A beat with nothing for this instrument says so, rather than leaving an
+        // empty highway that reads as broken.
+        if (!playing || emptyMessage != null) {
+            val hint = measurer.measure(emptyMessage ?: Strings.get(R.string.learn_press_play), TextStyle(color = soft, fontSize = 12.sp))
             val pad = 6.dp.toPx()
             val at = Offset(size.width / 2 - hint.size.width / 2f, hitY - pxPerStep / 2 - hint.size.height / 2f)
             drawRoundRect(

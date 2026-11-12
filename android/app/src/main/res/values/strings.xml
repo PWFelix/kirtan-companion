@@ -223,7 +223,11 @@
     <string name="import_suggested_bpm">suggested %1$d BPM</string>
     <string name="import_title">Import</string>
     <string name="learn_closed">closed</string>
+    <string name="learn_instrument">Learn which part</string>
+    <string name="learn_kartal">Kartals</string>
     <string name="learn_left_handed">Left-handed · dayan on the left</string>
+    <string name="learn_mrdanga">Mrdanga</string>
+    <string name="learn_no_kartal">This beat has no kartal part</string>
     <string name="learn_open">open</string>
     <string name="learn_pick_beat">Pick a beat on Home to learn it here.</string>
     <string name="learn_press_play">Press Play — strokes land on the line</string>

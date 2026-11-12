@@ -14,7 +14,20 @@ class HighwayTest {
 
     @Test
     fun columnsAreHeadedByTheirBols() {
-        assertEquals(listOf("Ge", "Khe", "Te", "Ta"), HighwayColumn.entries.map { it.bol })
+        assertEquals(listOf("Ge", "Khe", "Te", "Ta"), LearnInstrument.MRDANGA.columns.map { it.bol })
+        assertEquals(listOf("Ching", "Chip"), LearnInstrument.KARTAL.columns.map { it.bol })
+    }
+
+    @Test
+    fun theKartalHighwayCarriesOnlyTheKartalLine() {
+        val beat = BEATS.first { Highway.hasPart(it, LearnInstrument.KARTAL) }
+        val frame = Highway.frame(beat, 0.0, beat.steps.toDouble() - 1, LearnInstrument.KARTAL)
+        assertTrue(frame.notes.isNotEmpty())
+        assertTrue(frame.notes.all { it.column.lane == LaneId.KARTAL })
+        val expected = (0 until beat.steps).count { beat.pattern(LaneId.KARTAL)!![it] != null }
+        assertEquals(expected, frame.notes.count { it.rel >= 0 && it.rel < beat.steps })
+        // And the kartal never mirrors: handedness is the drum's.
+        assertEquals(LearnInstrument.KARTAL.columns, Highway.columnsFor(true, LearnInstrument.KARTAL))
     }
 
     @Test

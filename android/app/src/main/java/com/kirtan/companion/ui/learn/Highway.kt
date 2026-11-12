@@ -37,6 +37,10 @@ enum class HighwayColumn(val lane: LaneId, val stroke: Stroke) {
     BAYAN_CLOSED(LaneId.BAYAN, Stroke.CLOSED),
     DAYAN_CLOSED(LaneId.DAYAN, Stroke.CLOSED),
     DAYAN_OPEN(LaneId.DAYAN, Stroke.OPEN),
+
+    // The karatalas' highway: the ringing "Ching" and the choked "Chip".
+    KARTAL_OPEN(LaneId.KARTAL, Stroke.OPEN),
+    KARTAL_CLOSED(LaneId.KARTAL, Stroke.CLOSED),
     ;
 
     /** The spoken syllable for this stroke — the column's heading. */
@@ -61,11 +65,32 @@ data class HighwayFrame(
     val currentStep: Int,
 )
 
+/**
+ * What Learn teaches: the mridanga (four columns, mirrored for a left-handed
+ * player) or the karatalas (two columns; handedness does not apply). Same split
+ * as the web's highway.js INSTRUMENTS.
+ */
+enum class LearnInstrument(val columns: List<HighwayColumn>) {
+    MRDANGA(listOf(HighwayColumn.BAYAN_OPEN, HighwayColumn.BAYAN_CLOSED, HighwayColumn.DAYAN_CLOSED, HighwayColumn.DAYAN_OPEN)),
+    KARTAL(listOf(HighwayColumn.KARTAL_OPEN, HighwayColumn.KARTAL_CLOSED)),
+    ;
+
+    val lanes: List<LaneId> get() = columns.map { it.lane }.distinct()
+}
+
 object Highway {
 
     /** The columns left to right; mirrored for a left-handed player. */
-    fun columnsFor(leftHanded: Boolean): List<HighwayColumn> =
-        if (leftHanded) HighwayColumn.entries.reversed() else HighwayColumn.entries
+    fun columnsFor(leftHanded: Boolean, instrument: LearnInstrument = LearnInstrument.MRDANGA): List<HighwayColumn> =
+        when {
+            instrument != LearnInstrument.MRDANGA -> instrument.columns
+            leftHanded -> instrument.columns.reversed()
+            else -> instrument.columns
+        }
+
+    /** True when the beat gives [instrument] anything to play. */
+    fun hasPart(beat: Beat, instrument: LearnInstrument): Boolean =
+        instrument.lanes.any { lane -> beat.pattern(lane)?.any { it != null } == true }
 
     /** How much time the screen shows ahead of the hit line. */
     const val LOOKAHEAD_SECONDS = 1.8
@@ -86,7 +111,12 @@ object Highway {
      * (fractional, `phase × steps`). The beat loops, so the window wraps past the
      * end of the pattern into the next bar.
      */
-    fun frame(beat: Beat, position: Double, lookahead: Double): HighwayFrame {
+    fun frame(
+        beat: Beat,
+        position: Double,
+        lookahead: Double,
+        instrument: LearnInstrument = LearnInstrument.MRDANGA,
+    ): HighwayFrame {
         val steps = beat.steps
         if (steps <= 0) return HighwayFrame(emptyList(), emptyList(), 0)
         val now = floor(position).toInt()
@@ -100,7 +130,7 @@ object Highway {
         for (abs in first..last) {
             val step = Math.floorMod(abs, steps)
             val rel = abs - position
-            for (lane in listOf(LaneId.BAYAN, LaneId.DAYAN)) {
+            for (lane in instrument.lanes) {
                 val stroke = beat.pattern(lane)?.getOrNull(step) ?: continue
                 val column = HighwayColumn.of(lane, stroke) ?: continue
                 notes.add(HighwayNote(column, step, rel))

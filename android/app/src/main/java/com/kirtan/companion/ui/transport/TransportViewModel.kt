@@ -386,6 +386,11 @@ class TransportViewModel(
         publish(settings.copy(learnLeftHanded = leftHanded))
     }
 
+    /** Which part Learn teaches: the karatalas', or (false) the mridanga's. Display only. */
+    fun setLearnKartal(kartal: Boolean) {
+        publish(settings.copy(learnKartal = kartal))
+    }
+
     /**
      * Tap tempo: average the gaps between the last few taps.
      *
