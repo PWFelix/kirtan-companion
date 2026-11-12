@@ -188,7 +188,11 @@ export default {
   "import.title": "Añadir ritmo compartido",
   "import.title2": "Alguien compartió esto",
 
+  "learn.instrument": "Qué parte aprender",
+  "learn.kartal": "Kartals",
   "learn.leftHanded": "Zurdo · dayan a la izquierda",
+  "learn.mrdanga": "Mrdanga",
+  "learn.noKartal": "Este ritmo no tiene parte de kartal",
   "learn.pressPlay": "Pulsa Tocar: los golpes caen sobre la línea",
   "learn.rightHanded": "Diestro · dayan a la derecha",
   "learn.subtitle": "Mira caer los golpes y toca a la par",

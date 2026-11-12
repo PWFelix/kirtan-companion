@@ -12,7 +12,11 @@
  *
  * Four columns, one per hand and stroke, laid out as the drum sits before a
  * player: bayan (left hand) on the left, dayan on the right, open strokes on
- * the outside. Kartal is left off — it is the congregation's part.
+ * the outside.
+ *
+ * The kartal highway is the same geometry with two columns, the ringing
+ * "Ching" (open) and the choked "Chip" (closed), so a learner can practise
+ * the karatalas' part. Handedness does not apply to it.
  */
 import { BOLS, COMBO_BOLS } from "./bols.js";
 import { groupsFor } from "./meter.js";
@@ -38,8 +42,28 @@ export const TRAIL_STEPS = 1;
 
 const floorMod = (a, n) => ((a % n) + n) % n;
 
-export const columnOf = (lane, stroke) =>
-  COLUMNS.findIndex((c) => c.lane === lane && c.stroke === stroke);
+export const KARTAL_COLUMNS = [
+  { lane: "kartal", stroke: "O" },
+  { lane: "kartal", stroke: "X" },
+].map((c) => ({ ...c, bol: BOLS[c.lane][c.stroke] }));
+
+/** What Learn can teach. Each instrument's base columns, in default order. */
+export const INSTRUMENTS = { mrdanga: COLUMNS, kartal: KARTAL_COLUMNS };
+
+/** The base columns for an instrument (unknown falls back to the mridanga). */
+export const baseColumns = (instrument) => INSTRUMENTS[instrument] ?? COLUMNS;
+
+/** The columns left to right for an instrument; only the mridanga mirrors. */
+export const columnsForInstrument = (instrument, leftHanded) =>
+  instrument === "kartal" ? KARTAL_COLUMNS : columnsFor(leftHanded);
+
+/** True when the beat gives this instrument anything to play. */
+export const hasPart = (beat, instrument) =>
+  [...new Set(baseColumns(instrument).map((c) => c.lane))]
+    .some((lane) => (beat[lane] ?? []).some(Boolean));
+
+export const columnOf = (lane, stroke, base = COLUMNS) =>
+  base.findIndex((c) => c.lane === lane && c.stroke === stroke);
 
 /** Steps visible ahead at this tempo — time-based, never fewer than four. */
 export const lookaheadSteps = (bpm, cellsPerQuarter) =>
@@ -60,8 +84,10 @@ export function groupBoundaries(beat) {
 /**
  * Notes ({ column, step, rel }) and beat lines ({ rel, sam }) visible with
  * the playhead at `position` steps. The beat loops, so the window wraps.
+ * `column` indexes `base`, the instrument's columns (default: the mridanga).
  */
-export function highwayFrame(beat, position, lookahead) {
+export function highwayFrame(beat, position, lookahead, base = COLUMNS) {
+  const lanes = [...new Set(base.map((c) => c.lane))];
   const steps = beat.steps;
   if (!(steps > 0)) return { notes: [], lines: [], currentStep: 0 };
   const first = Math.floor(position - TRAIL_STEPS);
@@ -71,10 +97,10 @@ export function highwayFrame(beat, position, lookahead) {
   for (let abs = first; abs <= last; abs++) {
     const step = floorMod(abs, steps);
     const rel = abs - position;
-    for (const lane of ["bayan", "dayan"]) {
+    for (const lane of lanes) {
       const stroke = beat[lane]?.[step];
       if (!stroke) continue;
-      const column = columnOf(lane, stroke);
+      const column = columnOf(lane, stroke, base);
       if (column >= 0) notes.push({ column, step, rel });
     }
     if (bounds.has(step)) lines.push({ rel, sam: step === 0 });

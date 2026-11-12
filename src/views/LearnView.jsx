@@ -3,11 +3,17 @@ import * as sh from "../ui/styles.js";
 import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
 import { t } from "../i18n/index.js";
 import { BackIcon, ChevronRightIcon, PlayIcon, PauseIcon } from "../ui/icons.jsx";
-import { COLUMNS, TRAIL_STEPS, columnsFor, highwayFrame, lookaheadSteps } from "../data/highway.js";
+import { TRAIL_STEPS, baseColumns, columnsForInstrument, hasPart, highwayFrame, lookaheadSteps } from "../data/highway.js";
 
 // Left-handed mirror. Only Learn reads it, so it lives here, not in a hook.
 const LEFT_KEY = "kirtan-learn-left-handed";
 const loadLeft = () => { try { return localStorage.getItem(LEFT_KEY) === "1"; } catch { return false; } };
+// Which part is being learned: the mridanga or the karatalas. Remembered, so a
+// kartal player lands back on their own part.
+const INSTRUMENT_KEY = "kirtan-learn-instrument";
+const loadInstrument = () => {
+  try { return localStorage.getItem(INSTRUMENT_KEY) === "kartal" ? "kartal" : "mrdanga"; } catch { return "mrdanga"; }
+};
 import { cpqFor } from "../data/meter.js";
 
 /**
@@ -27,7 +33,12 @@ function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav })
   const [pickerOpen, setPickerOpen] = useState(false);
   const { playing, ready, bpm, nudgeBpm, togglePlay, getPhase } = transport;
   const [leftHanded, setLeftHanded] = useState(loadLeft);
-  const columns = useMemo(() => columnsFor(leftHanded), [leftHanded]);
+  const [instrument, setInstrument] = useState(loadInstrument);
+  const columns = useMemo(() => columnsForInstrument(instrument, leftHanded), [instrument, leftHanded]);
+  const pickInstrument = (next) => {
+    setInstrument(next);
+    try { localStorage.setItem(INSTRUMENT_KEY, next); } catch { /* private mode: session only */ }
+  };
   const flipHands = () => {
     const next = !leftHanded;
     setLeftHanded(next);
@@ -58,12 +69,25 @@ function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav })
           onClose={() => setPickerOpen(false)} />
       )}
 
-      <button onClick={flipHands} style={st.hands} aria-pressed={leftHanded}>
-        {leftHanded ? t("learn.leftHanded") : t("learn.rightHanded")}
-      </button>
+      <div style={st.segments} role="radiogroup" aria-label={t("learn.instrument")}>
+        {["mrdanga", "kartal"].map((id) => (
+          <button key={id} role="radio" aria-checked={instrument === id} onClick={() => pickInstrument(id)}
+            style={{ ...st.segment, ...(instrument === id ? st.segmentOn : null) }}>
+            {t(`learn.${id}`)}
+          </button>
+        ))}
+      </div>
+
+      {/* Handedness is about which side the drum's heads sit; karatalas have none. */}
+      {instrument === "mrdanga" && (
+        <button onClick={flipHands} style={st.hands} aria-pressed={leftHanded}>
+          {leftHanded ? t("learn.leftHanded") : t("learn.rightHanded")}
+        </button>
+      )}
 
       <HighwayCanvas beat={beat} bpm={bpm} playing={playing} getPhase={getPhase}
-        columns={columns} />
+        columns={columns} base={baseColumns(instrument)}
+        emptyMsg={hasPart(beat, instrument) ? null : t("learn.noKartal")} />
 
       <div style={st.controls}>
         {/* Learning wants SLOWER more than anything: 5 BPM steps. */}
@@ -87,7 +111,7 @@ function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav })
  * first bar at rest while stopped so the learner can read what's coming.
  * Colours are read from the design tokens, so it re-tints with the theme.
  */
-function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
+function HighwayCanvas({ beat, bpm, playing, getPhase, columns, base, emptyMsg }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -98,7 +122,7 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
     const c = {
       head: tok("--head"), worn: tok("--head-worn"), rule: tok("--rule"),
       syahi: tok("--syahi"), soft: tok("--syahi-soft"),
-      dayan: tok("--lane-dayan"), bayan: tok("--lane-bayan"),
+      dayan: tok("--lane-dayan"), bayan: tok("--lane-bayan"), kartal: tok("--lane-kartal"),
       font: tok("--font-body") || "sans-serif",
     };
     let raf = 0;
@@ -106,10 +130,10 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
     const paint = (ctx, w, h) => {
       const position = playing ? (getPhase() || 0) * beat.steps : 0;
       const lookahead = lookaheadSteps(bpm, cpqFor(beat));
-      const frame = highwayFrame(beat, position, lookahead);
+      const frame = highwayFrame(beat, position, lookahead, base);
       const gap = 6, labelH = 34;
       const colW = (w - gap * (columns.length - 1)) / columns.length;
-      const colOf = (n) => columns.indexOf(COLUMNS[n.column]);
+      const colOf = (n) => columns.indexOf(base[n.column]);
       const hitY = h - labelH - 28;
       const pxPerStep = hitY / lookahead;
       const r = Math.min(20, Math.max(7, Math.min(colW, pxPerStep) * 0.36));
@@ -149,7 +173,7 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
           circle(cx, hitY, r * 2); ctx.fill();
         }
         ctx.globalAlpha = alpha;
-        if (COLUMNS[n.column].stroke === "O") {
+        if (base[n.column].stroke === "O") {
           ctx.fillStyle = laneColor(ci); circle(cx, y, r); ctx.fill();
         } else {
           // An X inscribed in the disc's bounds, round-capped like a pen stroke.
@@ -175,11 +199,13 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
         ctx.fillStyle = c.syahi; ctx.font = `600 15px ${c.font}`;
         ctx.fillText(col.bol, cx, h - labelH + 18);
         ctx.fillStyle = c.soft; ctx.font = `9px ${c.font}`;
-        ctx.fillText(`${col.lane === "dayan" ? "Dayan" : "Bayan"} · ${col.stroke === "O" ? t("stroke.open") : t("stroke.closed")}`, cx, h - 3);
+        ctx.fillText(`${LANE_NAMES[col.lane]} · ${col.stroke === "O" ? t("stroke.open") : t("stroke.closed")}`, cx, h - 3);
       });
 
-      if (!playing) {
-        const msg = t("learn.pressPlay");
+      // A beat with nothing for this instrument says so, rather than leaving
+      // an empty highway that reads as broken.
+      if (!playing || emptyMsg) {
+        const msg = emptyMsg ?? t("learn.pressPlay");
         ctx.font = `12px ${c.font}`;
         const tw = ctx.measureText(msg).width, y = hitY - pxPerStep / 2;
         ctx.globalAlpha = 0.92; ctx.fillStyle = c.head;
@@ -207,12 +233,23 @@ function HighwayCanvas({ beat, bpm, playing, getPhase, columns }) {
     const onResize = () => { if (!playing) draw(); };
     window.addEventListener("resize", onResize);
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", onResize); };
-  }, [beat, bpm, playing, getPhase, columns]);
+  }, [beat, bpm, playing, getPhase, columns, base, emptyMsg]);
 
   return <canvas ref={ref} style={st.canvas} role="img" aria-label="Falling strokes" />;
 }
 
+const LANE_NAMES = { dayan: "Dayan", bayan: "Bayan", kartal: "Kartal" };
+
 const st = {
+  segments: {
+    flexShrink: 0, display: "flex", gap: 4, padding: 4, borderRadius: 14,
+    background: "var(--head-worn)",
+  },
+  segment: {
+    flex: 1, minHeight: 38, borderRadius: 10, border: "none", background: "transparent",
+    color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 14, cursor: "pointer",
+  },
+  segmentOn: { background: "var(--head)", color: "var(--syahi)", boxShadow: "0 0 0 1px var(--rule)" },
   titleBtn: { background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit", maxWidth: "100%" },
   caret: { fontSize: "0.6em", color: "var(--ink-secondary)" },
   titleWrap: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center" },

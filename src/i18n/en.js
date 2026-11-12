@@ -189,7 +189,11 @@ export default {
   "import.title": "Add shared beat",
   "import.title2": "Someone shared this",
 
+  "learn.instrument": "Learn which part",
+  "learn.kartal": "Kartals",
   "learn.leftHanded": "Left-handed · dayan on the left",
+  "learn.mrdanga": "Mrdanga",
+  "learn.noKartal": "This beat has no kartal part",
   "learn.pressPlay": "Press Play — strokes land on the line",
   "learn.rightHanded": "Right-handed · dayan on the right",
   "learn.subtitle": "Watch the strokes land, and play along",
