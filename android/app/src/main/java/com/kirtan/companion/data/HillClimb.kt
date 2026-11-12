@@ -11,8 +11,8 @@ package com.kirtan.companion.data
  * (data/hillClimb.js, data/HillClimb.swift).
  */
 object HillClimb {
-    /** BPM added per step. Small steps: a learner should barely notice each one. */
-    val STEPS: List<Int> = listOf(1, 2, 3, 5, 10)
+    /** BPM added per step: steps a learner can feel, from a nudge to a real climb. */
+    val STEPS: List<Int> = listOf(5, 10, 15, 20, 25)
 
     /** Seconds between steps. */
     val INTERVALS_SEC: List<Int> = listOf(30, 60, 120, 180, 300, 600)
