@@ -86,6 +86,11 @@ export class KirtanEngine extends EventEmitter {
     this._sequencer.setBpm(bpm);
   }
 
+  /** Tempo change on the 1 nearest `inSeconds` from now; seconds until it, or null when stopped. */
+  setBpmAtBar(bpm, inSeconds) {
+    return this._sequencer.setBpmAtBar(bpm, inSeconds);
+  }
+
   /** Set master volume. @param {number} value 0..1 */
   setVolume(value) {
     this._soundPlayer.setVolume(value);
@@ -228,6 +233,11 @@ export class KirtanEngine extends EventEmitter {
     const heard = heardContextTime(Tone.getContext().rawContext, perfMs);
     const position = this._sequencer.getPhaseAt(heard) * beat.steps;
     return (position - Math.round(position)) * this._sequencer.stepMs();
+  }
+
+  /** True while the transport runs (a bar-snapped tempo is still to come only then). */
+  get isPlaying() {
+    return this._sequencer.isRunning;
   }
 
   get isReady() {

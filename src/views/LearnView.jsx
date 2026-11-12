@@ -3,7 +3,7 @@ import * as sh from "../ui/styles.js";
 import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
 import { t } from "../i18n/index.js";
 import { BackIcon, ChevronRightIcon, PlayIcon, PauseIcon, StairsIcon } from "../ui/icons.jsx";
-import { CLIMB_STEPS, CLIMB_INTERVALS, climbNext, climbStepOf, climbIntervalOf, climbClock } from "../data/hillClimb.js";
+import { CLIMB_STEPS, CLIMB_INTERVALS, climbNext, climbLeadSeconds, climbStepOf, climbIntervalOf, climbClock } from "../data/hillClimb.js";
 import { tempoRange } from "../data/meter.js";
 import { TRAIL_STEPS, baseColumns, columnsForInstrument, hasPart, highwayFrame, lookaheadSteps } from "../data/highway.js";
 
@@ -55,20 +55,27 @@ function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav })
   const climbTop = bpm >= ceiling;
   const live = useRef({});
   const leftRef = useRef(climb.every);
-  useEffect(() => { live.current = { bpm, ceiling, changeBpm }; });
+  useEffect(() => { live.current = { bpm, ceiling, changeBpm, changeBpmAtBar: transport.changeBpmAtBar, beatsPerBar: beat?.beatsPerBar ?? 4 }; });
   // The countdown runs on PLAYING time: pausing holds it, and Play carries on.
   useEffect(() => {
     if (!climbOn || !playing) return;
+    let handed = false;
     const id = setInterval(() => {
       const { bpm: now, ceiling: top } = live.current;
       if (now >= top) return;
       // Counted in a ref, not a state updater: updaters must stay pure (strict
       // mode runs them twice), and this one changes the tempo.
       const left = leftRef.current - 1;
+      // Handed over a little early so it lands on the 1 nearest the deadline
+      // (climbLeadSeconds); `handed` keeps it to once per step.
+      if (!handed && left <= climbLeadSeconds(now, live.current.beatsPerBar)) {
+        live.current.changeBpmAtBar(climbNext(now, climb.step, top), Math.max(0, left));
+        handed = true;
+      }
       if (left > 0) leftRef.current = left;
       else {
-        live.current.changeBpm(climbNext(now, climb.step, top));
         leftRef.current = climb.every;
+        handed = false;
       }
       setClimbLeft(leftRef.current);
     }, 1000);

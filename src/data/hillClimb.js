@@ -19,6 +19,26 @@ export const DEFAULT_CLIMB_INTERVAL = 120;
 export const climbNext = (bpm, step, ceiling) => Math.max(bpm, Math.min(bpm + step, ceiling));
 
 /** A remembered value snapped to an offered choice (storage may hold anything). */
+/**
+ * SNAP TO BAR. A step doesn't land mid-phrase: the new tempo starts on the 1
+ * nearest the moment the countdown runs out — up to half a bar before or after.
+ * So it is handed to the engine this many whole seconds BEFORE the deadline
+ * (half a bar rounded up, plus one for the countdown's own granularity), early
+ * enough that the nearest 1 is still ahead. The engine picks that 1.
+ */
+export const climbLeadSeconds = (bpm, beatsPerBar = 4) =>
+  Math.ceil((60 / Math.max(1, bpm)) * beatsPerBar / 2) + 1;
+
+/**
+ * Ticks from now to the bar line nearest a point `ahead` ticks away, given
+ * `into` ticks already into a `bar`-tick bar — never one already played.
+ */
+export function ticksToNearestBar(into, ahead, bar) {
+  let line = Math.round((into + ahead) / bar) * bar;
+  while (line < into) line += bar;
+  return line - into;
+}
+
 export const climbStepOf = (raw) => (CLIMB_STEPS.includes(raw) ? raw : DEFAULT_CLIMB_STEP);
 export const climbIntervalOf = (raw) => (CLIMB_INTERVALS.includes(raw) ? raw : DEFAULT_CLIMB_INTERVAL);
 

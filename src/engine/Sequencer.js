@@ -27,6 +27,7 @@
  *   emits "step" (derived index) on every tick.
  */
 import * as Tone from "tone";
+import { ticksToNearestBar } from "../data/hillClimb.js";
 import { EventEmitter } from "./EventEmitter.js";
 
 // Tiny tolerance added before flooring phase→step. getTicksAtTime()
@@ -68,7 +69,28 @@ export class Sequencer extends EventEmitter {
     // ("1m") and the step interval (now expressed in ticks, "...i")
     // are BOTH tempo-relative musical-time units, they auto-scale
     // together — no resched needed on a tempo change.
+    // A direct change overrides one waiting for its bar (hill climb).
+    Tone.Transport.bpm.cancelScheduledValues(0);
     Tone.Transport.bpm.value = bpm;
+  }
+
+  /**
+   * Change tempo ON THE 1 nearest `inSeconds` from now — Learn's hill climb,
+   * so a speed-up starts a bar instead of landing mid-phrase. Scheduled on the
+   * Transport's own tempo automation, so it takes effect at that downbeat's
+   * exact audio time. Returns the seconds until then (the UI shows the new
+   * tempo as it is heard), or null when stopped.
+   */
+  setBpmAtBar(bpm, inSeconds) {
+    if (Tone.Transport.state !== "started" || !this._beat) return null;
+    const now = Tone.now();
+    const bar = Tone.Transport.PPQ * this._beatsPerBar();
+    const ticksPerSec = (Tone.Transport.bpm.value / 60) * Tone.Transport.PPQ;
+    const into = Tone.Transport.getTicksAtTime(now) % bar;
+    const wait = ticksToNearestBar(into, inSeconds * ticksPerSec, bar) / ticksPerSec;
+    Tone.Transport.bpm.cancelScheduledValues(now);
+    Tone.Transport.bpm.setValueAtTime(bpm, now + wait);
+    return wait;
   }
 
   start() {
@@ -91,6 +113,7 @@ export class Sequencer extends EventEmitter {
       this._loopId = null;
     }
     Tone.Transport.stop();
+    Tone.Transport.bpm.cancelScheduledValues(0);
     Tone.Transport.position = 0;
     Tone.Transport.loop = false;
     this._lastFiredStep = -1;
@@ -122,6 +145,10 @@ export class Sequencer extends EventEmitter {
   stepMs() {
     if (!this._beat) return 0;
     return (60_000 / Tone.Transport.bpm.value) * this._beatsPerBar() / this._beat.steps;
+  }
+
+  get isRunning() {
+    return Tone.Transport.state === "started";
   }
 
   get beat() {

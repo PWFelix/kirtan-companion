@@ -75,6 +75,7 @@ export function useTransport() {
   const brahmaRef = useRef(false);
   const [burstKey, setBurstKey] = useState(0);
   const sessionSaveTimerRef = useRef(null);
+  const barChangeRef = useRef(null); // a hill-climb tempo waiting for its bar
   const [volume, setVolume] = useState(0.9);
   const [endVolumes, setEndVolumes] = useState({});  // per-lane faders, default 1
   const [mutedEnds, setMutedEnds] = useState({});
@@ -248,6 +249,7 @@ export function useTransport() {
   };
 
   function changeBpm(value) {
+    clearTimeout(barChangeRef.current);
     bpmRef.current = value;
     setBpm(value);
     engine.setBpm(value);
@@ -255,6 +257,21 @@ export function useTransport() {
     // Debounced like the EQ prefs: a drag fires this many times a second.
     clearTimeout(sessionSaveTimerRef.current);
     sessionSaveTimerRef.current = setTimeout(() => saveSession({ bpm: bpmRef.current }), 400);
+  }
+  // Hill climb's step: the new tempo starts on the 1 nearest `inSeconds` from
+  // now; the display follows when it is heard. Stopped, it's an ordinary change.
+  function changeBpmAtBar(value, inSeconds) {
+    const wait = engine.setBpmAtBar(value, inSeconds);
+    if (wait == null) return changeBpm(value);
+    clearTimeout(barChangeRef.current);
+    barChangeRef.current = setTimeout(() => {
+      // Stopped before that bar: the engine dropped it, so must the display.
+      if (!engine.isPlaying) return;
+      bpmRef.current = value;
+      setBpm(value);
+      setMode(brahmalokaFor(value, brahmaRef.current));
+      saveSession({ bpm: value });
+    }, wait * 1000);
   }
   function setMode(on) {
     brahmaRef.current = on;
@@ -406,6 +423,7 @@ export function useTransport() {
   const unlock = () => engine.unlock();
 
   return {
+    changeBpmAtBar,
     engine, ready, playing, step, getPhase,
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo, clampBpm,
     brahmaloka, burstKey, unlockBrahmaloka, leaveBrahmaloka,
