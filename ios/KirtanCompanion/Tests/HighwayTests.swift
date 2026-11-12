@@ -5,16 +5,23 @@ final class HighwayTests: XCTestCase {
     private var doubleTime: Beat { Beats.beats.first { $0.id == "double_time_2" }! }
     private var daspahir: Beat { Beats.beats.first { $0.id == "daspahir_taal" }! }
 
-    func testColumnsAreHeadedByTheirBols() {
-        XCTAssertEqual(LearnInstrument.mrdanga.columns.map(\.bol), ["Ge", "Khe", "Te", "Ta"])
-        XCTAssertEqual(LearnInstrument.kartal.columns.map(\.bol), ["Ching", "Chip"])
+    func testOneColumnPerHandNotPerStroke() {
+        XCTAssertEqual(LearnInstrument.mrdanga.columns, [.bayan, .dayan])
+        XCTAssertEqual(LearnInstrument.kartal.columns, [.kartal])
+    }
+
+    func testEachNoteKeepsItsStrokeAndBol() {
+        // Step 0 of Double Time 2: dayan X (Te) and bayan O (Ge), one per column.
+        let now = Highway.frame(doubleTime, position: 0, lookahead: 8).notes.filter { $0.rel == 0 }
+        XCTAssertEqual(Set(now.map { "\($0.column.wireId) \($0.stroke.rawValue) \($0.bol)" }), ["dayan X Te", "bayan O Ge"])
     }
 
     func testTheKartalHighwayCarriesOnlyTheKartalLine() {
         let beat = Beats.beats.first { Highway.hasPart($0, .kartal) }!
         let frame = Highway.frame(beat, position: 0, lookahead: Double(beat.steps - 1), instrument: .kartal)
         XCTAssertFalse(frame.notes.isEmpty)
-        XCTAssertTrue(frame.notes.allSatisfy { $0.column.lane == .kartal })
+        XCTAssertTrue(frame.notes.allSatisfy { $0.column == .kartal })
+        XCTAssertEqual(Set(frame.notes.map(\.bol)), ["Ching", "Chip"])
         let expected = beat.pattern(.kartal)!.prefix(beat.steps).filter { $0 != nil }.count
         XCTAssertEqual(frame.notes.filter { $0.rel >= 0 && $0.rel < Double(beat.steps) }.count, expected)
         // The kartal never mirrors: handedness is the drum's.
@@ -27,7 +34,7 @@ final class HighwayTests: XCTestCase {
     func testANoteSitsOnTheHitLineAtItsStep() {
         let frame = Highway.frame(doubleTime, position: 0, lookahead: 8)
         let now = Set(frame.notes.filter { $0.rel == 0 }.map(\.column))
-        XCTAssertEqual(now, [.dayanClosed, .bayanOpen])
+        XCTAssertEqual(now, [.dayan, .bayan])
         XCTAssertEqual(frame.currentStep, 0)
     }
 
@@ -39,7 +46,7 @@ final class HighwayTests: XCTestCase {
             for abs in 6...15 {
                 guard let stroke = pattern[abs % 16] else { continue }
                 let hits = frame.notes.filter {
-                    $0.column == HighwayColumn.of(lane, stroke) && $0.rel == Double(abs) - pos
+                    $0.column == lane && $0.stroke == stroke && $0.rel == Double(abs) - pos
                 }
                 XCTAssertEqual(hits.count, 1, "lane \(lane) step \(abs)")
             }
@@ -50,8 +57,9 @@ final class HighwayTests: XCTestCase {
     func testTheWindowWrapsIntoTheNextBar() {
         let frame = Highway.frame(daspahir, position: 30, lookahead: 6)
         XCTAssertTrue(frame.lines.contains { $0.sam && $0.rel == 2 })
-        let downbeat = frame.notes.filter { $0.step == 0 && $0.rel == 2 }.map(\.column)
-        XCTAssertEqual(downbeat, [.bayanOpen])
+        let downbeat = frame.notes.filter { $0.step == 0 && $0.rel == 2 }
+        XCTAssertEqual(downbeat.map(\.column), [.bayan])
+        XCTAssertEqual(downbeat.map(\.stroke), [.open])
     }
 
     func testBeatLinesFallOnGroupBoundaries() {
@@ -71,8 +79,8 @@ final class HighwayTests: XCTestCase {
     }
 
     func testLeftHandedMirrorsTheColumns() {
-        XCTAssertEqual(Highway.columns(leftHanded: false).map(\.bol), ["Ge", "Khe", "Te", "Ta"])
-        XCTAssertEqual(Highway.columns(leftHanded: true).map(\.bol), ["Ta", "Te", "Khe", "Ge"])
+        XCTAssertEqual(Highway.columns(leftHanded: false), [.bayan, .dayan])
+        XCTAssertEqual(Highway.columns(leftHanded: true), [.dayan, .bayan])
     }
 
     func testLeftHandedPrefRoundTrips() {

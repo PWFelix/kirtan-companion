@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The Learn tab: a "falling notes" view of the loaded beat.
 ///
-/// A port of Android's `LearnScreen.kt`. Each stroke drops down its own column (one
+/// A port of Android's `LearnScreen.kt`. Each stroke drops down its hand's column (one
 /// per hand and stroke, headed by its bol) and lands on the hit line at the instant
 /// the drum sounds it, so a learner can watch what is coming and play along on a real
 /// mridanga. Watch-only: no scoring — the point is to follow the drum.
@@ -380,34 +380,37 @@ private struct HighwayCanvas: View {
             let cx = colX(columns.firstIndex(of: note.column) ?? 0) + colW / 2
             let y = yFor(note.rel)
             guard y >= -noteR, y <= hitY + noteR * 3 else { continue }
-            let color = Palette.lane(note.column.lane)
+            let color = Palette.lane(note.column)
             let landed = note.rel <= 0
             let alpha = landed ? min(max(1 + note.rel / Highway.trailSteps, 0), 1) : 1
             if playing && landed && note.rel > -0.6 {
                 ctx.fill(circle(CGPoint(x: cx, y: hitY), noteR * 2), with: .color(color.opacity(0.25 * alpha)))
             }
             let c = CGPoint(x: cx, y: y)
-            switch note.column.stroke {
+            switch note.stroke {
             case .open: ctx.fill(circle(c, noteR), with: .color(color.opacity(alpha)))
             case .closed:
                 let d = (noteR - 2) * 0.75 / 0.72 // CrossMark insets 14% each side
                 ctx.stroke(CrossMark().path(in: CGRect(x: c.x - d, y: c.y - d, width: d * 2, height: d * 2)),
                            with: .color(color.opacity(alpha)), style: StrokeStyle(lineWidth: 4, lineCap: .round))
             }
+            // Its bol beside it: one column per hand, so the stroke is named here.
+            // (Not once it has passed the line: it would run into the hand's label.)
+            if y <= hitY {
+                ctx.draw(Text(note.bol).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.syahi.opacity(alpha)),
+                         at: CGPoint(x: cx + noteR + 6, y: y), anchor: .leading)
+            }
         }
 
-        // Targets on the hit line, with each column's bol underneath.
+        // Targets on the hit line, with the hand (lane) underneath.
         for (i, column) in columns.enumerated() {
             let cx = colX(i) + colW / 2
-            let color = Palette.lane(column.lane)
+            let color = Palette.lane(column)
             let hot = playing && frame.notes.contains { $0.column == column && $0.rel <= 0 && $0.rel > -0.5 }
             ctx.stroke(circle(CGPoint(x: cx, y: hitY), noteR + 4),
                        with: .color(hot ? color : color.opacity(0.35)), lineWidth: hot ? 4 : 2)
-            ctx.draw(Text(column.bol).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.syahi),
+            ctx.draw(Text(column.label).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.syahi),
                      at: CGPoint(x: cx, y: size.height - labelH + 12))
-            let sub = "\(column.lane.label) · " + (column.stroke == .open ? String(localized: "open", bundle: .strings) : String(localized: "closed", bundle: .strings))
-            ctx.draw(Text(sub).font(.system(size: 9)).foregroundStyle(Palette.syahiSoft),
-                     at: CGPoint(x: cx, y: size.height - 6))
         }
 
         // A beat with nothing for this instrument says so, rather than leaving an empty

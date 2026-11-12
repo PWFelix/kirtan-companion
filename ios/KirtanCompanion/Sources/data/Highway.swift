@@ -8,43 +8,25 @@ import Foundation
 /// three cells from now, three step-heights above it.
 ///
 /// Position comes from the engine's bar phase (`getPhase() × steps`), which is already
-/// backed off by output latency — a continuous, drift-free playhead. Four columns, one
-/// per hand and stroke, laid out as the drum sits before a player: bayan (left hand)
-/// on the left, dayan on the right, open strokes on the outside. Kartal is left off —
-/// it is the congregation's part, not the mridanga player's.
-enum HighwayColumn: Int, CaseIterable {
-    case bayanOpen, bayanClosed, dayanClosed, dayanOpen
-    // The karatalas' highway: the ringing "Ching" and the choked "Chip".
-    case kartalOpen, kartalClosed
+/// backed off by output latency — a continuous, drift-free playhead.
+///
+/// ONE COLUMN PER HAND, not per stroke: the eye only needs to know which hand and
+/// when — the hand already knows how to make the stroke. So the mridanga is two
+/// columns, laid out as the drum sits before a player (bayan, left hand, on the left;
+/// dayan on the right), and the karatalas one. Each note still says what it is: open
+/// is a disc, closed an X, with its bol beside it.
+typealias HighwayColumn = LaneId
 
-    var lane: LaneId {
-        switch self {
-        case .bayanOpen, .bayanClosed: .bayan
-        case .dayanOpen, .dayanClosed: .dayan
-        case .kartalOpen, .kartalClosed: .kartal
-        }
-    }
-
-    var stroke: Stroke {
-        switch self {
-        case .bayanOpen, .dayanOpen, .kartalOpen: .open
-        case .bayanClosed, .dayanClosed, .kartalClosed: .closed
-        }
-    }
-
-    /// The spoken syllable for this stroke — the column's heading.
-    var bol: String { Bols.forStroke(laneId: lane.wireId, code: stroke.rawValue) ?? "" }
-
-    static func of(_ lane: LaneId, _ stroke: Stroke) -> HighwayColumn? {
-        allCases.first { $0.lane == lane && $0.stroke == stroke }
-    }
-}
-
-/// One falling note. `step` is its index in the beat, `rel` its distance in steps.
+/// One falling note: in `column` (its lane), struck `stroke`. `step` is its index in
+/// the beat, `rel` its distance in steps.
 struct HighwayNote: Equatable {
     let column: HighwayColumn
+    let stroke: Stroke
     let step: Int
     let rel: Double
+
+    /// The spoken syllable for this stroke, drawn beside the note.
+    var bol: String { Bols.forStroke(laneId: column.wireId, code: stroke.rawValue) ?? "" }
 }
 
 /// A horizontal guide at a beat (group) boundary; `sam` marks the bar's first.
@@ -60,30 +42,25 @@ struct HighwayFrame {
     let currentStep: Int
 }
 
-/// What Learn teaches: the mridanga (four columns, mirrored for a left-handed player)
-/// or the karatalas (two columns; handedness does not apply). Same split as Android's
+/// What Learn teaches: the mridanga (two columns, one per hand, mirrored for a
+/// left-handed player) or the karatalas (one column; handedness does not apply). Same split as Android's
 /// `LearnInstrument` and the web's `INSTRUMENTS`.
 enum LearnInstrument: CaseIterable {
     case mrdanga, kartal
 
     var columns: [HighwayColumn] {
         switch self {
-        case .mrdanga: [.bayanOpen, .bayanClosed, .dayanClosed, .dayanOpen]
-        case .kartal: [.kartalOpen, .kartalClosed]
+        case .mrdanga: [.bayan, .dayan]
+        case .kartal: [.kartal]
         }
     }
 
-    var lanes: [LaneId] {
-        var out: [LaneId] = []
-        for c in columns where !out.contains(c.lane) { out.append(c.lane) }
-        return out
-    }
+    var lanes: [LaneId] { columns }
 }
 
 enum Highway {
     /// The columns left to right. allCases is the right-handed layout; a left-handed
-    /// player sits the drum the other way round, so it mirrors: dayan on the left,
-    /// open strokes still on the outside.
+    /// player sits the drum the other way round, so it mirrors: dayan on the left.
     static func columns(leftHanded: Bool, instrument: LearnInstrument = .mrdanga) -> [HighwayColumn] {
         instrument == .mrdanga && leftHanded ? instrument.columns.reversed() : instrument.columns
     }
@@ -122,9 +99,8 @@ enum Highway {
             let rel = Double(abs) - position
             for lane in instrument.lanes {
                 guard let pattern = beat.pattern(lane), step < pattern.count,
-                      let stroke = pattern[step],
-                      let column = HighwayColumn.of(lane, stroke) else { continue }
-                notes.append(HighwayNote(column: column, step: step, rel: rel))
+                      let stroke = pattern[step] else { continue }
+                notes.append(HighwayNote(column: lane, stroke: stroke, step: step, rel: rel))
             }
             if boundaries.contains(step) { lines.append(HighwayLine(rel: rel, sam: step == 0)) }
         }
