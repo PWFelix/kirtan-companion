@@ -242,8 +242,9 @@ data class EditorDraft(
     val windowEnd: Int get() = pages.getOrNull(page)?.let { it.last + 1 } ?: steps
     val zoomCells: Int get() = windowEnd - windowStart
 
-    /** ± is refused past 64 cells: every app version rejects a longer beat. */
-    val canAddBeat: Boolean get() = steps + meter.unit.sum() <= ShareCodec.MAX_STEPS
+    /** ± is refused past MAX_STEPS (384 cells, 32 beats at 12 per beat). Versions before 0.4.35 / iOS 0.4.29 capped beats at 64 cells and drop longer ones. */
+    val canAddBeat: Boolean get() =
+        steps + meter.unit.sum() <= ShareCodec.MAX_STEPS && groups.size + meter.unit.size <= ShareCodec.MAX_GROUPS
     val canRemoveBeat: Boolean get() = groups.size > meter.unit.size
 
     /** How many beats the bar has — one per numbered group. */
@@ -257,7 +258,7 @@ data class EditorDraft(
         return ResolutionLever(true, k, (MULTIPLIERS + k).distinct().sorted())
     }
 
-    /** Whether [option] fits: the format caps beats at 64 cells and 12 per beat. */
+    /** Whether [option] fits: the format caps beats at MAX_STEPS cells and 12 per beat. */
     fun resolutionFits(option: Int): Boolean {
         val (newGroups, _) = reshape(option)
         return newGroups.sum() <= ShareCodec.MAX_STEPS && newGroups.max() <= ShareCodec.MAX_GROUP_CELLS
@@ -562,7 +563,7 @@ data class EditorDraft(
     companion object {
         const val UNDO_LIMIT = 60
         const val ZOOM_CELLS = 8
-        /** Cells-per-beat choices for a simple meter; the lever greys any that would pass 64 cells. */
+        /** Cells-per-beat choices for a simple meter; the lever greys any that would pass MAX_STEPS cells. */
         val SIMPLE_RESOLUTIONS = listOf(1, 2, 3, 4, 6, 8)
         /** Multipliers offered for an odd meter. */
         val MULTIPLIERS = listOf(1, 2, 3)

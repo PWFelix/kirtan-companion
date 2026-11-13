@@ -1,6 +1,7 @@
 package com.kirtan.companion.ui.editor
 
 import com.kirtan.companion.data.BEATS
+import com.kirtan.companion.data.ShareCodec
 import com.kirtan.companion.data.model.LaneId
 import com.kirtan.companion.data.model.Stroke
 import org.junit.Assert.assertEquals
@@ -478,16 +479,18 @@ class EditorDraftTest {
     }
 
     @Test
-    fun `options past 64 cells are refused, and so is a 65th cell from plus`() {
+    fun `thirty-two beats fit at every resolution, and plus stops there`() {
         var draft = EditorDraft.from(null)
-        repeat(12) { draft = draft.addGroup() } // 16 beats of 2
-        assertEquals(32, draft.steps)
-        assertTrue(draft.resolutionFits(4))
-        assertFalse(draft.resolutionFits(6))
-        assertEquals(draft, draft.setResolution(8))
-        draft = draft.setResolution(4)
-        assertFalse(draft.canAddBeat)
-        assertEquals(64, draft.addGroup().steps)
+        repeat(28) { draft = draft.addGroup() } // 32 beats of 2
+        assertEquals(64, draft.steps)
+        assertTrue(draft.resolutionFits(8))
+        assertTrue(draft.resolutionFits(12))
+        draft = draft.setResolution(8)
+        assertEquals(256, draft.steps)
+        assertFalse(draft.canAddBeat)  // the 33rd beat is refused
+        assertEquals(256, draft.addGroup().steps)
+        // At 12 per beat, 32 beats is exactly the cell bound.
+        assertEquals(ShareCodec.MAX_STEPS, draft.setResolution(12).steps)
     }
 
     @Test

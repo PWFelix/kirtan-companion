@@ -166,15 +166,16 @@ class ShippedBeatsTest {
         }
         assertNull(shippedBeatsOf(one(good.with("groups", tooWide))))
 
-        // Legal groups that sum past the cell bound. Checked before the lanes, so
-        // the pattern lengths here are irrelevant to the refusal.
-        val tooLong = buildJsonArray { repeat(6) { add(ShareCodec.MAX_GROUP_CELLS) } }
-        assertEquals(72, tooLong.sumOf { it.jsonPrimitive.int })
-        assertTrue(72 > ShareCodec.MAX_STEPS)
+        // Groups that sum past the cell bound (32 beats of 12 is exactly the
+        // bound, so one more beat crosses it). Checked before the lanes, so the
+        // pattern lengths here are irrelevant to the refusal.
+        val tooLong = buildJsonArray { repeat(ShareCodec.MAX_GROUPS + 1) { add(ShareCodec.MAX_GROUP_CELLS) } }
+        assertEquals(396, tooLong.sumOf { it.jsonPrimitive.int })
+        assertTrue(396 > ShareCodec.MAX_STEPS)
         assertNull(shippedBeatsOf(one(good.with("groups", tooLong))))
 
         // The bounds are INCLUSIVE, and the ceiling is reachable by a real beat:
-        // 32 numbered beats of 2 cells is exactly MAX_STEPS. A bound nobody can
+        // 32 numbered beats of 12 cells is exactly MAX_STEPS. A bound nobody can
         // legally reach would be indistinguishable from an off-by-one.
         val atLimit = testBeat(
             id = "at_limit",
@@ -182,8 +183,8 @@ class ShippedBeatsTest {
             group = "Straight",
             steps = ShareCodec.MAX_STEPS,
             beatsPerBar = 32.0,
-            cellsPerGroup = 2,
-            groups = List(ShareCodec.MAX_GROUPS) { 2 },
+            cellsPerGroup = 12,
+            groups = List(ShareCodec.MAX_GROUPS) { 12 },
             dayan = "O".repeat(ShareCodec.MAX_STEPS),
             bayan = "X".repeat(ShareCodec.MAX_STEPS),
         )

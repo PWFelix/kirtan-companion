@@ -36,7 +36,7 @@ enum ShareCodec {
     static let MAX_NAME_LEN = 40
     static let MAX_GROUPS = 32
     static let MAX_GROUP_CELLS = 12
-    static let MAX_STEPS = 64
+    static let MAX_STEPS = 384
     static let MAX_CPQ = 12
     static let MAX_CAT_BEATS = 50
 

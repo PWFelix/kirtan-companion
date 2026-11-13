@@ -50,14 +50,23 @@ final class EditorShapeTests: XCTestCase {
         XCTAssertEqual(EditorShape.seeded(groups: [6, 6], cpq: 4).unit, [6, 6])
     }
 
-    func testOptionsPast64CellsAreRefusedAndSoIsA65thCell() {
+    func testThirtyTwoBeatsFitAtEveryResolution() {
         var shape = std
-        for _ in 0..<12 { shape = shape.addingBeat() } // 16 beats of 2
-        XCTAssertEqual(shape.steps, 32)
-        XCTAssertNotNil(shape.atResolution(4))
-        XCTAssertNil(shape.atResolution(6))
-        shape = shape.atResolution(4)!
+        for _ in 0..<28 { shape = shape.addingBeat() } // 32 beats of 2
+        XCTAssertEqual(shape.steps, 64)
         XCTAssertFalse(shape.canAddBeat)
-        XCTAssertEqual(shape.addingBeat().steps, 64)
+        XCTAssertNotNil(shape.atResolution(8))
+        XCTAssertEqual(shape.atResolution(12)?.steps, ShareCodec.MAX_STEPS)
+    }
+
+    func testThirtyTwoBeatsAtEightCellsAndPlusStopsThere() {
+        var shape = EditorShape(groups: Array(repeating: 8, count: 31), cpq: 8, unit: [8])
+        XCTAssertTrue(shape.canAddBeat)
+        shape = shape.addingBeat()
+        XCTAssertEqual(shape.beatCount, 32)
+        XCTAssertEqual(shape.steps, 256)
+        XCTAssertFalse(shape.canAddBeat)  // a 33rd beat breaks the 32-beat cap
+        // 32 beats of 12 is exactly the cell bound.
+        XCTAssertEqual(EditorShape(groups: Array(repeating: 12, count: 32), cpq: 12, unit: [12]).steps, ShareCodec.MAX_STEPS)
     }
 }

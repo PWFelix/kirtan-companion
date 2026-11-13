@@ -26,8 +26,10 @@ struct EditorShape: Equatable {
     var beatCount: Int { groups.count }
     var beatsPerBar: Double { Double(steps) / Double(cpq) }
 
-    /// ± is refused past 64 cells: every app version rejects a longer beat.
-    var canAddBeat: Bool { steps + unit.reduce(0, +) <= ShareCodec.MAX_STEPS }
+    /// ± is refused past MAX_STEPS (384 cells, 32 beats at 12 per beat). Versions before 0.4.35 / iOS 0.4.29 capped beats at 64 cells and drop longer ones.
+    var canAddBeat: Bool {
+        steps + unit.reduce(0, +) <= ShareCodec.MAX_STEPS && groups.count + unit.count <= ShareCodec.MAX_GROUPS
+    }
     var canRemoveBeat: Bool { groups.count > unit.count }
 
     func addingBeat() -> EditorShape {
@@ -53,7 +55,7 @@ struct EditorShape: Equatable {
     }
 
     /// The shape at [option] on the lever, or nil when it would pass the format's
-    /// caps (64 cells in all, 12 in one beat).
+    /// caps (MAX_STEPS cells in all, 12 in one beat).
     func atResolution(_ option: Int) -> EditorShape? {
         let k = resolution
         let shape: EditorShape

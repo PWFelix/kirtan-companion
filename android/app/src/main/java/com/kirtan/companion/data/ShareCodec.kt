@@ -101,7 +101,7 @@ object ShareCodec {
     const val MAX_NAME_LEN = 40
     const val MAX_GROUPS = 32       // numbered beats in one pattern
     const val MAX_GROUP_CELLS = 12  // cells in one numbered beat
-    const val MAX_STEPS = 64        // total cells — the DoS bound that matters
+    const val MAX_STEPS = 384       // total cells: 32 beats × 12 — the DoS bound that matters
     const val MAX_CPQ = 12
     const val MAX_CAT_BEATS = 50
 

@@ -1038,7 +1038,7 @@ private fun meterSig(preset: MeterPreset): String = when (preset.id) {
  * The second lever: how finely each beat is divided. A simple meter shows cells
  * per beat (1–8); an odd meter shows a multiplier on its own grouping, so 7/8
  * stays 2+2+3 in shape. Changing it keeps the rhythm (see
- * [EditorDraft.setResolution]); options that would pass 64 cells are greyed.
+ * [EditorDraft.setResolution]); options that would pass MAX_STEPS cells are greyed.
  */
 @Composable
 private fun ResolutionRow(draft: EditorDraft, onResolution: (Int) -> Unit) {
