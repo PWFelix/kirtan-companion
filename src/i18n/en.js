@@ -333,6 +333,11 @@ export default {
   "migrate.partial": "Some beats couldn't be moved. Check your connection and try again.",
 
   "mixer.balancedHint": "100% is balanced for phone speakers — the bass end is already boosted.",
+  "swing.title": "Swing",
+  "swing.straight": "Straight",
+  "swing.triplet": "Triplet",
+  "swing.mixerHint": "Plays every second cell late, for a long-short lilt. Starts at the beat’s own swing; choosing a beat brings that back.",
+  "swing.editorHint": "Saved with the beat. Plays every second cell late; beats of three cells stay as written.",
   "mixer.bandGain": "{lane} {band} gain",
   "mixer.eq": "{lane} EQ",
   "mixer.equalizer": "{lane} equalizer",

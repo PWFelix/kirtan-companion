@@ -61,6 +61,7 @@
 import { LANES } from "./lanes.js";
 import { STROKES } from "./strokes.js";
 import { MIN_BPM, MAX_BPM, groupsFor, cpqFor, sumGroups } from "./meter.js";
+import { clampSwing, SWING_STRAIGHT } from "./swing.js";
 
 const VERSION = 1;
 const REST_CHAR = "-";
@@ -118,7 +119,10 @@ function packBeat(beat) {
     const packed = packPattern(beat, lane.id, steps);
     if (packed !== null) patterns[lane.id] = packed;
   }
-  return { n: beat.name, m: beat.bpm, g: groups, q: cpqFor(beat), p: patterns };
+  const out = { n: beat.name, m: beat.bpm, g: groups, q: cpqFor(beat), p: patterns };
+  // Swing rides as "w", only when set: older apps ignore it and play straight.
+  if (clampSwing(beat.swing) > SWING_STRAIGHT) out.w = clampSwing(beat.swing);
+  return out;
 }
 
 export function encodeBeat(beat) {
@@ -206,6 +210,8 @@ function decodeBeat(raw) {
     cellsPerGroup: uniform ? groups[0] : q,
     groups,
     ...lanes,
+    // Junk or out-of-range plays straight rather than refusing the beat.
+    ...(clampSwing(raw.w) > SWING_STRAIGHT ? { swing: clampSwing(raw.w) } : {}),
   };
 }
 

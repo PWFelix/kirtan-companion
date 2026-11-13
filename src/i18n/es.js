@@ -332,6 +332,11 @@ export default {
   "migrate.partial": "Algunos ritmos no se pudieron mover. Revisa tu conexión e inténtalo de nuevo.",
 
   "mixer.balancedHint": "100 % está equilibrado para altavoces de teléfono: el extremo grave ya va reforzado.",
+  "swing.title": "Swing",
+  "swing.straight": "Recto",
+  "swing.triplet": "Tresillo",
+  "swing.mixerHint": "Toca cada segunda celda tarde, con un vaivén largo-corto. Empieza con el swing propio del ritmo; al elegir un ritmo vuelve a ese.",
+  "swing.editorHint": "Se guarda con el ritmo. Toca cada segunda celda tarde; los tiempos de tres celdas quedan como están.",
   "mixer.bandGain": "Ganancia de {band} de {lane}",
   "mixer.eq": "Ecualizador de {lane}",
   "mixer.equalizer": "Ecualizador de {lane}",

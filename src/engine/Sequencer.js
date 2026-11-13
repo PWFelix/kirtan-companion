@@ -30,6 +30,8 @@ import * as Tone from "tone";
 import { ticksToNearestBar } from "../data/hillClimb.js";
 import { EventEmitter } from "./EventEmitter.js";
 import { SequenceCursor } from "../data/sequences.js";
+import { groupsFor } from "../data/meter.js";
+import { swingOffbeats, lateFraction, clampSwing, SWING_STRAIGHT } from "../data/swing.js";
 
 // Tiny tolerance added before flooring phase→step. getTicksAtTime()
 // returns a float, so a value that should be exactly e.g. 3.0 at a step
@@ -85,6 +87,10 @@ export class Sequencer extends EventEmitter {
 
   setBeat(beat) {
     this._beat = beat;
+    // A beat brings its own swing, replacing any live nudge from the mixer.
+    this._offbeats = swingOffbeats(groupsFor(beat));
+    this._swing = clampSwing(beat.swing ?? SWING_STRAIGHT);
+    this.emit("swing", this._swing);
     // Update transport's loop length to the new bar — this is the
     // ONLY remap a beat switch needs. The transport keeps running,
     // so phase is preserved across the switch.
@@ -175,6 +181,13 @@ export class Sequencer extends EventEmitter {
     const loopTicks = Tone.Transport.PPQ * this._beatsPerBar();
     const ticks = Math.max(0, Tone.Transport.getTicksAtTime(time));
     return (ticks % loopTicks) / loopTicks;
+  }
+
+  /** Swing in force (50–67): the beat's own until nudged. */
+  get swing() { return this._swing ?? SWING_STRAIGHT; }
+  setSwing(v) {
+    this._swing = clampSwing(v);
+    this.emit("swing", this._swing);
   }
 
   /** Duration of one step in ms at the current tempo. */
@@ -290,6 +303,10 @@ export class Sequencer extends EventEmitter {
     // (an absent kartal array must not throw, and an unloaded kartal sample
     // just no-ops in SoundPlayer.play).
     const kartalHit = this._beat.kartal?.[step];
+
+    // Swing: the 2nd, 4th… cell of an even beat sounds late. Only the sound
+    // moves; the "step" event (and so the strip) stays on the grid.
+    if (this._offbeats?.[step]) time += (lateFraction(this._swing) * this.stepMs()) / 1000;
 
     if (dayanHit === "O") this._soundPlayer.play("dayan_open", time);
     else if (dayanHit === "X") this._soundPlayer.play("dayan_closed", time);

@@ -10,7 +10,8 @@
  * Public vocabulary:
  *   loadSounds(manifest)  - load the audio files
  *   unlock()              - unlock browser audio (first user tap)
- *   setBeat(beat)         - choose which beat to play
+ *   setBeat(beat)         - choose which beat to play (and its swing)
+ *   setSwing(v), getSwing() - nudge / read the swing in force (50–67)
  *   setBpm(bpm)           - set the tempo
  *   setVolume(value)      - set master volume (0..1)
  *   setEndVolume(end, v)  - per-end volume 0..1 (mixer track faders)
@@ -25,6 +26,7 @@
  *   on("step", cb)        - playhead advanced (derived from phase)
  *   on("ready", cb)       - sounds finished loading
  *   on("started"/"stopped", cb)
+ *   on("swing", cb)       - the swing in force changed (beat switch or nudge)
  *   on("sequenceAt", cb)  - a sequence's downbeat: { index, bar } (bar 1-based)
  *   on("sequenceEnded", cb) - last entry done, loop off (then "stopped")
  *
@@ -54,6 +56,7 @@ export class KirtanEngine extends EventEmitter {
     // A sequence's place, and its end — which stops everything, exactly as
     // a press of Stop would, so the UI needs no second path.
     this._sequencer.on("sequenceAt", (at) => this.emit("sequenceAt", at));
+    this._sequencer.on("swing", (v) => this.emit("swing", v));
     this._sequencer.on("sequenceEnded", () => {
       this.stop();
       this.emit("sequenceEnded");
@@ -89,6 +92,15 @@ export class KirtanEngine extends EventEmitter {
 
   setBeat(beat) {
     this._sequencer.setBeat(beat);
+  }
+
+  /** Nudge the playing beat's swing live (50–67); the next setBeat restores the beat's own. */
+  setSwing(v) {
+    this._sequencer.setSwing(v);
+  }
+
+  getSwing() {
+    return this._sequencer.swing;
   }
 
   setBpm(bpm) {

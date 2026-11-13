@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import SwingControl from "../ui/SwingControl.jsx";
 import { LANES } from "../data/lanes.js";
 import { EQ_BANDS, EQ_BAND_COUNT, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 import { TUNE_MIN_CENTS, TUNE_MAX_CENTS, END_BASE_FREQ, centsToRate, freqToNoteName } from "../data/tuning.js";
@@ -112,7 +113,7 @@ function HomeView({
     ready, playing, step, getPhase,
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo,
     tempoLocked, setTempoLocked,
-    volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
+    volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute, swing, setSwing,
     eqBands = { dayan: EQ_FLAT, bayan: EQ_FLAT },
     eqOpen = { dayan: false, bayan: false },
     changeEqBand, toggleEqPanel,
@@ -357,6 +358,9 @@ function HomeView({
         <p style={{ ...sh.emptyHint, marginTop: "var(--space-4)" }}>
           {t("mixer.balancedHint")}
         </p>
+        <div style={{ marginTop: "var(--space-4)" }}>
+          <SwingControl value={swing} onChange={setSwing} hint={t("swing.mixerHint")} />
+        </div>
       </div>
     </div>
   );

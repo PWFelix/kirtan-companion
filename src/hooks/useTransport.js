@@ -83,6 +83,14 @@ export function useTransport() {
   const [endVolumes, setEndVolumes] = useState({});  // per-lane faders, default 1
   const [mutedEnds, setMutedEnds] = useState({});
   const [tempoLocked, setTempoLocked] = useState(false);
+  // Swing in force: the playing beat's own unless nudged in the mixer. Mirrored
+  // from the engine's "swing" event, which fires on every beat switch too.
+  const [swing, setSwingState] = useState(50);
+  useEffect(() => {
+    engine.on("swing", setSwingState);
+    return () => engine.off("swing", setSwingState);
+  }, [engine]);
+  const setSwing = useCallback((v) => engine.setSwing(v), [engine]);
   const [displayDelayMs, setDisplayDelayMs] = useState(loadDisplayDelay);
   // Per-end EQ: five band gains in dB, the tuning offset in cents, plus
   // each panel's open/closed state.
@@ -434,7 +442,7 @@ export function useTransport() {
     engine, ready, playing, step, getPhase,
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo, clampBpm,
     brahmaloka, burstKey, unlockBrahmaloka, leaveBrahmaloka,
-    tempoLocked, setTempoLocked,
+    tempoLocked, setTempoLocked, swing, setSwing,
     volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
     eqBands, eqOpen, changeEqBand, toggleEqPanel, eqTune, changeEqTune,
     tuneOpen, toggleTunePanel,

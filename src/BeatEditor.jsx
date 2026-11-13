@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import SwingControl from "./ui/SwingControl.jsx";
+import { SWING_STRAIGHT } from "./data/swing.js";
 import { runBetween, copyRun, pasteRun, clipLength } from "./data/clipboard.js";
 import BeatStrip from "./BeatStrip.jsx";
 import { labelsFromGroups } from "./data/stepLabels.js";
@@ -81,6 +83,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   const [bayan, setBayan] = useState(start.bayan);
   const [kartal, setKartal] = useState(start.kartal);
   const [bpm, setBpm]     = useState(start.bpm);
+  const [swing, setSwing] = useState(start.swing ?? SWING_STRAIGHT);
   // Brahmaloka time, editor-local (the editor's tempo is the draft's, not the
   // transport's). A beat saved above 200 opens already in the high range.
   const [brahmaloka, setBrahmaloka] = useState(() => start.bpm > 200);
@@ -103,8 +106,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   const [selectAnchor, setSelectAnchor] = useState(null);
   const [clip, setClip] = useState(null);
   useEffect(() => {
-    onDraftChange?.({ groups, meter, dayan, bayan, kartal, bpm, name, cursor, cursorLane, tags });
-  }, [groups, meter, dayan, bayan, kartal, bpm, name, cursor, cursorLane, tags, onDraftChange]);
+    onDraftChange?.({ groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags });
+  }, [groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags, onDraftChange]);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const overviewRef = useRef(null);
@@ -131,7 +134,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   // What the last resolution change moved or dropped, shown until the next edit.
   const [resampleReport, setResampleReport] = useState(null);
 
-  const previewBeat = { id: "preview", name: name || t("editor.preview"), note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan, kartal };
+  const previewBeat = { id: "preview", name: name || t("editor.preview"), note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan, kartal, swing };
   const beatRef = useRef(previewBeat);
   useEffect(() => { beatRef.current = previewBeat; });
 
@@ -192,7 +195,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
     if (!previewing) return;
     engine.setBeat(beatRef.current);
     engine.setBpm(bpm);
-  }, [previewing, dayan, bayan, kartal, bpm, steps, engine]);
+  }, [previewing, dayan, bayan, kartal, bpm, swing, steps, engine]);
 
   const getPhase = () => engine.getPhase();
 
@@ -282,6 +285,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
       cellsPerGroup: uniform ? groups[0] : cpq, groups, dayan, bayan,
       ...(hasKartal ? { kartal } : {}),
       ...(tags.length ? { tags } : {}),
+      ...(swing > SWING_STRAIGHT ? { swing } : {}),
       // A copy of a community beat remembers its original (see communityTracking.js).
       ...(initialBeat?.forkedFrom ? { forkedFrom: initialBeat.forkedFrom } : {}) });
     if (saved) { onClose(); return; }   // unmounts — no state to reset
@@ -548,6 +552,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
               onChange={changeBpm} onUnlock={unlockBrahmaloka}
               title={brahmaloka ? t("brahma.badge") : t("brahma.hint")} ariaLabel={t("tempo.title")} />
           </div>
+          <SwingControl value={swing} onChange={setSwing} hint={t("swing.editorHint")} />
         </div>
 
       </div>
