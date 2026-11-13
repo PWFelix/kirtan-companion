@@ -27,6 +27,14 @@ enum EditorPads {
         } + [EditorPad(lane: lane, stroke: nil, label: "Rest")]
     }
 
+    /// A tap on the cell ALREADY selected steps it through its row's palette —
+    /// rest → open → closed → rest — so a cell can be edited without moving.
+    static func cycled(_ stroke: Stroke?, lane: LaneId) -> Stroke? {
+        let order: [Stroke?] = [nil] + forLane(lane).compactMap(\.stroke)
+        let at = order.firstIndex(of: stroke) ?? 0
+        return order[(at + 1) % order.count]
+    }
+
     /// Where entry goes after writing `step`: the next cell on the row, wrapping
     /// at the end of the bar.
     static func nextStep(after step: Int, steps: Int) -> Int {

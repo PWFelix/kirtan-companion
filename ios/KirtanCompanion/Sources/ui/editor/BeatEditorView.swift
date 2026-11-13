@@ -356,7 +356,7 @@ struct BeatEditorView: View {
                                 chosen: selection?.contains(s) == true,
                                 size: max(16, cellSize - 2),
                             ) {
-                                setCursor(lane: laneIndex, step: s)
+                                tapCell(lane: laneIndex, step: s)
                             }
                             .id(laneIndex * 1000 + s)
                         }
@@ -409,6 +409,21 @@ struct BeatEditorView: View {
     }
 
     private var cursorLane: LaneId { LaneId.ordered[cursor.lane] }
+
+    /// First tap selects a cell; a tap on the selected one cycles it (EditorPads.cycled),
+    /// sounding what lands. Choosing a run to copy only ever moves its end.
+    private func tapCell(lane: Int, step: Int) {
+        guard selectAnchor == nil, lane == cursor.lane, step == cursor.step else {
+            setCursor(lane: lane, step: step)
+            return
+        }
+        beforePaste = nil
+        let next = EditorPads.cycled(patternValue(lane, step), lane: LaneId.ordered[lane])
+        setPatternValue(lane: lane, step: step, value: next)
+        if let next, !previewing {
+            transport.engineHandle.playStroke(LaneId.ordered[lane], open: next == .open)
+        }
+    }
 
     private func setPatternValue(lane: Int, step: Int, value: Stroke?) {
         switch LaneId.ordered[lane] {

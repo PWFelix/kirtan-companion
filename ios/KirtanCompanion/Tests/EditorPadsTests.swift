@@ -18,3 +18,12 @@ final class EditorPadsTests: XCTestCase {
         XCTAssertEqual(EditorPads.nextStep(after: 0, steps: 0), 0)
     }
 }
+
+final class EditorCycleTests: XCTestCase {
+    func testCycleRunsRestOpenClosedRest() {
+        XCTAssertEqual(EditorPads.cycled(nil, lane: .bayan), .open)
+        XCTAssertEqual(EditorPads.cycled(.open, lane: .bayan), .closed)
+        XCTAssertNil(EditorPads.cycled(.closed, lane: .bayan))
+        XCTAssertEqual(EditorPads.cycled(nil, lane: .kartal), .open)
+    }
+}
