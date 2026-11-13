@@ -9,7 +9,7 @@
 
 export default {
   "about.glories": "¡Todas las glorias a Śrīla Prabhupāda!",
-  "about.gloss": "Mṛdaṅga-dhīra (मृदङ्गधीर): quien es firme, valiente o heroico con la mṛdaṅga.",
+  "about.gloss": "Kirtanero (de कीर्तन, kīrtana): quien glorifica al Señor Supremo a través del canto.",
   "about.production": "una producción de World Sankirtan Party",
   "about.title": "Acerca de",
 
