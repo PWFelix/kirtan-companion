@@ -317,6 +317,52 @@
         }
       }
     },
+    "%lld cells copied" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld cell copied"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld cells copied"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld celda copiada"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld celdas copiadas"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld celdas copiadas"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld copies" : {
       "localizations" : {
         "en" : {
@@ -1145,6 +1191,16 @@
         }
       }
     },
+    "Cells %lld–%lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Celdas %1$lld–%2$lld"
+          }
+        }
+      }
+    },
     "Cells per beat" : {
       "localizations" : {
         "es" : {
@@ -1291,6 +1347,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Las copias que otros ya hicieron se quedan en sus bibliotecas."
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar"
+          }
+        }
+      }
+    },
+    "Copy cells" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiar celdas"
           }
         }
       }
@@ -2601,6 +2677,16 @@
         }
       }
     },
+    "Paste" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pegar"
+          }
+        }
+      }
+    },
     "Paste a share code or link" : {
       "localizations" : {
         "es" : {
@@ -2617,6 +2703,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pega un código o enlace compartido. Sirve el enlace completo: el código se lee de él igualmente."
+          }
+        }
+      }
+    },
+    "Paste, bayan closed" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pegar, bayan cerrado"
+          }
+        }
+      }
+    },
+    "Pastes with the bayan’s open strokes closed — a guru half becomes its laghu half." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pega con los golpes abiertos del bayan cerrados: una mitad guru se vuelve su mitad laghu."
           }
         }
       }
@@ -3583,6 +3689,16 @@
         }
       }
     },
+    "Tap the last cell to copy" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toca la última celda a copiar"
+          }
+        }
+      }
+    },
     "Teental" : {
       "localizations" : {
         "es" : {
@@ -4085,6 +4201,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deshacer"
+          }
+        }
+      }
+    },
+    "Undo paste" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deshacer pegado"
           }
         }
       }

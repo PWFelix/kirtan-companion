@@ -48,6 +48,13 @@ struct BeatEditorView: View {
     /// the editor has no general undo, so this one change gets its own.
     @State private var lastResample: (shape: EditorShape, lanes: [[Stroke?]], report: ResampleReport)?
     @State private var seeded = false
+    /// Copy and paste (data/EditorClipboard.swift). While choosing a run this is
+    /// the cell it started at, and the cursor is its other end.
+    @State private var selectAnchor: Int?
+    @State private var clip: EditorClipboard.Clip?
+    /// The lanes before the last paste, for its one-step undo (the editor has
+    /// no general undo, as with a resolution change).
+    @State private var beforePaste: [LaneId: [Stroke?]]?
     @State private var saving = false
     @State private var saveError: String?
     /// The author's tags, published with the beat.
@@ -70,6 +77,7 @@ struct BeatEditorView: View {
                     lengthRow
                     resolutionRow
                     grid
+                    clipRow
                     pads
                     saveRow
                 }
@@ -332,6 +340,7 @@ struct BeatEditorView: View {
                                 lane: lane,
                                 isCursor: cursor.lane == laneIndex && cursor.step == s,
                                 sameMoment: cursor.lane != laneIndex && cursor.step == s,
+                                chosen: selection?.contains(s) == true,
                                 size: max(16, cellSize - 2),
                             ) {
                                 setCursor(lane: laneIndex, step: s)
@@ -378,6 +387,7 @@ struct BeatEditorView: View {
 
     /// Write the pad into the selected cell, sound it, and step along the same row.
     private func applyPad(_ pad: EditorPad) {
+        beforePaste = nil  // its undo would now take this edit back too
         setPatternValue(lane: cursor.lane, step: cursor.step, value: pad.stroke)
         if let stroke = pad.stroke, !previewing {
             transport.engineHandle.playStroke(pad.lane, open: stroke == .open)
@@ -399,6 +409,90 @@ struct BeatEditorView: View {
         cursor = (lane: min(max(0, lane), LaneId.ordered.count - 1), step: min(max(0, step), steps - 1))
     }
 
+    // ── Copy and paste ─────────────────────────────────────────────────────
+
+    private var selection: ClosedRange<Int>? {
+        selectAnchor.map { EditorClipboard.run(min($0, steps - 1), cursor.step) }
+    }
+
+    private var lanes: [LaneId: [Stroke?]] { [.dayan: dayan, .bayan: bayan, .kartal: kartal] }
+
+    private func setLanes(_ l: [LaneId: [Stroke?]]) {
+        dayan = l[.dayan] ?? dayan
+        bayan = l[.bayan] ?? bayan
+        kartal = l[.kartal] ?? kartal
+    }
+
+    private func paste(closeBayan: Bool) {
+        guard let clip else { return }
+        let r = EditorClipboard.paste(clip, into: lanes, at: cursor.step, closeBayan: closeBayan)
+        guard r.written > 0 else { return }
+        beforePaste = lanes
+        setLanes(r.lanes)
+        cursor.step = (cursor.step + r.written) % steps
+    }
+
+    /// "Copy cells" starts a run at the cursor; tapping cells moves its other end;
+    /// Copy keeps it. Paste writes it from the cursor on; "bayan closed" turns a
+    /// guru half into its laghu half in one go.
+    private var clipRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let sel = selection {
+                Text(String(localized: "Cells \(sel.lowerBound + 1)–\(sel.upperBound + 1)", bundle: .strings)
+                     + " · " + String(localized: "Tap the last cell to copy", bundle: .strings))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Palette.clay)
+                HStack(spacing: 8) {
+                    Button {
+                        clip = EditorClipboard.copy(lanes, sel)
+                        cursor.step = sel.lowerBound
+                        selectAnchor = nil
+                    } label: {
+                        Text(String(localized: "Copy", bundle: .strings)).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button { selectAnchor = nil } label: {
+                        Text(String(localized: "Cancel", bundle: .strings)).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Button { selectAnchor = cursor.step } label: {
+                        Text(String(localized: "Copy cells", bundle: .strings)).frame(maxWidth: .infinity)
+                    }
+                    Button { paste(closeBayan: false) } label: {
+                        Text(String(localized: "Paste", bundle: .strings)).frame(maxWidth: .infinity)
+                    }
+                    .disabled(clip == nil)
+                }
+                .buttonStyle(.bordered)
+                if let clip {
+                    Button { paste(closeBayan: true) } label: {
+                        Text(String(localized: "Paste, bayan closed", bundle: .strings)).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    Text(String(localized: "\(clip.count) cells copied", bundle: .strings)
+                         + " · " + String(localized: "Pastes with the bayan’s open strokes closed — a guru half becomes its laghu half.", bundle: .strings))
+                        .font(.caption)
+                        .foregroundStyle(Palette.syahiSoft)
+                }
+                if let before = beforePaste {
+                    Button {
+                        setLanes(before)
+                        beforePaste = nil
+                    } label: {
+                        Label(String(localized: "Undo paste", bundle: .strings), systemImage: "arrow.uturn.backward")
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Palette.clay)
+                }
+            }
+        }
+        .tint(Palette.clay)
+    }
+
     /// The selected cell's row's palette, with a heading saying which cell it writes.
     private var pads: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -418,6 +512,7 @@ struct BeatEditorView: View {
             }
             Spacer()
             Button {
+                beforePaste = nil
                 dayan = Array(repeating: nil, count: steps)
                 bayan = Array(repeating: nil, count: steps)
                 kartal = Array(repeating: nil, count: steps)
@@ -627,6 +722,8 @@ struct BeatEditorView: View {
     private func setShape(_ next: EditorShape) {
         shape = next
         lastResample = nil
+        selectAnchor = nil
+        beforePaste = nil
         let n = steps
         setCursor(lane: cursor.lane, step: cursor.step)
         dayan = resized(dayan, to: n)
@@ -647,6 +744,8 @@ private struct EditorCell: View {
     let isCursor: Bool
     /// The cursor's column on another row: where the other hands fall at that moment.
     var sameMoment = false
+    /// Inside the run being chosen for copying.
+    var chosen = false
     var size: CGFloat = 30
     var onTap: () -> Void
 
@@ -655,6 +754,11 @@ private struct EditorCell: View {
             RoundedRectangle(cornerRadius: size * 0.2)
                 .fill(stroke == nil ? (sameMoment ? Palette.headSunken : Palette.headWorn) : Palette.lane(lane).opacity(0.18))
                 .frame(width: size, height: size)
+                .overlay {
+                    if chosen {
+                        RoundedRectangle(cornerRadius: size * 0.2).fill(Palette.clay.opacity(0.22))
+                    }
+                }
                 .overlay {
                     if let stroke {
                         mark(stroke)
