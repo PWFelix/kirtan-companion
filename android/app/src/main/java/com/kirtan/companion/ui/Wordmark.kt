@@ -50,15 +50,11 @@ import com.kirtan.companion.ui.theme.fraunces
  * that carries straight across: a rasterised or pre-baked logo cannot use the
  * app's real fonts, and the old file always rendered in fallbacks. This is live
  * text in the bundled Fraunces, coloured from the design tokens (clay wordmark,
- * strap Devanagari and tilak), so it re-tints with any future theme exactly as
- * the JSX does.
+ * strap Devanagari), so it re-tints with any future theme exactly as the JSX
+ * does.
  *
  * Structure, top to bottom: कीर्तन in Noto Sans Devanagari at 0.46em in the
- * strap colour, then the wordmark in Fraunces bold in clay, in which the
- * Vaishnava TILAK stands in as the "i" of "Companion" — the same trick as the
- * original logo. `Kirtan Compan` + tilak + `on`, with the tilak set as inline
- * content so it sits on the text baseline where the dot and stem of the "i"
- * would be.
+ * strap colour, then "Kirtanero" in Fraunces bold in clay.
  *
  * **Everything is sized from the single [size] parameter**, which is the CSS
  * `--wm-size`: 1em = the wordmark line, and every other measurement is a
@@ -69,9 +65,8 @@ import com.kirtan.companion.ui.theme.fraunces
  * not scale with the user's font-size setting.** [size] is a [Dp], and the text
  * sizes are converted through `Density.toSp()`, which divides by the font scale
  * — so a 44dp wordmark renders at 44dp whether the device is at 100% or 200%
- * text. That is not an accessibility oversight: the tilak is drawn to sit at a
- * fixed fraction of the line, and if the text grew while the tilak did not the
- * mark would drift off the "i" and the lockup would come apart. A logotype is a
+ * text. That is not an accessibility oversight: the two lines are proportioned
+ * against each other, and a logotype is a
  * graphic, and the web sizes it in px (`clamp(30px, 8.5vw, 44px)`) for the same
  * reason. Body text elsewhere in the app uses `sp` as normal.
  *
@@ -95,35 +90,6 @@ internal fun Wordmark(size: Dp, modifier: Modifier = Modifier) {
     val devaStyle = remember(devaSize) { devanagari(devaSize) }
     val lineStyle = remember(em) { wordmarkLine(em) }
 
-    // The tilak keeps the SVG's own 12:42 aspect, so `advance` is its width
-    // plus the 0.015em margin the CSS puts on either side of it.
-    val tilakHeight = size * TilakHeightEm
-    val tilakWidth = tilakHeight * (TilakViewWidth / TilakViewHeight)
-    val tilakMargin = size * TilakMarginEm
-    val advance = with(density) { (tilakWidth + tilakMargin * 2).toSp() }
-    val tilakHeightSp = with(density) { tilakHeight.toSp() }
-
-    val tilak = InlineTextContent(
-        Placeholder(
-            width = advance,
-            height = tilakHeightSp,
-            placeholderVerticalAlign = PlaceholderVerticalAlign.AboveBaseline,
-        ),
-    ) {
-        // The margin, which an InlineTextContent has no way to express: the
-        // placeholder's width IS the advance, so the drawing is inset inside it
-        // and the space falls out on both sides.
-        Box(Modifier.fillMaxSize().padding(horizontal = tilakMargin)) {
-            Image(
-                painter = rememberVectorPainter(Tilak),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
-                colorFilter = ColorFilter.tint(Strap),
-            )
-        }
-    }
-
     Column(
         modifier = modifier.clearAndSetSemantics {
             contentDescription = label
@@ -143,7 +109,6 @@ internal fun Wordmark(size: Dp, modifier: Modifier = Modifier) {
             text = WordmarkLine,
             style = lineStyle,
             color = Clay,
-            inlineContent = mapOf(TilakSlot to tilak),
             maxLines = 1,
             softWrap = false,
         )
@@ -158,7 +123,7 @@ internal fun Wordmark(size: Dp, modifier: Modifier = Modifier) {
 //   `kc-wm-grow` / `kc-wm-fade` keyframes in index.css). Implementing it means
 //   animating the width of two collapsing groups — in Compose, an
 //   `Animatable` driving `Modifier.widthIn`/`clip` on each of the "irtan " and
-//   "ompan…on" runs, with the tilak's advance growing with the second one. It
+//   "rtanero" run. It
 //   belongs with the splash screen, which owns the entrance choreography (the
 //   wheel settling in, the two staggered rises, and the reduced-motion opt-out
 //   that disables all of it); adding a parameter here that only the splash
@@ -168,31 +133,14 @@ internal fun Wordmark(size: Dp, modifier: Modifier = Modifier) {
 /** कीर्तन (kīrtana) — the Devanagari line above the wordmark. */
 private const val DevanagariLine = "कीर्तन"
 
-/** The inline-content slot the tilak is registered under. */
-private const val TilakSlot = "tilak"
-
-/**
- * "K" + tilak + "rtanero": the tilak stands in for the name's i, the way it
- * once did for Companion's.
- */
-private val WordmarkLine = buildAnnotatedString {
-    append("K")
-    appendInlineContent(TilakSlot, "i")
-    append("rtanero")
-}
+/** The name, in plain letters. */
+private const val WordmarkLine = "Kirtanero"
 
 // ── The lockup's em fractions, from `.kc-wordmark` / `.kc-wm-*` in index.css ──
 private const val DevaEm = 0.46f
 private const val DevaTrackingEm = 0.04f
 private const val LineTrackingEm = 0.01f
 private const val GapEm = 0.06f
-private const val TilakHeightEm = 0.74f
-private const val TilakMarginEm = 0.015f
-
-// ── The tilak SVG's own box (viewBox "0 0 12 42") ──
-private const val TilakViewWidth = 12f
-private const val TilakViewHeight = 42f
-private const val TilakStrokeWidth = 3f
 
 /**
  * `line-height: 1` for both lines, without clipping.
@@ -239,43 +187,3 @@ private fun wordmarkLine(em: TextUnit): TextStyle = fraunces(
     lineHeight = em,
     lineHeightStyle = TightLeading,
 )
-
-/**
- * The tilak, on its own 12×42 viewBox, drawn in black and tinted strap by the
- * caller — the SVG strokes and fills `currentColor` and inherits `--strap` from
- * `.kc-wm-tilak`, and a tint reproduces that without baking the colour in.
- *
- * Two paths, exactly as in `Wordmark.jsx`: the U-shaped forehead stroke
- * (stroked at 3, round cap, no fill) and the filled teardrop below it. Neither
- * has been converted into the other — the stroke stays a stroke.
- */
-private val Tilak: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
-    ImageVector.Builder(
-        name = "Tilak",
-        defaultWidth = TilakViewWidth.dp,
-        defaultHeight = TilakViewHeight.dp,
-        viewportWidth = TilakViewWidth,
-        viewportHeight = TilakViewHeight,
-    ).apply {
-        path(
-            fill = null,
-            stroke = SolidColor(Color.Black),
-            strokeLineWidth = TilakStrokeWidth,
-            strokeLineCap = StrokeCap.Round,
-        ) {
-            // M 1.5 2 L 1.5 19 A 4.5 4.5 0 0 0 10.5 19 L 10.5 2
-            moveTo(1.5f, 2f)
-            lineTo(1.5f, 19f)
-            arcTo(4.5f, 4.5f, 0f, false, false, 10.5f, 19f)
-            lineTo(10.5f, 2f)
-        }
-        path(fill = SolidColor(Color.Black)) {
-            // M 3 26 A 3 3 0 0 1 9 26 Q 8 32 6 36 Q 4 32 3 26 Z
-            moveTo(3f, 26f)
-            arcTo(3f, 3f, 0f, false, true, 9f, 26f)
-            quadTo(8f, 32f, 6f, 36f)
-            quadTo(4f, 32f, 3f, 26f)
-            close()
-        }
-    }.build()
-}
