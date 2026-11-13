@@ -360,6 +360,7 @@ internal fun BeatEditorScreen(
                 onFeel = { feelOpen = true },
                 onLength = { add -> draft = if (add) draft.addGroup() else draft.removeGroup() },
                 onResolution = { draft = draft.setResolution(it) },
+                onSwing = { draft = draft.setSwing(it) },
                 onBpm = {
                     draft = draft.setBpm(it)
                     brahmaloka = com.kirtan.companion.data.brahmalokaFor(it, brahmaloka)
@@ -901,6 +902,7 @@ private fun ControlsZone(
     onLength: (Boolean) -> Unit,
     onResolution: (Int) -> Unit,
     onBpm: (Int) -> Unit,
+    onSwing: (Int) -> Unit,
     brahmaloka: Boolean,
     onUnlock: () -> Unit,
     onLeave: () -> Unit,
@@ -1008,6 +1010,12 @@ private fun ControlsZone(
                 modifier = Modifier.weight(1f),
             )
         }
+
+        com.kirtan.companion.ui.components.SwingControl(
+            value = draft.swing,
+            onChange = onSwing,
+            hint = stringResource(R.string.swing_editor_hint),
+        )
     }
 }
 

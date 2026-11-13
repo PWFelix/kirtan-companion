@@ -179,6 +179,9 @@ object ShareCodec {
             put("m", beat.bpm)
             put("g", buildJsonArray { groups.forEach { add(it) } })
             put("q", cpqFor(beat))
+            // Swing rides as "w", only when set: older apps ignore the key and
+            // play the beat straight, which is the right fallback.
+            if (beat.swing > Swing.STRAIGHT) put("w", beat.swing)
             putJsonObject("p") {
                 for (lane in LaneId.ORDERED) {
                     val packed = packPattern(beat, lane, steps) ?: continue
@@ -325,6 +328,8 @@ object ShareCodec {
             description = null,      // dropped, not validated; see rule 5
             lanePatterns = lanes,
             group = null,            // dropped for the same reason
+            // Out of range or junk plays straight rather than refusing the beat.
+            swing = (obj["w"] as? JsonPrimitive)?.intOrNull?.let(Swing::clamp) ?: Swing.STRAIGHT,
         )
     }
 

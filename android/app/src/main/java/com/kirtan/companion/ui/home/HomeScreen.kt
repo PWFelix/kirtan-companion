@@ -630,6 +630,12 @@ private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
             )
         }
 
+        com.kirtan.companion.ui.components.SwingControl(
+            value = state.swing,
+            onChange = transport::setSwing,
+            hint = stringResource(R.string.swing_mixer_hint),
+        )
+
         for (lane in LaneId.ORDERED) {
             val accent = lane.colorToken.color
             val end = settings.end(lane)

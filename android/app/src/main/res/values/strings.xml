@@ -390,6 +390,11 @@
     <string name="strip_lane_muted">%1$s drum, muted, tap to unmute</string>
     <string name="strip_lane_pattern">%1$s pattern</string>
     <string name="strip_lane_playing">%1$s drum, playing, tap to mute</string>
+    <string name="swing_editor_hint">Saved with the beat. Plays every second cell late; beats of three cells stay as written.</string>
+    <string name="swing_mixer_hint">Plays every second cell late, for a long-short lilt. Starts at the beat’s own swing; choosing a beat brings that back.</string>
+    <string name="swing_straight">Straight</string>
+    <string name="swing_title">Swing</string>
+    <string name="swing_triplet">Triplet</string>
     <string name="sync_delay_none">Display delay: none</string>
     <string name="sync_delay_value">Display delay: %1$s ms</string>
     <string name="sync_done">Done. The display now runs %1$s. Check it below and fine-tune if you need to.</string>

@@ -211,6 +211,8 @@ data class EditorDraft(
     val selectAnchor: Int? = null,
     /** The last copied run: every lane's cells, the same length. */
     val clip: Map<LaneId, List<Stroke?>>? = null,
+    /** Swing saved with the beat, 50–67; see [com.kirtan.companion.data.Swing]. */
+    val swing: Int = com.kirtan.companion.data.Swing.STRAIGHT,
 ) {
     val cpq: Int get() = meter.cpq
     val steps: Int get() = groups.sum()
@@ -503,6 +505,8 @@ data class EditorDraft(
 
     fun setBpm(value: Int): EditorDraft = copy(bpm = value)
 
+    fun setSwing(value: Int): EditorDraft = copy(swing = com.kirtan.companion.data.Swing.clamp(value))
+
     /** Tapping a cell in [lane]'s row: select it, which also swaps the pads to that row's. */
     fun pickCell(lane: LaneId, index: Int): EditorDraft =
         setCursor(index).copy(cursorLane = lane)
@@ -539,6 +543,7 @@ data class EditorDraft(
             groups = groups,
             description = null,
             lanePatterns = out,
+            swing = swing,
         )
     }
 
@@ -557,6 +562,7 @@ data class EditorDraft(
             groups = groups,
             description = null,
             lanePatterns = out,
+            swing = swing,
         )
     }
 
@@ -584,6 +590,7 @@ data class EditorDraft(
                 bpm = beat?.bpm ?: 90,
                 name = beat?.name ?: "",
                 cursor = 0,
+                swing = beat?.swing ?: com.kirtan.companion.data.Swing.STRAIGHT,
             )
         }
     }

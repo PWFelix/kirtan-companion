@@ -138,6 +138,12 @@ data class Beat(
      * Exclusive with [sourceItemId]: a beat either follows the original or is yours.
      */
     val forkedFrom: String? = null,
+    /**
+     * Swing, 50 (straight) to 67 (triplet lilt): see [com.kirtan.companion.data.Swing].
+     * Stored and shared only when above 50, so a straight beat's body is unchanged
+     * and apps from before swing read every beat exactly as before.
+     */
+    val swing: Int = com.kirtan.companion.data.Swing.STRAIGHT,
 ) {
     /**
      * A community beat the user added: read-only, follows the original, can't be

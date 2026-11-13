@@ -227,6 +227,9 @@ class KirtanEngine(
     fun setBeat(beat: Beat) {
         currentBeat = beat
         humanizer.setBeat(beat)
+        // A beat brings its own swing, replacing any live nudge from the mixer.
+        swingOffbeats = com.kirtan.companion.data.Swing.offbeats(com.kirtan.companion.data.groupsFor(beat))
+        swing = beat.swing
         sequencer.beat = beat
         sequencer.invalidateGuard()
     }
@@ -325,6 +328,18 @@ class KirtanEngine(
     fun hasEq(lane: LaneId): Boolean = soundPlayer.hasEq(lane)
 
     fun setEndPitch(lane: LaneId, cents: Int) = soundPlayer.setEndPitch(lane, cents)
+
+    /** Which cells swing for the current beat; see [com.kirtan.companion.data.Swing]. */
+    @Volatile private var swingOffbeats = BooleanArray(0)
+
+    /** Swing in force, 50–67. Set from the beat on [setBeat]; [setSwing] nudges it live. */
+    @Volatile
+    var swing: Int = com.kirtan.companion.data.Swing.STRAIGHT
+        private set
+
+    fun setSwing(value: Int) {
+        swing = com.kirtan.companion.data.Swing.clamp(value)
+    }
 
     /** How much human variation the drum plays with. See [Humanizer]. */
     fun setFeel(feel: Feel) {
@@ -542,11 +557,16 @@ class KirtanEngine(
         // ten times a second forever, so it allocates nothing.
         humanizer.advance()
         val stepMs = 60_000.0 / clock.bpm * beat.beatsPerBar / beat.steps.coerceAtLeast(1)
+        // Swing: the 2nd, 4th… cell of an even beat sounds late. Only the sound
+        // moves — the step event (and so the strip) stays on the grid.
+        val swingFrames = if (swingOffbeats.getOrElse(event.step) { false }) {
+            (com.kirtan.companion.data.Swing.lateFraction(swing) * stepMs * sampleRate / 1000.0).toInt()
+        } else 0
         for (lane in LaneId.ORDERED) {
             val stroke = beat.strokeAt(lane, event.step) ?: continue
             soundPlayer.play(
                 StrokeKey(lane, stroke == Stroke.OPEN),
-                offset + humanizer.delayFrames(lane, event.step, stepMs),
+                offset + swingFrames + humanizer.delayFrames(lane, event.step, stepMs),
                 humanizer.gain(event.step),
             )
         }

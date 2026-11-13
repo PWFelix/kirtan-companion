@@ -3,6 +3,7 @@ package com.kirtan.companion.storage
 import com.kirtan.companion.data.MAX_BPM
 import com.kirtan.companion.data.MIN_BPM
 import com.kirtan.companion.data.ShareCodec
+import com.kirtan.companion.data.Swing
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.Category
 import com.kirtan.companion.data.model.LaneId
@@ -86,6 +87,7 @@ internal object LibraryJson {
     private const val KEY_TAGS = "tags"
     private const val KEY_SOURCE_INDEX = "sourceIndex"
     private const val KEY_FORKED_FROM = "forkedFrom"
+    private const val KEY_SWING = "swing"
     private const val MAX_TAGS = 16
     private const val KEY_BEAT_IDS = "beatIds"
 
@@ -128,6 +130,7 @@ internal object LibraryJson {
         if (beat.tags.isNotEmpty()) put(KEY_TAGS, buildJsonArray { beat.tags.forEach { add(it) } })
         beat.sourceIndex?.let { put(KEY_SOURCE_INDEX, it) }
         beat.forkedFrom?.let { put(KEY_FORKED_FROM, it) }
+        if (beat.swing > Swing.STRAIGHT) put(KEY_SWING, beat.swing)
         for (lane in LaneId.ORDERED) {
             val cells = beat.pattern(lane) ?: continue
             put(lane.wireId, encodePattern(cells))
@@ -298,6 +301,7 @@ internal object LibraryJson {
                 .orEmpty(),
             sourceIndex = obj.intField(KEY_SOURCE_INDEX)?.takeIf { it >= 0 },
             forkedFrom = obj.stringField(KEY_FORKED_FROM),
+            swing = Swing.clamp(obj.intField(KEY_SWING) ?: Swing.STRAIGHT),
         )
     }
 

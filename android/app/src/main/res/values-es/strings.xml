@@ -384,6 +384,11 @@
     <string name="strip_lane_muted">%1$s silenciado, toca para activar</string>
     <string name="strip_lane_pattern">Patrón de %1$s</string>
     <string name="strip_lane_playing">%1$s sonando, toca para silenciar</string>
+    <string name="swing_editor_hint">Se guarda con el ritmo. Toca cada segunda celda tarde; los tiempos de tres celdas quedan como están.</string>
+    <string name="swing_mixer_hint">Toca cada segunda celda tarde, con un vaivén largo-corto. Empieza con el swing propio del ritmo; al elegir un ritmo vuelve a ese.</string>
+    <string name="swing_straight">Recto</string>
+    <string name="swing_title">Swing</string>
+    <string name="swing_triplet">Tresillo</string>
     <string name="sync_delay_none">Retraso de pantalla: ninguno</string>
     <string name="sync_delay_value">Retraso de pantalla: %1$s ms</string>
     <string name="sync_done">Listo. La pantalla ahora va %1$s. Compruébalo abajo y ajústalo si hace falta.</string>

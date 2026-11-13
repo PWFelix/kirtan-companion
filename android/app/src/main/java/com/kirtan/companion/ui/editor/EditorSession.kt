@@ -58,7 +58,7 @@ internal class EditorSession(
 
         /** What a save would write, compared field by field; cursor and undo don't count. */
         fun sameContent(a: EditorDraft, b: EditorDraft): Boolean =
-            a.groups == b.groups && a.cpq == b.cpq && a.bpm == b.bpm &&
+            a.groups == b.groups && a.cpq == b.cpq && a.bpm == b.bpm && a.swing == b.swing &&
                 a.name.trim() == b.name.trim() &&
                 LaneId.ORDERED.all { lane -> a.pattern(lane) == b.pattern(lane) }
     }

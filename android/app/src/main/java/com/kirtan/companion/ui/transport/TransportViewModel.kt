@@ -86,6 +86,8 @@ data class TransportState(
     val brahmaloka: Boolean = false,
     /** Counts unlocks; the overlay plays once each time it changes. */
     val burstKey: Int = 0,
+    /** Swing in force: the playing beat's own, unless nudged in the mixer. */
+    val swing: Int = com.kirtan.companion.data.Swing.STRAIGHT,
 ) {
     /** The display delay in force for the current output. */
     val displayDelayMs: Int get() = settings.displayDelay(route.key)
@@ -312,7 +314,7 @@ class TransportViewModel(
                         _sequence.value = was.copy(playingEntry = entry, playingBar = event.bar, playingBeat = beat)
                         if (was.playingBeat != beat) {
                             container.currentBeatName.value = beat.name
-                            _state.value = _state.value.copy(beatName = beat.name)
+                            _state.value = _state.value.copy(beatName = beat.name, swing = engine.swing)
                         }
                     }
 
@@ -443,6 +445,15 @@ class TransportViewModel(
     fun setTempoLocked(locked: Boolean) {
         tempoLocked = locked
         publish(settings.copy(tempoLocked = locked))
+    }
+
+    /**
+     * Nudge the playing beat's swing. Live only: the beat keeps its saved swing,
+     * and choosing a beat brings that back. Set a beat's own swing in the editor.
+     */
+    fun setSwing(value: Int) {
+        engine.setSwing(value)
+        _state.value = _state.value.copy(swing = engine.swing)
     }
 
     /** How much human variation the drum plays with. See [com.kirtan.companion.engine.Humanizer]. */
@@ -612,7 +623,7 @@ class TransportViewModel(
         leaveSequence()
         engine.setBeat(beat)
         container.currentBeatName.value = beat.name
-        _state.value = _state.value.copy(beatName = beat.name)
+        _state.value = _state.value.copy(beatName = beat.name, swing = beat.swing)
         val restore = restoreBpm?.takeIf { loadedBeatId == null && beat.id == restoreBeatId }
         restoreBpm = null
         when {
@@ -638,7 +649,7 @@ class TransportViewModel(
         engine.setBeat(beat)
         engine.setBpm(bpm)
         container.currentBeatName.value = beat.name
-        _state.value = _state.value.copy(beatName = beat.name)
+        _state.value = _state.value.copy(beatName = beat.name, swing = beat.swing)
         connection.setPlayWhenReady(true)
     }
 
