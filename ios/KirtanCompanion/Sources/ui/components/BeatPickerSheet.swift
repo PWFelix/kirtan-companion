@@ -8,6 +8,11 @@ import SwiftUI
 /// contract as Android's and the web's quick-pick.
 struct BeatPickerSheet: View {
     let container: AppContainer
+    /// The beat to mark as chosen; nil means the loaded beat.
+    var selectedId: String?? = nil
+    /// Where the pick goes. Nil loads it (Home's beat, Learn's beat); Home's
+    /// sequencer passes one to add or replace an entry instead.
+    var onPick: ((Beat) -> Void)? = nil
     let onDone: () -> Void
 
     @State private var tab: String = ""
@@ -75,10 +80,10 @@ struct BeatPickerSheet: View {
     }
 
     private func row(_ beat: Beat) -> some View {
-        let selected = beat.id == container.transport.loadedBeat?.id
+        let selected = beat.id == (selectedId ?? container.transport.loadedBeat?.id)
         return Button {
             library.setActiveCategory(tab)
-            container.transport.loadBeat(beat)
+            if let onPick { onPick(beat) } else { container.transport.loadBeat(beat) }
             onDone()
         } label: {
             VStack(alignment: .leading, spacing: 6) {

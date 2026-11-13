@@ -31,6 +31,8 @@ struct HomeView: View {
 
             stripBlock(engine: engine, muted: muted, lanes: lanes)
 
+            SequencePanel(container: container)
+
             Spacer(minLength: 0)
             playButton
             Spacer(minLength: 0)
@@ -41,6 +43,9 @@ struct HomeView: View {
         // buttons sat underneath it, unreachable. 96 is what the shell's banners clear.
         .padding(.bottom, 72)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Sequences find their beats by id; keep them handed the library's.
+        .onAppear { transport.setBeatLookup(container.library.allBeats) }
+        .onChange(of: container.library.allBeats) { _, beats in transport.setBeatLookup(beats) }
         .sheet(isPresented: $mixerOpen) {
             MixerSheet(container: container, beat: beat)
                 .presentationDetents([.medium, .large])
@@ -101,7 +106,7 @@ struct HomeView: View {
                 // Tap the name to choose from built-ins, your beats or a list.
                 Button { pickerOpen = true } label: {
                     HStack(spacing: 6) {
-                        Text(transport.beatName ?? String(localized: "No beat", bundle: .strings))
+                        Text(transport.sequence.playingBeat?.name ?? transport.beatName ?? String(localized: "No beat", bundle: .strings))
                             .font(.system(size: 30, weight: .semibold, design: .serif))
                             .foregroundStyle(Palette.syahi)
                         Image(systemName: "chevron.down").font(.callout).foregroundStyle(Palette.syahiSoft)
@@ -137,14 +142,19 @@ struct HomeView: View {
     @ViewBuilder
     private var playButton: some View {
         let enabled = transport.ready && !transport.outputFailed
+        // With a sequence on Home, Play plays it from the top; without, the
+        // loaded beat loops as it always has.
+        let sequenceMode = transport.sequenceMode
         Button {
-            transport.togglePlay(beat)
+            if sequenceMode { transport.toggleSequence() } else { transport.togglePlay(beat) }
         } label: {
             Image(systemName: transport.playing ? "pause.circle.fill" : "play.circle.fill")
-                .font(.system(size: 96))
+                .font(.system(size: 80))
                 .foregroundStyle(enabled ? Palette.clay : Palette.faint)
         }
         .disabled(!enabled)
+        .accessibilityLabel(transport.playing ? String(localized: "Pause", bundle: .strings)
+            : sequenceMode ? String(localized: "Play sequence", bundle: .strings) : String(localized: "Play", bundle: .strings))
 
         if !transport.ready {
             Text(String(localized: "Loading sounds…", bundle: .strings))
@@ -200,9 +210,11 @@ struct HomeView: View {
     }
 
     private func beatForTransport() -> Beat {
-        // The selected beat, or the default. A fresh Home has already loadBeat'd a
+        // While a sequence plays, the beat SOUNDING (and after it stops, the one
+        // last heard); otherwise the selected beat, or the default. A fresh Home has already loadBeat'd a
         // beat in the container's begin(), so this is a fallback.
-        transport.loadedBeat
+        transport.sequence.playingBeat
+            ?? transport.loadedBeat
             ?? container.library.allBeats.first
             ?? container.library.shippedBeats.defaultBeat
     }

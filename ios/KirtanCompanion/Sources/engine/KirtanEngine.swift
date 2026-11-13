@@ -11,6 +11,12 @@ enum EngineEvent {
     /// should still read `getPhase()` per frame rather than animate off these,
     /// because a step event is ~10/s and a playhead wants 60.
     case step(Int)
+    /// A sequence bar line: entry `index` is playing, on its bar `bar` (1-based).
+    /// Emitted from the audio thread at each downbeat of a playing sequence.
+    case sequenceAt(index: Int, bar: Int)
+    /// The sequence ran out with loop off, and the engine stopped itself on the
+    /// next 1. Followed by `.stopped`.
+    case sequenceEnded
     /// The output device went away, or never opened. Playback cannot continue.
     case outputFailed
 }
@@ -26,7 +32,9 @@ enum EngineEvent {
 // Public vocabulary, deliberately identical to the JS facade:
 //   loadSounds() · arm()/release() · setBeat · setBpm · setVolume ·
 //   setEndVolume · setEndMuted · setEqBand · setEndPitch · start()/stop() ·
-//   playStroke · getPhase()/getStep() · events (ready/started/stopped/step/outputFailed)
+//   setSequence · setSequenceLoop ·
+//   playStroke · getPhase()/getStep() · events (ready/started/stopped/step/outputFailed,
+//   sequenceAt/sequenceEnded)
 //
 // KNOWS NOTHING ABOUT UI OR LIFECYCLE. The one audio type it takes is a
 // SampleLoader, to read the bundled recordings.
@@ -157,6 +165,50 @@ final class KirtanEngine: BlockRenderer {
         sequencer.invalidateGuard()
     }
 
+    // ── Sequences ──────────────────────────────────────────────────────────
+
+    /// The playing sequence: its entries and the cursor counting through them.
+    /// Swapped whole under `planLock`; the cursor itself is touched only by the
+    /// audio thread once playing (and by start(), before the clock runs).
+    private final class Plan {
+        let steps: [SequenceStep]
+        let cursor: SequenceCursor
+        init(_ steps: [SequenceStep], _ cursor: SequenceCursor) { self.steps = steps; self.cursor = cursor }
+    }
+    private let planLock = NSLock()
+    private var plan: Plan?
+    private func currentPlan() -> Plan? { planLock.lock(); defer { planLock.unlock() }; return plan }
+
+    /// The frame a sequence switch re-anchored at, so its 1 isn't counted twice.
+    /// Audio thread only.
+    private var switchedAtFrame: Int64 = .min
+
+    /// Play `steps` in order, each for its bar count, switching beats on the bar
+    /// line. Nil (or empty) goes back to looping one beat. Stopped, it loads the
+    /// first entry and waits for start(); playing, an EDIT keeps its place (same
+    /// entry and bar where they still exist).
+    func setSequence(_ steps: [SequenceStep]?, loop: Bool) {
+        guard let steps, !steps.isEmpty else {
+            planLock.lock(); plan = nil; planLock.unlock()
+            return
+        }
+        let cursor = SequenceCursor(bars: steps.map(\.bars), loop: loop)
+        if isPlaying, let old = currentPlan() {
+            cursor.adopt(old.cursor)
+            planLock.lock(); plan = Plan(steps, cursor); planLock.unlock()
+            let now = steps[cursor.index].beat
+            if now != currentBeat { setBeat(now) }
+        } else {
+            planLock.lock(); plan = Plan(steps, cursor); planLock.unlock()
+            setBeat(steps[0].beat)
+        }
+    }
+
+    /// Loop on or off while it plays: takes effect at the end of the last entry.
+    func setSequenceLoop(_ loop: Bool) { currentPlan()?.cursor.loop = loop }
+
+    var hasSequence: Bool { currentPlan() != nil }
+
     func setBpm(_ bpm: Int) {
         // A direct change overrides one waiting for its bar.
         startLock.lock(); pendingBarBpm = nil; startLock.unlock()
@@ -203,6 +255,11 @@ final class KirtanEngine: BlockRenderer {
             return // no beat loaded; nothing to start
         }
         if !arm() { return }
+        // A sequence always starts from its top.
+        if let p = currentPlan() {
+            p.cursor.reset()
+            setBeat(p.steps[0].beat)
+        }
         // Anchored by the audio thread at the top of its next block; see pendingStart.
         clock.stop()
         startLock.lock(); pendingStart = true; startLock.unlock()
@@ -314,31 +371,78 @@ final class KirtanEngine: BlockRenderer {
             }
         }
 
-        // 2. Sequenced steps falling inside this block.
-        if let beat = sequencer.currentBeat, clock.isRunning {
+        // 2. Sequenced steps falling inside this block. A LOOP, because a
+        //    sequence can switch beats mid-block: the switch re-anchors the clock
+        //    on that 1 and the rest of the block is collected again under the new
+        //    beat's grid.
+        var cursorFrame = fromFrame
+        let endFrame = fromFrame + Int64(count)
+        blocks: while let beat = sequencer.currentBeat, clock.isRunning {
             stepScratch.removeAll(keepingCapacity: true)
-            sequencer.collectStepEvents(fromFrame: fromFrame, toFrame: fromFrame + Int64(count), into: &stepScratch)
+            sequencer.collectStepEvents(fromFrame: cursorFrame, toFrame: endFrame, into: &stepScratch)
             for event in stepScratch {
-                let offset = min(max(Int(event.frame - fromFrame), 0), count - 1)
-                // Iterated inline: this runs ten times a second forever, so it
-                // allocates nothing.
-                humanizer.advance()
-                let stepMs = 60_000 / clock.bpm * beat.beatsPerBar / Double(max(1, beat.steps))
-                for lane in LaneId.ordered {
-                    guard let stroke = beat.strokeAt(lane, event.step) else { continue }
-                    soundPlayer.play(
-                        StrokeKey(lane: lane, open: stroke == .open),
-                        offsetInBlock: offset + humanizer.delayFrames(lane, step: event.step, stepMs: stepMs),
-                        gain: humanizer.gain(step: event.step)
-                    )
+                if event.step == 0, let p = currentPlan() {
+                    if event.frame != switchedAtFrame {
+                        switch p.cursor.onDownbeat() {
+                        case .end:
+                            endSequence()
+                            break blocks
+                        case .switchTo(let i):
+                            switchSequenceBeat(p.steps[i].beat, atFrame: event.frame)
+                            cursorFrame = event.frame
+                            continue blocks
+                        case .stay:
+                            break
+                        }
+                    }
+                    emit(.sequenceAt(index: p.cursor.index, bar: p.cursor.bar + 1))
                 }
-                emit(.step(event.step))
+                playStep(beat, event, fromFrame: fromFrame, count: count)
             }
+            break
         }
 
         // 3. Mix: voices → per-end EQ and fader → master.
         soundPlayer.renderBlock(&out, count: count)
         // 4. Soft-limit the summed mix: the last stage before the speaker.
         softClipInPlace(&out, count: count)
+    }
+
+    private func playStep(_ beat: Beat, _ event: StepEvent, fromFrame: Int64, count: Int) {
+        let offset = min(max(Int(event.frame - fromFrame), 0), count - 1)
+        // Iterated inline: this runs ten times a second forever, so it
+        // allocates nothing.
+        humanizer.advance()
+        let stepMs = 60_000 / clock.bpm * beat.beatsPerBar / Double(max(1, beat.steps))
+        for lane in LaneId.ordered {
+            guard let stroke = beat.strokeAt(lane, event.step) else { continue }
+            soundPlayer.play(
+                StrokeKey(lane: lane, open: stroke == .open),
+                offsetInBlock: offset + humanizer.delayFrames(lane, step: event.step, stepMs: stepMs),
+                gain: humanizer.gain(step: event.step)
+            )
+        }
+        emit(.step(event.step))
+    }
+
+    /// A sequence moves to its next entry ON this 1. The clock is re-anchored
+    /// here (tick 0 = this frame, tempo kept) because the bar line of one meter
+    /// is not a bar line of another, so carrying the tick count over would start
+    /// the new beat mid-bar. A bar-snapped tempo change was aimed at old ticks,
+    /// so it goes.
+    private func switchSequenceBeat(_ next: Beat, atFrame: Int64) {
+        setBeat(next)
+        clock.start(atFrame: atFrame)
+        switchedAtFrame = atFrame
+        startLock.lock(); pendingBarBpm = nil; startLock.unlock()
+    }
+
+    /// Loop off and the last entry done: stop on this 1 without playing it.
+    private func endSequence() {
+        isPlaying = false
+        startLock.lock(); pendingBarBpm = nil; startLock.unlock()
+        clock.stop()
+        emit(.sequenceEnded)
+        emit(.stopped)
     }
 }

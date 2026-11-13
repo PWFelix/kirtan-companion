@@ -53,7 +53,13 @@ struct RootView: View {
             try? await Task.sleep(for: .seconds(1))
             let beat = container.library.allBeats.first
                 ?? container.library.shippedBeats.defaultBeat
-            container.transport.togglePlay(beat)
+            // DEBUG: `-kirtanSequence` plays the stored sequence instead.
+            if ProcessInfo.processInfo.arguments.contains("-kirtanSequence") {
+                container.transport.setBeatLookup(container.library.allBeats)
+                container.transport.toggleSequence()
+            } else {
+                container.transport.togglePlay(beat)
+            }
             try? await Task.sleep(for: .seconds(4))
             await MainActor.run {
                 #if DEBUG

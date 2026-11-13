@@ -73,6 +73,12 @@ final class TransportViewModel {
     var displayDelayMs: Int { settings.displayDelay(route.key) }
 
     // ── Authoritative, not rendered ────────────────────────────────────────
+    /// Home's sequencer: the working sequence, the saved ones, and where it is.
+    var sequence = SequenceState()
+    @ObservationIgnored private var sequencePlan: [(entryIndex: Int, step: SequenceStep)] = []
+    @ObservationIgnored private var beatLookup: [String: Beat] = [:]
+    @ObservationIgnored private let sequenceStore = SequenceStore()
+
     @ObservationIgnored private var loadedBeatId: String?
     @ObservationIgnored private var tapTimes: [Int64] = []
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -104,6 +110,7 @@ final class TransportViewModel {
             }
         }
         route = playback.route
+        loadSequences()
 
         // Belt-and-braces: if the engine already loaded before this view model
         // existed (it is process-scoped), seed from `isReady` instead of waiting
@@ -145,9 +152,24 @@ final class TransportViewModel {
         case .stopped:
             playing = false
             step = -1
+            // No chip is lit any more, but the beat last heard stays on Home.
+            sequence.playingEntry = nil
+            sequence.playingBar = nil
 
         case .step(let step):
             self.step = step
+
+        case .sequenceAt(let index, let bar):
+            guard let p = sequencePlan.indices.contains(index) ? sequencePlan[index] : nil else { break }
+            sequence.playingEntry = p.entryIndex
+            sequence.playingBar = bar
+            sequence.playingBeat = p.step.beat
+            playback.setBeatTitle(p.step.beat.name)
+
+        case .sequenceEnded:
+            // The engine stopped itself; bring the session, lock screen and
+            // Play button along (stop() on a stopped engine is a no-op).
+            playback.setPlayWhenReady(false)
 
         case .outputFailed:
             outputFailed = true
@@ -462,6 +484,7 @@ final class TransportViewModel {
     /// Point the engine at a beat WITHOUT starting it, adopting the beat's own
     /// suggested tempo unless the user has locked it.
     func loadBeat(_ beat: Beat) {
+        leaveSequence()
         engine.setBeat(beat)
         playback.setBeatTitle(beat.name)
         beatName = beat.name
@@ -479,6 +502,7 @@ final class TransportViewModel {
     func play(_ beat: Beat) {
         guard ready else { return }
         guard !playing else { return }
+        leaveSequence()
         engine.setBeat(beat)
         engine.setBpm(bpm)
         playback.setBeatTitle(beat.name)
@@ -502,6 +526,7 @@ final class TransportViewModel {
     /// plain stop-then-start.
     func startPreview(_ beat: Beat, previewBpm: Int) {
         guard ready else { return }
+        leaveSequence()
         if playing { playback.setPlayWhenReady(false) }
         engine.setBeat(beat)
         engine.setBpm(previewBpm)
@@ -560,4 +585,114 @@ extension TransportViewModel {
         beatsPerBar: 4, cellsPerGroup: 1, groups: nil, description: nil,
         lanePatterns: [.dayan: Array(repeating: .closed, count: 4)]
     )
+
+    // ── Home's sequencer ───────────────────────────────────────────────────
+    //
+    // The running order lives here, not in the view, because it FEEDS THE
+    // ENGINE: edits made while it plays must reach it at once. Pure edits and
+    // the storage format are in data/Sequences.swift.
+
+    /// Hand over the library's beats; sequences find theirs by id. An edited
+    /// beat then sounds edited inside a playing sequence.
+    func setBeatLookup(_ beats: [Beat]) {
+        beatLookup = Dictionary(beats.compactMap { b in b.id.map { ($0, b) } }, uniquingKeysWith: { a, _ in a })
+        if engine.hasSequence { pushSequence() }
+    }
+
+    func sequenceBeat(_ id: String) -> Beat? { beatLookup[id] }
+
+    /// Something in the sequence can play.
+    var sequenceMode: Bool { sequence.working.entries.contains { beatLookup[$0.beatId] != nil } }
+
+    func loadSequences() {
+        sequence.working = sequenceStore.loadWorking()
+        sequence.saved = sequenceStore.loadSaved()
+    }
+
+    /// Play the sequence from its top, or pause it.
+    func toggleSequence() {
+        guard ready else { return }
+        if playing { playback.setPlayWhenReady(false); return }
+        guard pushSequence() else { return }
+        engine.setBpm(bpm)
+        playback.setPlayWhenReady(true)
+    }
+
+    func editSequence(_ edit: ([SequenceEntry]) -> [SequenceEntry]) {
+        var w = sequence.working
+        w.entries = edit(w.entries)
+        setWorking(w)
+        if engine.hasSequence, !pushSequence() { playback.setPlayWhenReady(false) }
+    }
+
+    func setSequenceLoop(_ loop: Bool) {
+        var w = sequence.working; w.loop = loop
+        setWorking(w)
+        engine.setSequenceLoop(loop)
+    }
+
+    func saveSequence(name: String, asNew: Bool) {
+        let r = Sequences.save(sequence.working, into: sequence.saved, name: name, asNew: asNew, newId: UUID().uuidString)
+        sequence.saved = r.saved
+        sequenceStore.saveSaved(r.saved)
+        setWorking(r.working)
+    }
+
+    func openSequence(_ id: String) {
+        guard let s = sequence.saved.first(where: { $0.id == id }) else { return }
+        replaceWorking(WorkingSequence(entries: s.entries, savedId: s.id, name: s.name, loop: sequence.working.loop))
+    }
+
+    func newSequence() {
+        replaceWorking(WorkingSequence(loop: sequence.working.loop))
+    }
+
+    func deleteSequence(_ id: String) {
+        sequence.saved.removeAll { $0.id == id }
+        sequenceStore.saveSaved(sequence.saved)
+        if sequence.working.savedId == id {
+            var w = sequence.working; w.savedId = nil; setWorking(w)
+        }
+    }
+
+    private func replaceWorking(_ w: WorkingSequence) {
+        setWorking(w)
+        if engine.hasSequence, !pushSequence() { playback.setPlayWhenReady(false) }
+    }
+
+    private func setWorking(_ w: WorkingSequence) {
+        sequence.working = w
+        sequenceStore.saveWorking(w)
+    }
+
+    /// Hand the engine the playable plan; false when nothing in it can play.
+    @discardableResult
+    private func pushSequence() -> Bool {
+        let plan = Sequences.resolve(sequence.working.entries) { beatLookup[$0] }
+        sequencePlan = plan
+        engine.setSequence(plan.isEmpty ? nil : plan.map(\.step), loop: sequence.working.loop)
+        return !plan.isEmpty
+    }
+
+    /// A beat chosen by hand leaves the sequence: back to looping one beat.
+    private func leaveSequence() {
+        guard engine.hasSequence else { return }
+        engine.setSequence(nil, loop: false)
+        sequencePlan = []
+        sequence.playingEntry = nil
+        sequence.playingBar = nil
+        sequence.playingBeat = nil
+    }
+}
+
+/// Home's sequencer, as the UI sees it. While a sequence plays, `playingEntry`
+/// (index into `working.entries`) and `playingBar` (1-based) say where it is.
+/// `playingBeat` is the sequence's beat last heard, kept after a stop; Home
+/// shows it instead of the library selection until a beat is chosen by hand.
+struct SequenceState {
+    var working = WorkingSequence()
+    var saved: [BeatSequence] = []
+    var playingEntry: Int?
+    var playingBar: Int?
+    var playingBeat: Beat?
 }

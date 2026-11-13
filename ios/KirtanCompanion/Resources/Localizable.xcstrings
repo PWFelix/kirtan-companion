@@ -87,6 +87,52 @@
         }
       }
     },
+    "%lld bars" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld bar"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld bars"
+                }
+              }
+            }
+          }
+        },
+        "es" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld compás"
+                }
+              },
+              "many" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld compases"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld compases"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld beats" : {
       "localizations" : {
         "en" : {
@@ -539,6 +585,26 @@
         }
       }
     },
+    "Add beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir ritmo"
+          }
+        }
+      }
+    },
+    "Add beats to play them in order, each for a number of bars." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añade ritmos para tocarlos en orden, cada uno durante varios compases."
+          }
+        }
+      }
+    },
     "Add list" : {
       "localizations" : {
         "es" : {
@@ -873,12 +939,42 @@
         }
       }
     },
+    "Bar %lld of %lld" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compás %1$lld de %2$lld"
+          }
+        }
+      }
+    },
+    "Bars" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compases"
+          }
+        }
+      }
+    },
     "Beat" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ritmo"
+          }
+        }
+      }
+    },
+    "Beat not found" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ritmo no encontrado"
           }
         }
       }
@@ -1055,6 +1151,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Celdas por tiempo"
+          }
+        }
+      }
+    },
+    "Change beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiar ritmo"
           }
         }
       }
@@ -1559,6 +1665,16 @@
         }
       }
     },
+    "Fewer bars" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menos compases"
+          }
+        }
+      }
+    },
     "Fill" : {
       "localizations" : {
         "es" : {
@@ -1959,6 +2075,26 @@
         }
       }
     },
+    "Loop is on. Tap to stop at the end" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repetición activada. Toca para parar al final"
+          }
+        }
+      }
+    },
+    "Loop the sequence" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repetir la secuencia"
+          }
+        }
+      }
+    },
     "Loose" : {
       "localizations" : {
         "es" : {
@@ -2009,6 +2145,16 @@
         }
       }
     },
+    "More bars" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Más compases"
+          }
+        }
+      }
+    },
     "More for %@" : {
       "localizations" : {
         "es" : {
@@ -2025,6 +2171,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Más añadidos"
+          }
+        }
+      }
+    },
+    "Move earlier" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mover antes"
+          }
+        }
+      }
+    },
+    "Move later" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mover después"
           }
         }
       }
@@ -2215,6 +2381,16 @@
         }
       }
     },
+    "New sequence" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nueva secuencia"
+          }
+        }
+      }
+    },
     "Next beat" : {
       "localizations" : {
         "es" : {
@@ -2251,6 +2427,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ya no se comparte"
+          }
+        }
+      }
+    },
+    "No saved sequences yet." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no hay secuencias guardadas."
           }
         }
       }
@@ -2375,6 +2561,16 @@
         }
       }
     },
+    "Open a sequence" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir una secuencia"
+          }
+        }
+      }
+    },
     "Opening sign-in…" : {
       "localizations" : {
         "es" : {
@@ -2481,6 +2677,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Iniciar clic"
+          }
+        }
+      }
+    },
+    "Play sequence" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tocar secuencia"
           }
         }
       }
@@ -2661,6 +2867,16 @@
         }
       }
     },
+    "Remove from sequence" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar de la secuencia"
+          }
+        }
+      }
+    },
     "Remove “%@” from the community library?" : {
       "localizations" : {
         "es" : {
@@ -2791,12 +3007,42 @@
         }
       }
     },
+    "Save as new" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar como nueva"
+          }
+        }
+      }
+    },
     "Save as new beat" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Guardar como ritmo nuevo"
+          }
+        }
+      }
+    },
+    "Save changes" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar cambios"
+          }
+        }
+      }
+    },
+    "Save sequence" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar secuencia"
           }
         }
       }
@@ -2847,6 +3093,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Encabezado de sección"
+          }
+        }
+      }
+    },
+    "Sequence" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secuencia"
+          }
+        }
+      }
+    },
+    "Sequences" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secuencias"
           }
         }
       }
@@ -3843,6 +4109,16 @@
         }
       }
     },
+    "Unsaved sequence" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secuencia sin guardar"
+          }
+        }
+      }
+    },
     "Update available" : {
       "localizations" : {
         "es" : {
@@ -4015,6 +4291,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No se pudieron mover tus ritmos. Siguen en este dispositivo."
+          }
+        }
+      }
+    },
+    "Your current sequence has unsaved changes; opening another replaces them." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu secuencia actual tiene cambios sin guardar; abrir otra los reemplaza."
           }
         }
       }
