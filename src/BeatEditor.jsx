@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { runBetween, copyRun, pasteRun, clipLength } from "./data/clipboard.js";
 import BeatStrip from "./BeatStrip.jsx";
 import { labelsFromGroups } from "./data/stepLabels.js";
 import { BOLS } from "./data/bols.js";
@@ -95,6 +96,12 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   // The author's tags, published with the beat (data/tags.js).
   const [tags, setTags] = useState(start.tags ?? []);
   const [discardOpen, setDiscardOpen] = useState(false);
+  // Copy and paste (data/clipboard.js). While choosing a run, selectAnchor is
+  // the cell it started at and the cursor is its other end, so tapping cells —
+  // on any page — moves that end. The clip outlives the run: paste it again
+  // and again.
+  const [selectAnchor, setSelectAnchor] = useState(null);
+  const [clip, setClip] = useState(null);
   useEffect(() => {
     onDraftChange?.({ groups, meter, dayan, bayan, kartal, bpm, name, cursor, cursorLane, tags });
   }, [groups, meter, dayan, bayan, kartal, bpm, name, cursor, cursorLane, tags, onDraftChange]);
@@ -147,7 +154,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
     setResampleReport(null);
     setCanUndo(undoRef.current.length > 0);
   }
-  function resetUndo() { undoRef.current = []; setCanUndo(false); setResampleReport(null); }
+  function resetUndo() { undoRef.current = []; setCanUndo(false); setResampleReport(null); setSelectAnchor(null); }
 
   /**
    * Change the resolution, KEEPING THE RHYTHM: every hit stays at its moment in
@@ -162,6 +169,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
     const n = sum(next.groups);
     const report = { moved: 0, dropped: 0 };
     undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor, groups, meter });
+    setSelectAnchor(null);
     if (undoRef.current.length > 60) undoRef.current.shift();
     setCanUndo(true);
     setDayan(resample(dayan, cpq, next.cpq, n, report));
@@ -280,6 +288,25 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
     setSaving(false);
   }
 
+  const selection = selectAnchor == null ? null
+    : runBetween(Math.min(selectAnchor, steps - 1), Math.min(cursor, steps - 1));
+  function copySelection() {
+    if (!selection) return;
+    setClip(copyRun({ dayan, bayan, kartal }, selection[0], selection[1]));
+    setCursor(selection[0]);
+    setSelectAnchor(null);
+  }
+  function paste(closeBayan) {
+    if (!clip) return;
+    const { lanes, written } = pasteRun({ dayan, bayan, kartal }, clip, cursor, closeBayan);
+    if (!written) return;
+    pushUndo();
+    setDayan(lanes.dayan); setBayan(lanes.bayan); setKartal(lanes.kartal);
+    setSelectAnchor(null);
+    setResampleReport(null);
+    setCursor((cursor + written) % steps);
+  }
+
   function clearGrid() {
     pushUndo();
     setDayan(emptyGrid(steps)); setBayan(emptyGrid(steps)); setKartal(emptyGrid(steps)); setCursor(0);
@@ -339,6 +366,11 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
           onPointerUp={() => { scrubbingRef.current = false; }}
           onPointerCancel={() => { scrubbingRef.current = false; }}>
           <BeatStrip beat={previewBeat} step={step} playing={previewing} getPhase={getPhase} mini />
+          {selection && (
+            <div aria-hidden="true" style={{ ...st.overviewSel,
+              left: (selection[0] / steps) * 100 + "%",
+              width: ((selection[1] + 1 - selection[0]) / steps) * 100 + "%" }} />
+          )}
           {pageCount > 1 && (
             <div aria-hidden="true" style={{ ...st.overviewFrame,
               left: (windowStart / steps) * 100 + "%",
@@ -379,6 +411,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
                       const i = windowStart + j;
                       const isCursor = onRow && i === cursor;
                       const lit = previewing && i === step;
+                      const chosen = selection && i >= selection[0] && i <= selection[1];
                       return (
                         <button key={end + i} onClick={() => pick(i)} aria-current={isCursor || undefined}
                           aria-label={v ? t("editor.cell", { lane: end, n: i + 1, bol: BOLS[end]?.[v] ?? v }) : t("editor.cellEmpty", { lane: end, n: i + 1 })}
@@ -387,7 +420,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
                             borderWidth: isCursor ? 2 : 1,
                             // The cursor's column, faintly, on the other rows: where the
                             // other hands fall at the same moment.
-                            background: lit ? "var(--head-sunken)" : (!onRow && i === cursor) ? "var(--head-worn)" : "var(--head)" }}>
+                            background: lit ? "var(--head-sunken)" : chosen ? "color-mix(in srgb, var(--clay) 16%, var(--head))"
+                              : (!onRow && i === cursor) ? "var(--head-worn)" : "var(--head)" }}>
                           <span aria-hidden="true"
                             style={dotStyle(v, `var(--lane-${end})`, 18)} />
                         </button>
@@ -398,6 +432,34 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
               );
             })}
           </div>
+        </div>
+
+        {/* ── COPY / PASTE ── */}
+        <div style={st.clip}>
+          {selection ? (
+            <>
+              <div style={st.clipPrompt}>
+                {t("editor.selection", { from: selection[0] + 1, to: selection[1] + 1 })} · {t("editor.selectHint")}
+              </div>
+              <div style={st.controlRow}>
+                <button onClick={copySelection} style={{ ...st.utilBtn, ...st.previewOn }}>{t("editor.copy")}</button>
+                <button onClick={() => setSelectAnchor(null)} style={st.utilBtn}>{t("common.cancel")}</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={st.controlRow}>
+                <button onClick={() => setSelectAnchor(cursor)} style={st.utilBtn}>{t("editor.select")}</button>
+                <button onClick={() => paste(false)} disabled={!clip} style={{ ...st.utilBtn, opacity: clip ? 1 : 0.4 }}>{t("editor.paste")}</button>
+              </div>
+              {clip && (
+                <>
+                  <button onClick={() => paste(true)} style={st.utilBtn}>{t("editor.pasteClosed")}</button>
+                  <div style={st.clipHint}>{t("editor.clip", { n: clipLength(clip) })} · {t("editor.pasteClosedHint")}</div>
+                </>
+              )}
+            </>
+          )}
         </div>
 
         {/* ── PADS ── */}
@@ -572,6 +634,10 @@ const st = {
   titleInput: { flex: 1, minWidth: 0, border: "none", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", padding: "2px 0", outline: "none" },
   titlePencil: { flexShrink: 0, width: 40, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", cursor: "pointer", display: "grid", placeItems: "center" },
 
+  overviewSel: { position: "absolute", top: 4, bottom: 4, borderRadius: 4, background: "var(--clay)", opacity: 0.22, pointerEvents: "none" },
+  clip: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" },
+  clipPrompt: { color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600 },
+  clipHint: { color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: 12 },
   overviewWrap: { position: "relative", flexShrink: 0, padding: "6px 2px", cursor: "grab", touchAction: "none" },
   overviewFrame: { position: "absolute", top: 0, bottom: 0, borderRadius: 8, border: "2px solid var(--clay)", background: "oklch(0.54 0.12 40 / 0.08)", pointerEvents: "none" },
 
