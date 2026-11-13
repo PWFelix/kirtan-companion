@@ -136,6 +136,7 @@
     <string name="editor_cells_per_beat">Cells per beat</string>
     <string name="editor_clear">Clear</string>
     <string name="editor_community_copy_note">The community beat stays as it is. Saving adds your version to Your beats; you can share it once the rhythm differs.</string>
+    <string name="editor_copy">Copy</string>
     <string name="editor_copy_name">%1$s (copy)</string>
     <string name="editor_default_name">Custom Beat</string>
     <string name="editor_discard_continue">Discard and continue</string>
@@ -146,6 +147,9 @@
     <string name="editor_need_stroke">Add at least one stroke before saving.</string>
     <string name="editor_next_page">Next page</string>
     <string name="editor_page_range">%1$d–%2$d of %3$d</string>
+    <string name="editor_paste">Paste</string>
+    <string name="editor_paste_closed">Paste, bayan closed</string>
+    <string name="editor_paste_closed_hint">Pastes with the bayan’s open strokes closed — a guru half becomes its laghu half.</string>
     <string name="editor_prev_page">Previous page</string>
     <string name="editor_preview">Preview</string>
     <string name="editor_remove_group">Remove a beat</string>
@@ -157,6 +161,9 @@
     <string name="editor_save">Save beat</string>
     <string name="editor_save_as_new">Save as new beat</string>
     <string name="editor_save_copy">Save as my version</string>
+    <string name="editor_select">Copy cells</string>
+    <string name="editor_select_hint">Tap the last cell to copy</string>
+    <string name="editor_selection">Cells %1$d–%2$d</string>
     <string name="editor_start_over">Start over</string>
     <string name="editor_start_over_body">Clear this unsaved beat and start again from a blank grid?</string>
     <string name="editor_tap_any_cell">tap any cell to change row</string>
@@ -488,6 +495,10 @@
     <plurals name="editor_beat_count">
         <item quantity="one">%1$d beat</item>
         <item quantity="other">%1$d beats</item>
+    </plurals>
+    <plurals name="editor_clip">
+        <item quantity="one">%d cell copied</item>
+        <item quantity="other">%d cells copied</item>
     </plurals>
     <plurals name="editor_resample_dropped">
         <item quantity="one">%1$d dropped where two landed together.</item>

@@ -130,6 +130,7 @@
     <string name="editor_cells_per_beat">Celdas por tiempo</string>
     <string name="editor_clear">Borrar</string>
     <string name="editor_community_copy_note">El ritmo de la comunidad se queda como está. Al guardar, tu versión se añade a Tus ritmos; podrás compartirla cuando el ritmo sea distinto.</string>
+    <string name="editor_copy">Copiar</string>
     <string name="editor_copy_name">%1$s (copia)</string>
     <string name="editor_default_name">Ritmo personalizado</string>
     <string name="editor_discard_continue">Descartar y continuar</string>
@@ -140,6 +141,9 @@
     <string name="editor_need_stroke">Añade al menos un golpe antes de guardar.</string>
     <string name="editor_next_page">Página siguiente</string>
     <string name="editor_page_range">%1$d–%2$d de %3$d</string>
+    <string name="editor_paste">Pegar</string>
+    <string name="editor_paste_closed">Pegar, bayan cerrado</string>
+    <string name="editor_paste_closed_hint">Pega con los golpes abiertos del bayan cerrados: una mitad guru se vuelve su mitad laghu.</string>
     <string name="editor_prev_page">Página anterior</string>
     <string name="editor_preview">Vista previa</string>
     <string name="editor_remove_group">Quitar un tiempo</string>
@@ -151,6 +155,9 @@
     <string name="editor_save">Guardar ritmo</string>
     <string name="editor_save_as_new">Guardar como ritmo nuevo</string>
     <string name="editor_save_copy">Guardar como mi versión</string>
+    <string name="editor_select">Copiar celdas</string>
+    <string name="editor_select_hint">Toca la última celda a copiar</string>
+    <string name="editor_selection">Celdas %1$d–%2$d</string>
     <string name="editor_start_over">Empezar de nuevo</string>
     <string name="editor_start_over_body">¿Borrar este ritmo sin guardar y empezar de nuevo con la cuadrícula vacía?</string>
     <string name="editor_tap_any_cell">toca cualquier celda para cambiar de fila</string>
@@ -491,6 +498,11 @@
         <item quantity="one">%1$d tiempo</item>
         <item quantity="many">%1$d tiempos</item>
         <item quantity="other">%1$d tiempos</item>
+    </plurals>
+    <plurals name="editor_clip">
+        <item quantity="one">%d celda copiada</item>
+        <item quantity="many">%d celdas copiadas</item>
+        <item quantity="other">%d celdas copiadas</item>
     </plurals>
     <plurals name="editor_resample_dropped">
         <item quantity="one">%1$d se descartó al coincidir con otro.</item>

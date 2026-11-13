@@ -497,4 +497,69 @@ class EditorDraftTest {
         draft = draft.setPagePage(1)
         assertEquals(6, draft.windowStart)
     }
+
+    // ── Copy and paste ─────────────────────────────────────────────────────
+
+    /** An 8-cell draft whose first half is drawn: dayan O . O . / bayan O O . X */
+    private fun guruHalf(): EditorDraft {
+        val d = EditorDraft.from(null)
+        return d.copy(lanes = d.lanes + mapOf(
+            LaneId.DAYAN to listOf(Stroke.OPEN, null, Stroke.OPEN, null, null, null, null, null),
+            LaneId.BAYAN to listOf(Stroke.OPEN, Stroke.OPEN, null, Stroke.CLOSED, null, null, null, null),
+        ))
+    }
+
+    @Test
+    fun `the selection runs from the anchor to the cursor either way round`() {
+        val d = guruHalf().setCursor(3).startSelect().setCursor(1)
+        assertEquals(1..3, d.selection)
+        assertEquals(3..5, d.setCursor(5).selection)
+        assertNull(d.cancelSelect().selection)
+    }
+
+    @Test
+    fun `copy takes every lane and pastes at the cursor`() {
+        val d = guruHalf().startSelect().setCursor(3).copySelection()
+        assertNull(d.selection)
+        assertEquals(4, d.clipLength)
+        val p = d.setCursor(4).paste()
+        assertEquals(listOf(Stroke.OPEN, null, Stroke.OPEN, null), p.pattern(LaneId.DAYAN).subList(4, 8))
+        assertEquals(listOf(Stroke.OPEN, Stroke.OPEN, null, Stroke.CLOSED), p.pattern(LaneId.BAYAN).subList(4, 8))
+        assertEquals(0, p.cursor)  // after the run, wrapped
+        assertEquals(d.setCursor(4).lanes, p.undoLast().lanes)
+    }
+
+    @Test
+    fun `paste with the bayan closed turns only bayan opens to closed`() {
+        val p = guruHalf().startSelect().setCursor(3).copySelection().setCursor(4).paste(closeBayan = true)
+        assertEquals(listOf(Stroke.CLOSED, Stroke.CLOSED, null, Stroke.CLOSED), p.pattern(LaneId.BAYAN).subList(4, 8))
+        assertEquals(listOf(Stroke.OPEN, null, Stroke.OPEN, null), p.pattern(LaneId.DAYAN).subList(4, 8))
+        // The first half is untouched.
+        assertEquals(Stroke.OPEN, p.pattern(LaneId.BAYAN)[0])
+    }
+
+    @Test
+    fun `paste stops at the end of the beat rather than wrapping`() {
+        val p = guruHalf().startSelect().setCursor(3).copySelection().setCursor(6).paste()
+        assertEquals(listOf(Stroke.OPEN, null), p.pattern(LaneId.DAYAN).subList(6, 8))
+        assertEquals(Stroke.OPEN, p.pattern(LaneId.DAYAN)[0])
+        assertEquals(null, p.pattern(LaneId.DAYAN)[1])
+        assertEquals(0, p.cursor)
+    }
+
+    @Test
+    fun `the clip survives a length change and choosing stops`() {
+        val d = guruHalf().startSelect().setCursor(3).copySelection().startSelect().addGroup()
+        assertNull(d.selection)
+        assertEquals(4, d.clipLength)
+        val p = d.setCursor(8).paste()
+        assertEquals(Stroke.OPEN, p.pattern(LaneId.DAYAN)[8])
+    }
+
+    @Test
+    fun `paste with nothing copied does nothing`() {
+        val d = guruHalf()
+        assertEquals(d, d.paste())
+    }
 }
+

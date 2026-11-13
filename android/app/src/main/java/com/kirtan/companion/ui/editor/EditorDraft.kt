@@ -203,6 +203,14 @@ data class EditorDraft(
     val undo: List<DraftSnapshot> = emptyList(),
     /** Set by the last resolution change while any hit moved; cleared by the next edit. */
     val resampleReport: ResampleReport? = null,
+    /**
+     * Non-null while choosing a run of cells to copy: the cell where the run
+     * started. The run is anchor..cursor, so tapping cells (on any page)
+     * moves its other end.
+     */
+    val selectAnchor: Int? = null,
+    /** The last copied run: every lane's cells, the same length. */
+    val clip: Map<LaneId, List<Stroke?>>? = null,
 ) {
     val cpq: Int get() = meter.cpq
     val steps: Int get() = groups.sum()
@@ -307,6 +315,7 @@ data class EditorDraft(
             cursor = (cursor * newCpq / cpq).coerceIn(0, newSteps - 1),
             undo = (undo + DraftSnapshot(lanes, cursor, cursorLane, groups, meter)).takeLast(UNDO_LIMIT),
             resampleReport = if (moved > 0 || dropped > 0) ResampleReport(moved, dropped) else null,
+            selectAnchor = null,
         )
     }
 
@@ -358,6 +367,7 @@ data class EditorDraft(
             groups = groups + meter.unit,
             lanes = lanes.mapValues { (_, cells) -> cells + pad },
             undo = emptyList(),
+            selectAnchor = null,
             resampleReport = null,
         )
     }
@@ -371,6 +381,7 @@ data class EditorDraft(
             lanes = lanes.mapValues { (_, cells) -> cells.dropLast(drop) },
             cursor = min(cursor, steps - drop - 1).coerceAtLeast(0),
             undo = emptyList(),
+            selectAnchor = null,
             resampleReport = null,
         )
     }
@@ -387,6 +398,7 @@ data class EditorDraft(
         lanes = LaneId.ORDERED.associateWith { List(preset.bar.sum()) { null as Stroke? } },
         cursor = 0,
         undo = emptyList(),
+        selectAnchor = null,
     )
 
     // ── Cursor and editing ─────────────────────────────────────────────────
@@ -427,6 +439,64 @@ data class EditorDraft(
         lanes = lanes.mapValues { List(steps) { null as Stroke? } },
         cursor = 0,
     )
+
+    // ── Copy and paste ─────────────────────────────────────────────────────
+    //
+    // A run of cells is copied across EVERY lane at once — what was played at
+    // those moments, not one hand of it. The common use is a beat whose second
+    // half repeats the first with the bayan closed (guru then laghu), so paste
+    // has a variant that turns the bayan's open strokes into closed ones.
+
+    /** The run being chosen, in cell order; null when not choosing. */
+    val selection: IntRange? get() = selectAnchor?.let { a ->
+        val b = cursor
+        minOf(a, b).coerceIn(0, steps - 1)..maxOf(a, b).coerceIn(0, steps - 1)
+    }
+
+    val clipLength: Int get() = clip?.values?.firstOrNull()?.size ?: 0
+
+    fun startSelect(): EditorDraft = copy(selectAnchor = cursor)
+
+    fun cancelSelect(): EditorDraft = copy(selectAnchor = null)
+
+    /** Keep the chosen run as the clip and stop choosing; the cursor goes to its start. */
+    fun copySelection(): EditorDraft {
+        val range = selection ?: return this
+        return copy(
+            clip = LaneId.ORDERED.associateWith { lane -> pattern(lane).slice(range) },
+            selectAnchor = null,
+            cursor = range.first,
+        )
+    }
+
+    /**
+     * Write the clip over the cells from the cursor on, every lane, stopping at
+     * the end of the beat (nothing wraps round to the start). With
+     * [closeBayan], the bayan's open strokes land closed. The cursor moves to
+     * the cell after the pasted run, ready to paste again.
+     */
+    fun paste(closeBayan: Boolean = false): EditorDraft {
+        val c = clip ?: return this
+        val n = minOf(clipLength, steps - cursor)
+        if (n <= 0) return this
+        val withHistory = withUndo()
+        val updated = withHistory.lanes.toMutableMap()
+        for (lane in LaneId.ORDERED) {
+            val src = c[lane] ?: continue
+            val cells = pattern(lane).toMutableList()
+            for (i in 0 until n) {
+                val v = src[i]
+                cells[cursor + i] = if (closeBayan && lane == LaneId.BAYAN && v == Stroke.OPEN) Stroke.CLOSED else v
+            }
+            updated[lane] = cells
+        }
+        return withHistory.copy(
+            lanes = updated,
+            resampleReport = null,
+            selectAnchor = null,
+            cursor = (cursor + n).mod(steps),
+        )
+    }
 
     fun setName(value: String): EditorDraft = copy(name = value)
 

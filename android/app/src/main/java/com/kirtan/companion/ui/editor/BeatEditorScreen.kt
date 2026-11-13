@@ -43,6 +43,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
@@ -340,6 +341,14 @@ internal fun BeatEditorScreen(
                 onPage = { draft = draft.setPagePage(it) },
             )
 
+            ClipZone(
+                draft = draft,
+                onStart = { draft = draft.startSelect() },
+                onCopy = { draft = draft.copySelection() },
+                onCancel = { draft = draft.cancelSelect() },
+                onPaste = { closeBayan -> draft = draft.paste(closeBayan) },
+            )
+
             PadsZone(draft = draft, onPad = ::tapPad)
 
             ControlsZone(
@@ -506,6 +515,21 @@ private fun OverviewZone(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .onSizeChanged { widthPx = it.width }
+            // The run being chosen for copying (it can span pages), painted
+            // over the strip.
+            .drawWithContent {
+                drawContent()
+                val sel = draft.selection
+                if (sel != null && draft.steps > 0) {
+                    val cell = size.width / draft.steps
+                    drawRoundRect(
+                        color = PaletteToken.CLAY.color.copy(alpha = 0.22f),
+                        topLeft = androidx.compose.ui.geometry.Offset(sel.first * cell, 0f),
+                        size = androidx.compose.ui.geometry.Size((sel.last + 1 - sel.first) * cell, size.height),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()),
+                    )
+                }
+            }
             .pointerInput(draft.steps) {
                 // Drag anywhere on the overview to scrub; onDragStart covers the
                 // initial touch so a plain tap lands the cursor too.
@@ -649,6 +673,7 @@ private fun ZoomZone(
                         // other hands fall at the same moment.
                         val sameMoment = !onRow && index == draft.cursor
                         val lit = previewing && index == step
+                        val chosen = draft.selection?.contains(index) == true
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -658,6 +683,7 @@ private fun ZoomZone(
                                 .background(
                                     when {
                                         lit -> PaletteToken.HEAD_SUNKEN.color
+                                        chosen -> PaletteToken.CLAY.color.copy(alpha = 0.16f)
                                         sameMoment -> PaletteToken.HEAD_WORN.color
                                         else -> PaletteToken.HEAD.color
                                     }
@@ -678,6 +704,79 @@ private fun ZoomZone(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Copy and paste. "Copy cells" starts a run at the cursor; tapping cells (any
+ * row, any page) moves its other end; Copy keeps it. Paste writes it from the
+ * cursor on; "bayan closed" pastes the bayan's opens as closed, which turns a
+ * guru half into its laghu half in one go.
+ */
+@Composable
+private fun ClipZone(
+    draft: EditorDraft,
+    onStart: () -> Unit,
+    onCopy: () -> Unit,
+    onCancel: () -> Unit,
+    onPaste: (Boolean) -> Unit,
+) {
+    val dimens = KirtanTheme.dimens
+    val sel = draft.selection
+    Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
+        if (sel != null) {
+            Text(
+                text = stringResource(R.string.editor_selection, sel.first + 1, sel.last + 1) +
+                    " · " + stringResource(R.string.editor_select_hint),
+                color = PaletteToken.CLAY.color,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
+                PrimaryButton(
+                    label = stringResource(R.string.editor_copy),
+                    onClick = onCopy,
+                    modifier = Modifier.weight(1f),
+                    minHeight = 44.dp,
+                )
+                SecondaryButton(
+                    label = stringResource(R.string.common_cancel),
+                    onClick = onCancel,
+                    modifier = Modifier.weight(1f),
+                    minHeight = 44.dp,
+                )
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(dimens.space2)) {
+                SecondaryButton(
+                    label = stringResource(R.string.editor_select),
+                    onClick = onStart,
+                    modifier = Modifier.weight(1f),
+                    minHeight = 44.dp,
+                )
+                SecondaryButton(
+                    label = stringResource(R.string.editor_paste),
+                    onClick = { onPaste(false) },
+                    enabled = draft.clip != null,
+                    modifier = Modifier.weight(1f),
+                    minHeight = 44.dp,
+                )
+            }
+            if (draft.clip != null) {
+                SecondaryButton(
+                    label = stringResource(R.string.editor_paste_closed),
+                    onClick = { onPaste(true) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minHeight = 44.dp,
+                )
+                Text(
+                    text = pluralStringResource(R.plurals.editor_clip, draft.clipLength, draft.clipLength) +
+                        " · " + stringResource(R.string.editor_paste_closed_hint),
+                    color = PaletteToken.SYAHI_SOFT.color,
+                    fontSize = 12.sp,
+                )
             }
         }
     }
