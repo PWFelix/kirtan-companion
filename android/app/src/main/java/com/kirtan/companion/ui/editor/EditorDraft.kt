@@ -511,6 +511,28 @@ data class EditorDraft(
     fun pickCell(lane: LaneId, index: Int): EditorDraft =
         setCursor(index).copy(cursorLane = lane)
 
+    /**
+     * A tap on a grid cell. The first tap selects it (and so picks the pads); a
+     * tap on the cell ALREADY selected steps it through its row's palette —
+     * rest → open → closed → rest — so a cell can be edited without moving.
+     * The cursor stays put. While choosing a run to copy, taps only move its end.
+     */
+    fun tapCell(lane: LaneId, index: Int): EditorDraft =
+        if (selectAnchor == null && lane == cursorLane && index == cursor) cycleCell()
+        else pickCell(lane, index)
+
+    /** The selected cell, one step on through its palette; undoable like a pad. */
+    fun cycleCell(): EditorDraft {
+        if (cursor !in 0 until steps) return this
+        val order: List<Stroke?> = listOf(null) + padSetFor(cursorLane).mapNotNull { it.write[cursorLane] }
+        val now = pattern(cursorLane)[cursor]
+        val next = order[(order.indexOf(now) + 1).mod(order.size)]
+        val withHistory = withUndo()
+        val cells = withHistory.pattern(cursorLane).toMutableList()
+        cells[cursor] = next
+        return withHistory.copy(resampleReport = null, lanes = withHistory.lanes + (cursorLane to cells))
+    }
+
     // ── Output ─────────────────────────────────────────────────────────────
 
     /**

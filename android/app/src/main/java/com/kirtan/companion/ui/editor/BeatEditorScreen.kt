@@ -337,7 +337,16 @@ internal fun BeatEditorScreen(
                 draft = draft,
                 step = step,
                 previewing = previewing,
-                onCellTap = { lane, index -> draft = draft.pickCell(lane, index) },
+                onCellTap = { lane, index ->
+                    val before = draft
+                    draft = draft.tapCell(lane, index)
+                    // A re-tap cycled the cell: sound what landed (a rest stays silent).
+                    val landed = draft.pattern(lane).getOrNull(index)
+                    if (!previewing && draft.lanes != before.lanes && landed != null) {
+                        engine.playStroke(lane, landed == Stroke.OPEN)
+                    }
+                },
+                onLaneTap = { lane -> draft = draft.pickCell(lane, draft.cursor) },
                 onPage = { draft = draft.setPagePage(it) },
             )
 
@@ -588,6 +597,8 @@ private fun ZoomZone(
     step: Int,
     previewing: Boolean,
     onCellTap: (LaneId, Int) -> Unit,
+    /** The row label: moves to that row, same column. Never edits. */
+    onLaneTap: (LaneId) -> Unit,
     onPage: (Int) -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
@@ -661,7 +672,7 @@ private fun ZoomZone(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = { onCellTap(lane, draft.cursor) },
+                            onClick = { onLaneTap(lane) },
                         )
                         .padding(vertical = 2.dp),
                 )
