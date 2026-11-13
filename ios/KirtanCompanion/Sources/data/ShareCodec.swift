@@ -103,13 +103,17 @@ enum ShareCodec {
                 p.append(JPair(key: lane.wireId, value: .string(packed)))
             }
         }
-        return .obj(
+        let base = JValue.obj(
             ("n", .string(beat.name)),
             ("m", .int(beat.bpm)),
             ("g", .arr(groups.map { .int($0) })),
             ("q", .int(cpqFor(beat))),
             ("p", .object(p)),
         )
+        // Swing rides as "w", only when set: older apps ignore it and play straight.
+        guard beat.swing > Swing.straight, case .object(var pairs) = base else { return base }
+        pairs.append(JPair(key: "w", value: .int(Swing.clamp(beat.swing))))
+        return .object(pairs)
     }
 
     static func encodeBeat(_ beat: Beat) -> String {
@@ -221,6 +225,8 @@ enum ShareCodec {
             description: nil,        // dropped, not validated; see rule 5
             lanePatterns: lanes,
             group: nil,              // dropped for the same reason
+            // Junk or out-of-range plays straight (or at the nearest end) rather than refusing the beat.
+            swing: Swing.clamp(obj.doubleField("w").flatMap { $0.isFinite ? Int($0.rounded()) : nil } ?? Swing.straight),
         )
     }
 

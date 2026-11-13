@@ -30,6 +30,7 @@ struct BeatEditorView: View {
     // ── The draft. All of it means nothing outside this view. ──
     @State private var name = String(localized: "New beat", bundle: .strings)
     @State private var bpm = 120
+    @State private var swing = Swing.straight
     /// The editor's own Brahmaloka mode: + at 200 opens it, below 200 closes it, and a
     /// beat saved above 200 opens in it.
     @State private var brahmaloka = false
@@ -74,6 +75,17 @@ struct BeatEditorView: View {
                     nameField
                     tagsLine
                     meterRow
+                    SwingControl(
+                        value: swing,
+                        onChange: { v in
+                            swing = v
+                            // Preview plays a copy taken at start; nudge it live too.
+                            if previewing { transport.setSwing(v) }
+                        },
+                        hint: String(localized: "Saved with the beat. Plays every second cell late; beats of three cells stay as written.", bundle: .strings)
+                    )
+                    .padding(10)
+                    .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 10))
                     lengthRow
                     resolutionRow
                     grid
@@ -120,6 +132,7 @@ struct BeatEditorView: View {
         name = d.name
         tags = d.tags
         bpm = d.bpm
+        swing = d.swing
         brahmaloka = d.bpm > NORMAL_MAX_BPM
         shape = d.shape
         dayan = d.dayan
@@ -131,7 +144,7 @@ struct BeatEditorView: View {
     /// The draft as the session keeps it.
     private var snapshot: EditorSnapshot {
         EditorSnapshot(name: name, bpm: bpm, shape: shape, dayan: dayan, bayan: bayan, kartal: kartal,
-                       tags: tags, cursorLane: cursor.lane, cursorStep: cursor.step)
+                       tags: tags, swing: swing, cursorLane: cursor.lane, cursorStep: cursor.step)
     }
 
     // MARK: header
@@ -628,6 +641,7 @@ struct BeatEditorView: View {
         )
         if case .edit(let original) = mode { beat.sourceItemId = original.sourceItemId }
         beat.tags = tags
+        beat.swing = swing
         // A copy of a community beat (or of a copy) remembers where it came from: credit,
         // and what keeps it from being shared until the rhythm actually differs.
         if case .fork(let original) = mode { beat.forkedFrom = original.sourceItemId ?? original.forkedFrom }

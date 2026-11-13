@@ -39,6 +39,8 @@ struct EditorSnapshot: Equatable {
     var bayan: [Stroke?]
     var kartal: [Stroke?]
     var tags: [String]
+    /// Swing, 50–67 (see Swing). Saved with the beat.
+    var swing = Swing.straight
     var cursorLane = 0
     var cursorStep = 0
 
@@ -62,14 +64,15 @@ struct EditorSnapshot: Equatable {
             ? EditorShape.seeded(groups: groups, cpq: cpqFor(beat))
             : EditorShape.seeded(groups: [n], cpq: cpqFor(beat))
         return EditorSnapshot(name: beat.name, bpm: beat.bpm, shape: shape,
-                              dayan: lane(.dayan), bayan: lane(.bayan), kartal: lane(.kartal), tags: beat.tags)
+                              dayan: lane(.dayan), bayan: lane(.bayan), kartal: lane(.kartal), tags: beat.tags,
+                              swing: Swing.clamp(beat.swing))
     }
 
     /// What a save would write, compared; the cursor doesn't count.
     func sameContent(as o: EditorSnapshot) -> Bool {
         let n = shape.steps
         func pad(_ a: [Stroke?]) -> [Stroke?] { Array(a.prefix(n)) + Array(repeating: nil, count: max(0, n - a.count)) }
-        return n == o.shape.steps && shape.groups == o.shape.groups && shape.cpq == o.shape.cpq && bpm == o.bpm &&
+        return n == o.shape.steps && shape.groups == o.shape.groups && shape.cpq == o.shape.cpq && bpm == o.bpm && swing == o.swing &&
             name.trimmingCharacters(in: .whitespaces) == o.name.trimmingCharacters(in: .whitespaces) &&
             pad(dayan) == pad(o.dayan) && pad(bayan) == pad(o.bayan) && pad(kartal) == pad(o.kartal) &&
             tags == o.tags
@@ -124,7 +127,8 @@ enum EditorSessionStore {
         let beat = Beat(id: nil, name: d.name.isEmpty ? "-" : d.name, note: "", bpm: d.bpm, steps: d.shape.steps,
                         beatsPerBar: d.shape.beatsPerBar,
                         cellsPerGroup: allSame ? (d.shape.groups.first ?? d.shape.cpq) : d.shape.cpq,
-                        groups: d.shape.groups, description: nil, lanePatterns: lanes, group: nil)
+                        groups: d.shape.groups, description: nil, lanePatterns: lanes, group: nil,
+                        swing: d.swing)
         let kind: String
         switch s.mode {
         case .new: kind = "new"

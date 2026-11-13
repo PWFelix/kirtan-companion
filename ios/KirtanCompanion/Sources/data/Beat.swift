@@ -87,6 +87,8 @@ struct Beat: Hashable {
     /// The community item an EDITED COPY was made from: credit, and what stops a copy
     /// being re-shared until it actually differs. Exclusive with sourceItemId.
     var forkedFrom: String? = nil
+    /// Swing, 50 (straight) to 67 (triplet); see Swing. Saved and shared with the beat.
+    var swing: Int = Swing.straight
 
     /// A community beat the user added: read-only, follows the original, can't be
     /// shared. Editing one makes a copy in Your beats.

@@ -18,6 +18,12 @@ struct MixerSheet: View {
                 VStack(spacing: 20) {
                     masterSection
                     feelSection
+                SwingControl(
+                    value: transport.swing,
+                    onChange: { transport.setSwing($0) },
+                    hint: String(localized: "Plays every second cell late, for a long-short lilt. Starts at the beat’s own swing; choosing a beat brings that back.", bundle: .strings)
+                )
+                .sectionCard()
 
                     ForEach(LaneId.ordered, id: \.self) { lane in
                         laneSection(lane)

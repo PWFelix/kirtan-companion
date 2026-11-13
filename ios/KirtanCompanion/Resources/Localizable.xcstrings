@@ -2853,6 +2853,16 @@
         }
       }
     },
+    "Plays every second cell late, for a long-short lilt. Starts at the beat’s own swing; choosing a beat brings that back." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toca cada segunda celda tarde, con un vaivén largo-corto. Empieza con el swing propio del ritmo; al elegir un ritmo vuelve a ese."
+          }
+        }
+      }
+    },
     "Prayers" : {
       "localizations" : {
         "es" : {
@@ -3149,6 +3159,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Guardar secuencia"
+          }
+        }
+      }
+    },
+    "Saved with the beat. Plays every second cell late; beats of three cells stay as written." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se guarda con el ritmo. Toca cada segunda celda tarde; los tiempos de tres celdas quedan como están."
           }
         }
       }
@@ -3539,6 +3559,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Detener clic"
+          }
+        }
+      }
+    },
+    "Straight" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recto"
           }
         }
       }
@@ -4171,6 +4201,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Destacados"
+          }
+        }
+      }
+    },
+    "Triplet" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tresillo"
           }
         }
       }

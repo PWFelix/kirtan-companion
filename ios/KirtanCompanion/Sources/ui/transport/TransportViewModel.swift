@@ -54,6 +54,8 @@ final class TransportViewModel {
     var step = -1
     var bpm = DEFAULT_BPM
     var beatName: String?
+    /// Swing in force: the playing beat's own, unless nudged in the mixer.
+    var swing = Swing.straight
     /// The beat the engine is pointed at — what Learn draws.
     var loadedBeat: Beat?
     var settings = EqPrefsSnapshot.default
@@ -164,6 +166,7 @@ final class TransportViewModel {
             sequence.playingEntry = p.entryIndex
             sequence.playingBar = bar
             sequence.playingBeat = p.step.beat
+            swing = p.step.beat.swing
             playback.setBeatTitle(p.step.beat.name)
 
         case .sequenceEnded:
@@ -338,6 +341,13 @@ final class TransportViewModel {
         publish(s)
     }
 
+    /// Nudge the playing beat's swing. Live only: the beat keeps its saved swing,
+    /// and choosing a beat brings that back. A beat's own swing is set in the editor.
+    func setSwing(_ value: Int) {
+        engine.setSwing(value)
+        swing = engine.swing
+    }
+
     func setFeel(_ feel: Feel) {
         engine.setFeel(feel)
         var s = settings; s.feel = feel
@@ -488,6 +498,7 @@ final class TransportViewModel {
         engine.setBeat(beat)
         playback.setBeatTitle(beat.name)
         beatName = beat.name
+        swing = engine.swing
         loadedBeat = beat
         if !settings.tempoLocked && beat.id != loadedBeatId { changeBpm(beat.bpm) }
         loadedBeatId = beat.id
@@ -507,6 +518,7 @@ final class TransportViewModel {
         engine.setBpm(bpm)
         playback.setBeatTitle(beat.name)
         beatName = beat.name
+        swing = engine.swing
         loadedBeat = beat
         playback.setPlayWhenReady(true)
     }
@@ -533,6 +545,7 @@ final class TransportViewModel {
         engine.start()
         playing = true
         beatName = beat.name
+        swing = engine.swing
     }
 
     /// End the preview. Synchronous, unlike `stop`: nothing round-trips, and the
@@ -556,6 +569,7 @@ final class TransportViewModel {
         if let beat = loadedBeat {
             engine.setBeat(beat)
             beatName = beat.name
+            swing = engine.swing
         }
         engine.setBpm(bpm)
     }

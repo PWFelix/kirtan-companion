@@ -54,6 +54,7 @@ enum LibraryJson {
     private static let keyTags = "tags"
     private static let keySourceIndex = "sourceIndex"
     private static let keyForkedFrom = "forkedFrom"
+    private static let keySwing = "swing"
     private static let maxTags = 16
     private static let keyBeatIds = "beatIds"
 
@@ -100,6 +101,10 @@ enum LibraryJson {
         }
         if let from = beat.forkedFrom {
             pairs.append(JPair(key: keyForkedFrom, value: .string(from)))
+        }
+        // Only when set, so a straight beat's stored form is unchanged.
+        if beat.swing > Swing.straight {
+            pairs.append(JPair(key: keySwing, value: .number(Double(Swing.clamp(beat.swing)))))
         }
         for lane in LaneId.ordered {
             if let cells = beat.pattern(lane) {
@@ -222,6 +227,7 @@ enum LibraryJson {
             tags: decodeTags(obj.element(keyTags)),
             sourceIndex: obj.intField(keySourceIndex).flatMap { $0 >= 0 ? $0 : nil },
             forkedFrom: obj.stringField(keyForkedFrom),
+            swing: Swing.clamp(obj.intField(keySwing) ?? Swing.straight),
         )
     }
 

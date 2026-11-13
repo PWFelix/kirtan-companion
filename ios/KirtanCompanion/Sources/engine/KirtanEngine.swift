@@ -161,6 +161,9 @@ final class KirtanEngine: BlockRenderer {
     func setBeat(_ beat: Beat) {
         currentBeat = beat
         humanizer.setBeat(beat)
+        // A beat brings its own swing, replacing any live nudge from the mixer.
+        swingOffbeats = Swing.offbeats(groupsFor(beat))
+        swing = Swing.clamp(beat.swing)
         sequencer.setBeat(beat)
         sequencer.invalidateGuard()
     }
@@ -233,6 +236,12 @@ final class KirtanEngine: BlockRenderer {
 
     /// How much human variation the drum plays with. Takes effect on the next stroke.
     func setFeel(_ feel: Feel) { humanizer.feel = feel }
+
+    /// Which cells swing for the current beat; see Swing.
+    private var swingOffbeats: [Bool] = []
+    /// Swing in force, 50–67. Set from the beat on setBeat; setSwing nudges it live.
+    private(set) var swing: Int = Swing.straight
+    func setSwing(_ value: Int) { swing = Swing.clamp(value) }
 
     func setVolume(_ value: Float) { soundPlayer.setVolume(value) }
     func volume() -> Float { soundPlayer.volume() }
@@ -414,11 +423,15 @@ final class KirtanEngine: BlockRenderer {
         // allocates nothing.
         humanizer.advance()
         let stepMs = 60_000 / clock.bpm * beat.beatsPerBar / Double(max(1, beat.steps))
+        // Swing: the 2nd, 4th… cell of an even beat sounds late. Only the sound
+        // moves — the step event (and so the strip) stays on the grid.
+        let swung = event.step >= 0 && event.step < swingOffbeats.count && swingOffbeats[event.step]
+        let swingFrames = swung ? Int(Swing.lateFraction(swing) * stepMs * Double(sampleRate) / 1000) : 0
         for lane in LaneId.ordered {
             guard let stroke = beat.strokeAt(lane, event.step) else { continue }
             soundPlayer.play(
                 StrokeKey(lane: lane, open: stroke == .open),
-                offsetInBlock: offset + humanizer.delayFrames(lane, step: event.step, stepMs: stepMs),
+                offsetInBlock: offset + swingFrames + humanizer.delayFrames(lane, step: event.step, stepMs: stepMs),
                 gain: humanizer.gain(step: event.step)
             )
         }
