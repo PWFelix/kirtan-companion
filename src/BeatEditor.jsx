@@ -12,7 +12,7 @@ import { tempoRange, brahmalokaFor } from "./data/meter.js";
 import BpmRange from "./ui/BpmRange.jsx";
 import BrahmalokaBurst from "./ui/BrahmalokaBurst.jsx";
 import { leverFor, reshape, resample, pagesFor } from "./data/resolution.js";
-import { MAX_STEPS } from "./data/shareCodec.js";
+import { MAX_STEPS, MAX_GROUPS } from "./data/shareCodec.js";
 import { METERS, meterFor, emptyGrid, sum, draftFrom } from "./data/editorDraft.js";
 
 /**
@@ -124,8 +124,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   const [windowStart, windowEnd] = pages[page] ?? [0, steps];
   const zoomCells = windowEnd - windowStart;
 
-  // The two levers: beats (±, capped so the beat stays within 64 cells) and resolution.
-  const canAddBeat = steps + sum(meter.unit) <= MAX_STEPS;
+  // The two levers: beats (±, capped so the beat stays within MAX_STEPS cells, 384) and resolution.
+  const canAddBeat = steps + sum(meter.unit) <= MAX_STEPS && groups.length + meter.unit.length <= MAX_GROUPS;
   const canRemoveBeat = groups.length > meter.unit.length;
   const lever = leverFor(groups, cpq);
   // What the last resolution change moved or dropped, shown until the next edit.

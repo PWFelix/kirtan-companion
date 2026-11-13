@@ -33,7 +33,7 @@ export function leverFor(groups, cpq) {
 
 /**
  * The grid at `option` on the lever: { groups, cpq, unit }, or null when it would
- * pass the format's caps (64 cells in all, 12 in one beat) — older apps reject those.
+ * pass the format's caps (MAX_STEPS cells in all, 12 in one beat) — older apps reject those.
  */
 export function reshape(groups, cpq, unit, option) {
   const lever = leverFor(groups, cpq);

@@ -69,9 +69,9 @@ const REST_CHAR = "-";
 // hostile payload can't allocate anything interesting.
 const MAX_CODE_LEN = 8000;   // ~a category of ten beats, with headroom
 const MAX_NAME_LEN = 40;
-const MAX_GROUPS = 32;       // numbered beats in one pattern
+export const MAX_GROUPS = 32;      // numbered beats in one pattern
 export const MAX_GROUP_CELLS = 12;  // cells in one numbered beat
-export const MAX_STEPS = 64;        // total cells — this is the DoS bound that matters
+export const MAX_STEPS = 384;       // total cells — this is the DoS bound that matters
 const MAX_CPQ = 12;
 const MAX_CAT_BEATS = 50;
 
