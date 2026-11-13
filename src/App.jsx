@@ -118,6 +118,15 @@ function App() {
   // Selecting a beat FROM a category makes that category the active cycling
   // context for Home's chevrons and quick-pick. Switches the loop live if
   // playing — the mid-kirtan "next step in the progression" move.
+  // The sequencer finds its beats by id; keep it handed the current library
+  // (an edited beat then sounds edited inside a playing sequence).
+  const { bindSequenceBeats } = transport;
+  const { customBeats } = library;
+  useEffect(() => { bindSequenceBeats(library.allBeats); },
+    // allBeats is rebuilt each render; customBeats is what actually changes it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customBeats]);
+
   function selectBeat(b, fromCat) {
     setBeatId(b.id);
     saveSession({ beatId: b.id });

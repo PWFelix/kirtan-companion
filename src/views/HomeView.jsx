@@ -6,6 +6,8 @@ import { MIN_BPM, MAX_BPM } from "../hooks/useTransport.js";
 import { tempoRange } from "../data/meter.js";
 import BpmRange from "../ui/BpmRange.jsx";
 import BrahmalokaBurst from "../ui/BrahmalokaBurst.jsx";
+import SequencePanel from "./SequencePanel.jsx";
+import { addEntry, setEntryBars, setEntryBeat, moveEntry, removeEntry } from "../data/sequences.js";
 import BeatStrip from "../BeatStrip.jsx";
 import Wordmark from "../Wordmark.jsx";
 import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
@@ -117,12 +119,27 @@ function HomeView({
     eqTune = { dayan: 0, bayan: 0 }, changeEqTune,
     tuneOpen = { dayan: false, bayan: false }, toggleTunePanel,
     togglePlay,
+    sequence: seq, toggleSequence, editSequence, setSequenceLoop,
+    saveSequence, openSequence, newSequence, deleteSequence,
     brahmaloka, burstKey, unlockBrahmaloka, leaveBrahmaloka,
   } = transport;
   // The slider spans 40–200, or 190–500 in Brahmaloka time (data/meter.js);
   // holding it at 200 unlocks the high range.
   const range = tempoRange(brahmaloka);
-  const { isCustomBeat } = library;
+  const { isCustomBeat, allBeats } = library;
+
+  // The sequencer. While a sequence plays, Home shows the beat SOUNDING
+  // (and after it stops, the one last heard) rather than the library pick.
+  // Play plays the sequence whenever it has a beat to play.
+  const beatsById = new Map(allBeats.map((b) => [b.id, b]));
+  const lookup = (id) => beatsById.get(id) ?? null;
+  const shown = seq.playingBeat ?? beat;
+  const sequenceMode = seq.working.entries.some((e) => beatsById.has(e.beatId));
+  const onPlay = () => (sequenceMode ? toggleSequence() : togglePlay(beat));
+  const playLabel = playing ? t("common.pause") : sequenceMode ? t("seq.play") : t("common.play");
+  // What the beat picker is choosing FOR: null = the loaded beat,
+  // -1 = a new sequence entry, n = entry n's beat.
+  const [pickFor, setPickFor] = useState(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mixerOpen, setMixerOpen] = useState(false);
@@ -158,18 +175,25 @@ function HomeView({
   }
 
   // Quick-pick (ui/BeatPickerSheet) opens on the active category.
-  function openPicker() {
+  function openPicker(target = null) {
+    setPickFor(target);
     setPickerOpen(true);
   }
 
   const playIcon = playing ? <PauseIcon /> : <PlayIcon />;
-  const editLabel = isCustomBeat(beat.id) ? t("home.editBeat") : t("home.customizeBeat");
+  const editLabel = isCustomBeat(shown.id) ? t("home.editBeat") : t("home.customizeBeat");
 
   // ── Sheets, shared by both orientations ──
 
   const beatPicker = pickerOpen && (
-    <BeatPickerSheet library={library} beatId={beatId} onSelect={onSelect}
-      onClose={() => setPickerOpen(false)} />
+    <BeatPickerSheet library={library}
+      beatId={pickFor === null ? beatId : pickFor === -1 ? null : seq.working.entries[pickFor]?.beatId}
+      onSelect={(b, tab) => {
+        if (pickFor === null) onSelect(b, tab);
+        else if (pickFor === -1) editSequence((es) => addEntry(es, b.id));
+        else editSequence((es) => setEntryBeat(es, pickFor, b.id));
+      }}
+      onClose={() => { setPickerOpen(false); setPickFor(null); }} />
   );
 
   // Precise BPM entry: type the number (desktop) or scroll the wheel (touch);
@@ -363,7 +387,7 @@ function HomeView({
         {burst}
         <main style={st.landStripWrap}>
           <BeatStrip
-            beat={beat}
+            beat={shown}
             step={step}
             playing={playing}
             getPhase={getPhase}
@@ -373,13 +397,13 @@ function HomeView({
         </main>
 
         <div style={st.landRail}>
-          <button onClick={() => onEdit(beat)} style={st.landEditBtn} aria-label={editLabel}>
+          <button onClick={() => onEdit(shown)} style={st.landEditBtn} aria-label={editLabel}>
             <PencilIcon />
           </button>
           <button onClick={() => onCycle(-1)} aria-label={t("common.prevBeat")} style={st.chevBtnSm}>‹</button>
           <button onClick={openPicker} style={st.landNameBtn}
             aria-haspopup="dialog" aria-expanded={pickerOpen}>
-            {beat.name} <span style={st.nameCaret}>▾</span>
+            {shown.name} <span style={st.nameCaret}>▾</span>
           </button>
           <button onClick={() => onCycle(1)} aria-label={t("common.nextBeat")} style={st.chevBtnSm}>›</button>
           <button onClick={() => setBpmEntryOpen(true)} style={{ ...st.bpmBtn, ...st.landBpmBtn }}
@@ -404,9 +428,9 @@ function HomeView({
             aria-haspopup="dialog" aria-expanded={mixerOpen}>
             <MixerIcon />
           </button>
-          <button onClick={() => togglePlay(beat)} disabled={!ready}
+          <button onClick={onPlay} disabled={!ready}
             style={{ ...st.landPlayBtn, opacity: ready ? 1 : 0.5 }}
-            aria-label={playing ? t("common.pause") : t("common.play")}>
+            aria-label={playLabel}>
             {playIcon}
           </button>
         </div>
@@ -434,11 +458,11 @@ function HomeView({
         <button onClick={() => onCycle(-1)} aria-label={t("common.prevBeat")} style={st.chevBtn}>‹</button>
         <button onClick={openPicker} style={st.nameBtn}
           aria-haspopup="dialog" aria-expanded={pickerOpen}>
-          <h1 style={st.beatName}>{beat.name} <span style={st.nameCaret}>▾</span></h1>
-          <span style={st.beatMeta}>{noteLabel(beat.note)} · {t("beat.cells", { n: beat.steps })}</span>
+          <h1 style={st.beatName}>{shown.name} <span style={st.nameCaret}>▾</span></h1>
+          <span style={st.beatMeta}>{noteLabel(shown.note)} · {t("beat.cells", { n: shown.steps })}</span>
         </button>
         <button onClick={() => onCycle(1)} aria-label={t("common.nextBeat")} style={st.chevBtn}>›</button>
-        <button onClick={() => onEdit(beat)} style={st.landEditBtn} aria-label={editLabel}>
+        <button onClick={() => onEdit(shown)} style={st.landEditBtn} aria-label={editLabel}>
           <PencilIcon />
         </button>
       </div>
@@ -446,7 +470,7 @@ function HomeView({
       {/* The strip — vertically centred in whatever space is left. */}
       <main style={st.stripWrap}>
         <BeatStrip
-          beat={beat}
+          beat={shown}
           step={step}
           playing={playing}
           getPhase={getPhase}
@@ -454,6 +478,13 @@ function HomeView({
           onToggleMute={toggleMute}
         />
       </main>
+
+      <SequencePanel seq={seq} lookup={lookup}
+        onEdit={(op, i, v) => editSequence((es) =>
+          op === "bars" ? setEntryBars(es, i, v) : op === "move" ? moveEntry(es, i, v) : removeEntry(es, i))}
+        onToggleLoop={() => setSequenceLoop(!seq.working.loop)}
+        onSave={saveSequence} onOpen={openSequence} onNew={newSequence} onDelete={deleteSequence}
+        onAdd={() => openPicker(-1)} onChangeBeat={(i) => openPicker(i)} />
 
       <section style={sh.controls}>
         {/* BPM as signage: the number IS the label, and tapping it opens
@@ -493,11 +524,11 @@ function HomeView({
 
       {/* The clay play bar — full width at thumb height: impossible to
           miss, impossible to fumble. */}
-      <button onClick={() => togglePlay(beat)} disabled={!ready}
+      <button onClick={onPlay} disabled={!ready}
         style={{ ...st.playBtn, opacity: ready ? 1 : 0.5 }}
-        aria-label={playing ? t("common.pause") : t("common.play")}>
+        aria-label={playLabel}>
         {playIcon}
-        {playing ? t("common.pause") : t("common.play")}
+        {playLabel}
       </button>
 
       {nav}

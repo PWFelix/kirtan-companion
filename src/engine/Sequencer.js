@@ -29,6 +29,7 @@
 import * as Tone from "tone";
 import { ticksToNearestBar } from "../data/hillClimb.js";
 import { EventEmitter } from "./EventEmitter.js";
+import { SequenceCursor } from "../data/sequences.js";
 
 // Tiny tolerance added before flooring phase→step. getTicksAtTime()
 // returns a float, so a value that should be exactly e.g. 3.0 at a step
@@ -50,7 +51,37 @@ export class Sequencer extends EventEmitter {
     // right after a beat switch) can't produce a double hit. Reset to
     // -1 on stop / start.
     this._lastFiredStep = -1;
+    // A playing SEQUENCE (Home's running order), or null for one looping beat.
+    // _plan is [{ beat, bars }]; the cursor counts downbeats through it.
+    this._plan = null;
+    this._cursor = null;
   }
+
+  /**
+   * Play `steps` ([{ beat, bars }]) in order instead of one beat, switching on
+   * bar lines; null goes back to a single beat. Re-setting it while playing
+   * (an edit) keeps the place: same entry and bar where they still exist.
+   * Emits "sequenceAt" ({ index, bar }, bar 1-based) on every downbeat and
+   * "sequenceEnded" when the last entry finishes with loop off.
+   */
+  setSequence(steps, loop) {
+    if (!steps || steps.length === 0) {
+      this._plan = null;
+      this._cursor = null;
+      return;
+    }
+    const cursor = new SequenceCursor(steps.map((s) => s.bars), loop);
+    if (this._cursor && this._loopId !== null) cursor.adopt(this._cursor);
+    this._plan = steps;
+    this._cursor = cursor;
+    if (this._loopId === null) this._beat = steps[0].beat;
+  }
+
+  setSequenceLoop(loop) {
+    if (this._cursor) this._cursor.loop = loop;
+  }
+
+  get hasSequence() { return this._plan !== null; }
 
   setBeat(beat) {
     this._beat = beat;
@@ -98,6 +129,10 @@ export class Sequencer extends EventEmitter {
       console.warn("Sequencer: no beat loaded");
       return;
     }
+    if (this._plan) {
+      this._cursor.reset();
+      this._beat = this._plan[0].beat;
+    }
     this._applyTransportLoop();
     // Start the bar at phase 0 so the visual playhead and the audio
     // both begin on the downbeat.
@@ -117,6 +152,7 @@ export class Sequencer extends EventEmitter {
     Tone.Transport.position = 0;
     Tone.Transport.loop = false;
     this._lastFiredStep = -1;
+    this._cursor?.reset();
   }
 
   /**
@@ -232,6 +268,21 @@ export class Sequencer extends EventEmitter {
     // only ever catches a genuine duplicate.
     if (step === this._lastFiredStep) return;
     this._lastFiredStep = step;
+
+    // A sequence decides on each 1. By the time this callback runs Tone has
+    // already wrapped the bar loop to tick 0 at `time`, so a switch here
+    // re-lays the loop (new meter, new grid) from this very downbeat and the
+    // new beat's first stroke is the one played below. End stops on the 1,
+    // unplayed — the last bar of the last entry was the music.
+    if (step === 0 && this._cursor) {
+      const out = this._cursor.onDownbeat();
+      if (out.type === "end") {
+        this.emit("sequenceEnded");
+        return;
+      }
+      if (out.type === "switch") this.setBeat(this._plan[out.index].beat);
+      this.emit("sequenceAt", { index: this._cursor.index, bar: this._cursor.bar + 1 });
+    }
 
     const dayanHit = this._beat.dayan[step];
     const bayanHit = this._beat.bayan[step];

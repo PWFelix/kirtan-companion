@@ -28,7 +28,7 @@ UI  ◀──events──  KirtanEngine  ◀──  Sequencer/SoundPlayer
 ```
 
 Files:
-- `src/engine/KirtanEngine.js` — the facade. Public surface: `loadSounds`, `unlock`, `setBeat`, `setBpm`, `setVolume`, `setEndVolume`, `setEndMuted`, `setEqBand`, `setEndPitch`, `start`, `stop`, plus `on/off` for `"ready" | "started" | "stopped" | "step"`.
+- `src/engine/KirtanEngine.js` — the facade. Public surface: `loadSounds`, `unlock`, `setBeat`, `setBpm`, `setVolume`, `setEndVolume`, `setEndMuted`, `setEqBand`, `setEndPitch`, `setSequence`, `setSequenceLoop`, `start`, `stop`, plus `on/off` for `"ready" | "started" | "stopped" | "step" | "sequenceAt" | "sequenceEnded"`. A sequence (Home's running order, `src/data/sequences.js`) is played by the Sequencer, which decides on each downbeat whether to stay, switch beat or end.
 - `src/engine/SoundPlayer.js` — loads/plays audio. **Routes each player by name prefix** into per-end gain channels: a sound named `dayan_*` goes through the dayan gain, `bayan_*` through bayan, anything else straight to master. This is what makes `setEndMuted("dayan", true)` work and is the contract you must honour when adding new instruments.
 - `src/engine/Sequencer.js` — owns `Tone.Transport`, schedules `_tick` via `scheduleRepeat(..., _stepInterval())`. `_stepInterval()` is currently hard-coded to `"8n"`; the comment in that file is the marker for where 12/16-step timing should be added.
 - `src/engine/EventEmitter.js` — tiny pub-sub used as the base class for the engine and sequencer.

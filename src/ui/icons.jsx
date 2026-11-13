@@ -294,3 +294,47 @@ export function RadioDot({ selected }) {
     </span>
   );
 }
+
+// ── Home's sequencer ──
+
+function Glyph({ children, size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+export function LoopIcon() {
+  return (
+    <Glyph>
+      <path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+      <path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" />
+    </Glyph>
+  );
+}
+
+export function FolderIcon() {
+  return (
+    <Glyph>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+    </Glyph>
+  );
+}
+
+export function SaveIcon() {
+  return (
+    <Glyph>
+      <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+    </Glyph>
+  );
+}
+
+export function PlusIcon({ size = 18 }) {
+  return (
+    <Glyph size={size}>
+      <path d="M12 5v14" /><path d="M5 12h14" />
+    </Glyph>
+  );
+}

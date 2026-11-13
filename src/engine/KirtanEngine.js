@@ -25,6 +25,8 @@
  *   on("step", cb)        - playhead advanced (derived from phase)
  *   on("ready", cb)       - sounds finished loading
  *   on("started"/"stopped", cb)
+ *   on("sequenceAt", cb)  - a sequence's downbeat: { index, bar } (bar 1-based)
+ *   on("sequenceEnded", cb) - last entry done, loop off (then "stopped")
  *
  * Knows NOTHING about React, the screen, or the UI.
  */
@@ -48,6 +50,13 @@ export class KirtanEngine extends EventEmitter {
     // Forward the sequencer's "step" event out as our own.
     this._sequencer.on("step", (step) => {
       this.emit("step", step);
+    });
+    // A sequence's place, and its end — which stops everything, exactly as
+    // a press of Stop would, so the UI needs no second path.
+    this._sequencer.on("sequenceAt", (at) => this.emit("sequenceAt", at));
+    this._sequencer.on("sequenceEnded", () => {
+      this.stop();
+      this.emit("sequenceEnded");
     });
   }
 
@@ -188,6 +197,11 @@ export class KirtanEngine extends EventEmitter {
   playStroke(name) {
     this._soundPlayer.play(name);
   }
+
+  /** Play [{ beat, bars }] in order (null: back to one beat). See Sequencer. */
+  setSequence(steps, loop) { this._sequencer.setSequence(steps, loop); }
+  setSequenceLoop(loop) { this._sequencer.setSequenceLoop(loop); }
+  get hasSequence() { return this._sequencer.hasSequence; }
 
   start() {
     this._sequencer.start();
