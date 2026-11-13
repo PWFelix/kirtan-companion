@@ -241,6 +241,20 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
     setCursor((c) => (c + 1) % steps);
   }
 
+  /**
+   * A tap on the cell that is ALREADY selected steps it through its row's
+   * palette — rest → open → closed → rest — so a cell can be edited without
+   * moving. The cursor stays put; the stroke sounds; undo takes it back.
+   */
+  function cycleCell(lane, i) {
+    const order = [null, ...padsFor(lane).filter((p) => !p.rest).map((p) => p.value)];
+    const now = { dayan, bayan, kartal }[lane][i] ?? null;
+    const next = order[(order.indexOf(now) + 1) % order.length];
+    pushUndo();
+    laneSetters[lane]((p) => { const c = [...p]; c[i] = next; return c; });
+    if (!previewing) { const n = soundName(lane, next); if (n) engine.playStroke(n); }
+  }
+
   async function togglePreview() {
     await engine.unlock();
     if (previewing) { engine.stop(); setPreviewing(false); }
@@ -417,7 +431,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
                       const lit = previewing && i === step;
                       const chosen = selection && i >= selection[0] && i <= selection[1];
                       return (
-                        <button key={end + i} onClick={() => pick(i)} aria-current={isCursor || undefined}
+                        <button key={end + i}
+                          // Choosing a run to copy only ever moves its end.
+                          onClick={() => (isCursor && selectAnchor == null ? cycleCell(end, i) : pick(i))}
+                          aria-current={isCursor || undefined}
                           aria-label={v ? t("editor.cell", { lane: end, n: i + 1, bol: BOLS[end]?.[v] ?? v }) : t("editor.cellEmpty", { lane: end, n: i + 1 })}
                           style={{ ...st.zoomCell,
                             borderColor: isCursor ? "var(--clay)" : "var(--rule)",
