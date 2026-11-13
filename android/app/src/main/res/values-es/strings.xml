@@ -311,6 +311,31 @@
     <string name="search_none">Ningún ritmo se llama «%1$s».</string>
     <string name="search_placeholder">Busca un ritmo por nombre</string>
     <string name="search_title">Buscar</string>
+    <string name="seq_add">Añadir ritmo</string>
+    <string name="seq_bar_of">Compás %1$d de %2$d</string>
+    <string name="seq_bars_label">Compases</string>
+    <string name="seq_change_beat">Cambiar ritmo</string>
+    <string name="seq_empty">Añade ritmos para tocarlos en orden, cada uno durante varios compases.</string>
+    <string name="seq_fewer_bars">Menos compases</string>
+    <string name="seq_loop_off">Repetir la secuencia</string>
+    <string name="seq_loop_on">Repetición activada. Toca para parar al final</string>
+    <string name="seq_missing">Ritmo no encontrado</string>
+    <string name="seq_more_bars">Más compases</string>
+    <string name="seq_move_earlier">Mover antes</string>
+    <string name="seq_move_later">Mover después</string>
+    <string name="seq_name_hint">Nombre</string>
+    <string name="seq_new">Nueva secuencia</string>
+    <string name="seq_none_saved">Aún no hay secuencias guardadas.</string>
+    <string name="seq_open">Abrir una secuencia</string>
+    <string name="seq_play">Tocar secuencia</string>
+    <string name="seq_remove">Quitar de la secuencia</string>
+    <string name="seq_replace_warning">Tu secuencia actual tiene cambios sin guardar; abrir otra los reemplaza.</string>
+    <string name="seq_save">Guardar secuencia</string>
+    <string name="seq_save_as_new">Guardar como nueva</string>
+    <string name="seq_save_changes">Guardar cambios</string>
+    <string name="seq_saved_title">Secuencias</string>
+    <string name="seq_title">Secuencia</string>
+    <string name="seq_untitled">Secuencia sin guardar</string>
     <string name="settings_audio_output">Salida de audio · %1$d Hz</string>
     <string name="settings_language">Idioma</string>
     <string name="settings_language_system">Sistema</string>
@@ -506,6 +531,16 @@
         <item quantity="one">%1$d tiempo</item>
         <item quantity="many">%1$d tiempos</item>
         <item quantity="other">%1$d tiempos</item>
+    </plurals>
+    <plurals name="seq_bars">
+        <item quantity="one">%1$d compás</item>
+        <item quantity="many">%1$d compases</item>
+        <item quantity="other">%1$d compases</item>
+    </plurals>
+    <plurals name="seq_beats">
+        <item quantity="one">%1$d ritmo</item>
+        <item quantity="many">%1$d ritmos</item>
+        <item quantity="other">%1$d ritmos</item>
     </plurals>
     <plurals name="share_list_note">
         <item quantity="one">El %1$d ritmo de esta lista viaja dentro del enlace. No se sube nada.</item>

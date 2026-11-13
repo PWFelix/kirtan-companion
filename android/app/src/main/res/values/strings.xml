@@ -317,6 +317,31 @@
     <string name="search_none">No beat is named “%1$s”.</string>
     <string name="search_placeholder">Find a beat by name</string>
     <string name="search_title">Search</string>
+    <string name="seq_add">Add beat</string>
+    <string name="seq_bar_of">Bar %1$d of %2$d</string>
+    <string name="seq_bars_label">Bars</string>
+    <string name="seq_change_beat">Change beat</string>
+    <string name="seq_empty">Add beats to play them in order, each for a number of bars.</string>
+    <string name="seq_fewer_bars">Fewer bars</string>
+    <string name="seq_loop_off">Loop the sequence</string>
+    <string name="seq_loop_on">Loop is on. Tap to stop at the end</string>
+    <string name="seq_missing">Beat not found</string>
+    <string name="seq_more_bars">More bars</string>
+    <string name="seq_move_earlier">Move earlier</string>
+    <string name="seq_move_later">Move later</string>
+    <string name="seq_name_hint">Name</string>
+    <string name="seq_new">New sequence</string>
+    <string name="seq_none_saved">No saved sequences yet.</string>
+    <string name="seq_open">Open a sequence</string>
+    <string name="seq_play">Play sequence</string>
+    <string name="seq_remove">Remove from sequence</string>
+    <string name="seq_replace_warning">Your current sequence has unsaved changes; opening another replaces them.</string>
+    <string name="seq_save">Save sequence</string>
+    <string name="seq_save_as_new">Save as new</string>
+    <string name="seq_save_changes">Save changes</string>
+    <string name="seq_saved_title">Sequences</string>
+    <string name="seq_title">Sequence</string>
+    <string name="seq_untitled">Unsaved sequence</string>
     <string name="settings_audio_output">Audio output · %1$d Hz</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_system">System</string>
@@ -493,6 +518,14 @@
         <item quantity="other"> that are not in your account yet.</item>
     </plurals>
     <plurals name="note_beat_count">
+        <item quantity="one">%1$d beat</item>
+        <item quantity="other">%1$d beats</item>
+    </plurals>
+    <plurals name="seq_bars">
+        <item quantity="one">%1$d bar</item>
+        <item quantity="other">%1$d bars</item>
+    </plurals>
+    <plurals name="seq_beats">
         <item quantity="one">%1$d beat</item>
         <item quantity="other">%1$d beats</item>
     </plurals>

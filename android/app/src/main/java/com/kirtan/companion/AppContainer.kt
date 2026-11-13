@@ -90,6 +90,10 @@ class AppContainer(private val appContext: Context) {
 
     /** The user's private tags, per beat id, on this device. */
     /** The last loaded beat and tempo — see [com.kirtan.companion.storage.SessionPrefs]. */
+    val sequences: com.kirtan.companion.storage.SequenceStore by lazy {
+        com.kirtan.companion.storage.SequenceStore(appContext)
+    }
+
     val session: com.kirtan.companion.storage.SessionPrefs by lazy {
         com.kirtan.companion.storage.SessionPrefs(appContext)
     }

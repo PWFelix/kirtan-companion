@@ -120,6 +120,45 @@ private fun filledIcon(
 
 internal object KcIcons {
 
+    /** Loop: the two chasing arrows of "repeat" — the sequence goes round again. */
+    val Loop: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
+        strokedIcon("Loop", 22.dp) {
+            moveTo(17f, 2f); lineTo(21f, 6f); lineTo(17f, 10f)
+            moveTo(3f, 11f); lineTo(3f, 9f)
+            arcToRelative(4f, 4f, 0f, false, true, 4f, -4f)
+            lineTo(21f, 5f)
+            moveTo(7f, 22f); lineTo(3f, 18f); lineTo(7f, 14f)
+            moveTo(21f, 13f); lineTo(21f, 15f)
+            arcToRelative(4f, 4f, 0f, false, true, -4f, 4f)
+            lineTo(3f, 19f)
+        }
+    }
+
+    /** Plus: add an entry. */
+    val Plus: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
+        strokedIcon("Plus", 22.dp) {
+            moveTo(12f, 5f); lineTo(12f, 19f)
+            moveTo(5f, 12f); lineTo(19f, 12f)
+        }
+    }
+
+    /** Folder: open a saved sequence. */
+    val Folder: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
+        strokedIcon("Folder", 22.dp) {
+            moveTo(3f, 6f); lineTo(9f, 6f); lineTo(11f, 8f); lineTo(21f, 8f)
+            lineTo(21f, 19f); lineTo(3f, 19f); close()
+        }
+    }
+
+    /** Save: an arrow down into a tray. */
+    val Save: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
+        strokedIcon("Save", 22.dp) {
+            moveTo(12f, 4f); lineTo(12f, 15f)
+            moveTo(7f, 10f); lineTo(12f, 15f); lineTo(17f, 10f)
+            moveTo(4f, 19f); lineTo(20f, 19f)
+        }
+    }
+
     /** Hill climb: a staircase rising left to right — the tempo going up in steps. */
     val Stairs: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
         strokedIcon("Stairs", 20.dp) {

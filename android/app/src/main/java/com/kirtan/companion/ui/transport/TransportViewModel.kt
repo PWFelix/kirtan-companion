@@ -20,7 +20,12 @@ import com.kirtan.companion.data.TUNE_MIN_CENTS
 import com.kirtan.companion.data.clampEqDb
 import com.kirtan.companion.data.model.Beat
 import com.kirtan.companion.data.model.LaneId
+import com.kirtan.companion.data.BeatSequence
+import com.kirtan.companion.data.SequenceEntry
+import com.kirtan.companion.data.Sequences
+import com.kirtan.companion.data.WorkingSequence
 import com.kirtan.companion.engine.EngineEvent
+import com.kirtan.companion.engine.SequenceStep
 import com.kirtan.companion.engine.KirtanEngine
 import com.kirtan.companion.playback.OutputRoute
 import com.kirtan.companion.storage.EndSoundPrefs
@@ -43,6 +48,22 @@ import kotlin.math.roundToInt
  * change that touches a fader and a mute together is then ONE recomposition
  * rather than two, so the UI can never be observed half-updated.
  */
+/**
+ * Home's sequencer: the working sequence, the saved ones, and — while a sequence
+ * plays — which ENTRY (index into `working.entries`) and bar (1-based) is sounding.
+ * `playingBeat` is the sequence's beat last heard, kept after a stop; Home shows
+ * it instead of the library selection until a beat is chosen by hand.
+ */
+data class SequenceState(
+    val working: WorkingSequence = WorkingSequence(),
+    val saved: List<BeatSequence> = emptyList(),
+    val playingEntry: Int? = null,
+    val playingBar: Int? = null,
+    val playingBeat: Beat? = null,
+) {
+    val dirty: Boolean get() = working.dirty(saved)
+}
+
 data class TransportState(
     /** Samples finished decoding. Nothing plays until this is true. */
     val ready: Boolean = false,
@@ -117,6 +138,19 @@ class TransportViewModel(
 
     private val _state = MutableStateFlow(TransportState())
     val state: StateFlow<TransportState> = _state.asStateFlow()
+
+    // Sequencer state — declared before init, which subscribes to engine events.
+    private val sequenceStore = container.sequences
+    private val _sequence = MutableStateFlow(
+        SequenceState(working = sequenceStore.loadWorking(), saved = sequenceStore.loadSaved()),
+    )
+    val sequence: StateFlow<SequenceState> = _sequence.asStateFlow()
+
+    /** Looks a beat up by id; Home keeps it current with the library. */
+    private var beatLookup: (String) -> Beat? = { null }
+
+    /** The played steps of the sequence in the engine, each with its entry index. */
+    private var playingSteps: List<Pair<Int, Beat>> = emptyList()
 
     /**
      * The bar phase is deliberately NOT in [state].
@@ -265,12 +299,25 @@ class TransportViewModel(
                         updateSyncPrompt()
                     }
 
-                    EngineEvent.Stopped -> _state.value = _state.value.copy(
-                        playing = false,
-                        step = -1,
-                    )
+                    EngineEvent.Stopped -> {
+                        _state.value = _state.value.copy(playing = false, step = -1)
+                        clearSequencePosition()
+                    }
 
                     is EngineEvent.Step -> _state.value = _state.value.copy(step = event.step)
+
+                    is EngineEvent.SequenceAt -> {
+                        val (entry, beat) = playingSteps.getOrNull(event.index) ?: return@collect
+                        val was = _sequence.value
+                        _sequence.value = was.copy(playingEntry = entry, playingBar = event.bar, playingBeat = beat)
+                        if (was.playingBeat != beat) {
+                            container.currentBeatName.value = beat.name
+                            _state.value = _state.value.copy(beatName = beat.name)
+                        }
+                    }
+
+                    // Stopped follows and clears the position.
+                    EngineEvent.SequenceEnded -> Unit
 
                     EngineEvent.OutputFailed -> _state.value =
                         _state.value.copy(outputFailed = true)
@@ -560,6 +607,9 @@ class TransportViewModel(
      * suggested tempo unless the user has locked it.
      */
     fun loadBeat(beat: Beat) {
+        // Choosing a beat by hand while a sequence plays leaves the sequence:
+        // the chosen beat carries on looping, from the same bar position.
+        leaveSequence()
         engine.setBeat(beat)
         container.currentBeatName.value = beat.name
         _state.value = _state.value.copy(beatName = beat.name)
@@ -584,6 +634,7 @@ class TransportViewModel(
     fun play(beat: Beat) {
         if (!_state.value.ready) return
         if (_state.value.playing) return
+        leaveSequence()
         engine.setBeat(beat)
         engine.setBpm(bpm)
         container.currentBeatName.value = beat.name
@@ -597,6 +648,99 @@ class TransportViewModel(
     }
 
     fun stop() = connection.setPlayWhenReady(false)
+
+    // ── Sequencer ──────────────────────────────────────────────────────────
+
+
+    fun setBeatLookup(lookup: (String) -> Beat?) {
+        beatLookup = lookup
+        // A beat edited in the library while its sequence plays: take the new one.
+        if (engine.hasSequence) pushSequence()
+    }
+
+    /** True when Home's Play button plays the sequence rather than one beat. */
+    fun sequencePlayable(): Boolean =
+        Sequences.resolve(_sequence.value.working.entries, beatLookup).isNotEmpty()
+
+    /** Play the working sequence from its top, or stop it. */
+    fun toggleSequence() {
+        if (!_state.value.ready) return
+        if (_state.value.playing) return connection.setPlayWhenReady(false)
+        if (!pushSequence()) return
+        engine.setBpm(bpm)
+        connection.setPlayWhenReady(true)
+    }
+
+    /** Hand the working sequence to the engine. False when nothing in it can play. */
+    private fun pushSequence(): Boolean {
+        val w = _sequence.value.working
+        playingSteps = Sequences.resolve(w.entries, beatLookup)
+        if (playingSteps.isEmpty()) {
+            leaveSequence()
+            return false
+        }
+        engine.setSequence(playingSteps.map { (i, beat) -> SequenceStep(beat, w.entries[i].bars) }, w.loop)
+        return true
+    }
+
+    private fun leaveSequence() {
+        if (!engine.hasSequence) return
+        engine.setSequence(null, false)
+        playingSteps = emptyList()
+        _sequence.value = _sequence.value.copy(playingEntry = null, playingBar = null, playingBeat = null)
+    }
+
+    /**
+     * Stopped (by hand or at the end): no entry is lit any more, but the beat last
+     * heard stays on Home — snapping back to the library pick would show a beat
+     * that never played. Choosing a beat by hand ([leaveSequence]) clears it.
+     */
+    private fun clearSequencePosition() {
+        _sequence.value = _sequence.value.copy(playingEntry = null, playingBar = null)
+    }
+
+    private fun updateWorking(next: WorkingSequence) {
+        _sequence.value = _sequence.value.copy(working = next)
+        sequenceStore.saveWorking(next)
+        // Edits apply live, keeping the place (see KirtanEngine.setSequence).
+        if (engine.hasSequence && _state.value.playing) pushSequence()
+    }
+
+    fun editEntries(edit: (List<SequenceEntry>) -> List<SequenceEntry>) {
+        val w = _sequence.value.working
+        updateWorking(w.copy(entries = edit(w.entries)))
+    }
+
+    fun setSequenceLoop(loop: Boolean) {
+        updateWorking(_sequence.value.working.copy(loop = loop))
+        engine.setSequenceLoop(loop)
+    }
+
+    /** Overwrite the saved sequence this one came from, or save it new as [name]. */
+    fun saveSequence(name: String, asNew: Boolean) {
+        val s = _sequence.value
+        val id = s.working.savedId?.takeUnless { asNew || s.saved.none { it.id == s.working.savedId } }
+            ?: java.util.UUID.randomUUID().toString()
+        val item = BeatSequence(id, name.trim().ifEmpty { s.working.name }, s.working.entries)
+        val saved = if (s.saved.any { it.id == id }) s.saved.map { if (it.id == id) item else it } else s.saved + item
+        sequenceStore.saveSaved(saved)
+        _sequence.value = s.copy(saved = saved)
+        updateWorking(s.working.copy(savedId = id, name = item.name))
+    }
+
+    fun openSequence(id: String) {
+        val item = _sequence.value.saved.firstOrNull { it.id == id } ?: return
+        updateWorking(_sequence.value.working.copy(entries = item.entries, savedId = id, name = item.name))
+    }
+
+    fun newSequence() = updateWorking(WorkingSequence(loop = _sequence.value.working.loop))
+
+    fun deleteSequence(id: String) {
+        val saved = _sequence.value.saved.filterNot { it.id == id }
+        sequenceStore.saveSaved(saved)
+        _sequence.value = _sequence.value.copy(saved = saved)
+        if (_sequence.value.working.savedId == id) updateWorking(_sequence.value.working.copy(savedId = null))
+    }
 
     /**
      * Start the editor's preview loop.
@@ -620,6 +764,7 @@ class TransportViewModel(
                 while (engine.isPlaying) delay(16)
             }
         }
+        leaveSequence()
         engine.setBeat(beat)
         engine.setBpm(previewBpm)
         engine.start()

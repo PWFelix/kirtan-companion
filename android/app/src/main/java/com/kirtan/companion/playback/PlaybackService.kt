@@ -17,6 +17,7 @@ import com.kirtan.companion.AppContainer
 import com.kirtan.companion.KirtanApplication
 import com.kirtan.companion.R
 import kotlinx.coroutines.CoroutineScope
+import com.kirtan.companion.engine.EngineEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -122,6 +123,13 @@ class PlaybackService : MediaSessionService() {
         // IllegalStateException from any other thread. Collecting the flow on the
         // container's Default scope crashed the process the first time a beat was
         // loaded; only running it on a device surfaced that.
+        // A sequence that ends on its own (loop off) stops the engine without a
+        // command; the session must follow, on the main thread for the same
+        // reason as below.
+        serviceScope.launch(Dispatchers.Main) {
+            engine.events.collect { if (it == EngineEvent.SequenceEnded) player.onEngineEnded() }
+        }
+
         serviceScope.launch(Dispatchers.Main) {
             container.currentBeatName.collect { name ->
                 if (name != null) player.setBeatTitle(name)

@@ -75,11 +75,12 @@ import com.kirtan.companion.ui.theme.color
 import com.kirtan.companion.ui.transport.TransportViewModel
 import androidx.compose.ui.res.stringResource
 import com.kirtan.companion.R
+import com.kirtan.companion.data.Sequences
 import androidx.compose.ui.res.pluralStringResource
 import com.kirtan.companion.ui.BeatText
 
 /** Which of the home screen's three sheets is open, if any. */
-private enum class HomeSheet { PICKER, MIXER, TEMPO }
+private enum class HomeSheet { PICKER, MIXER, TEMPO, SEQ_SAVE, SEQ_OPEN }
 
 /**
  * Below this screen height the wordmark is dropped to give the strip and the
@@ -124,6 +125,19 @@ internal fun HomeScreen(
     val dimens = KirtanTheme.dimens
     var sheet by remember { mutableStateOf<HomeSheet?>(null) }
 
+    // The sequencer: its state lives in the transport (it feeds the engine);
+    // which entry's sheet is open, and what the beat picker is choosing FOR
+    // (null = the loaded beat, -1 = a new entry, n = entry n's beat), live here.
+    val seq by transport.sequence.collectAsState()
+    val allBeats by library.allBeats.collectAsState()
+    val beatsById = remember(allBeats) { allBeats.mapNotNull { b -> b.id?.let { it to b } }.toMap() }
+    BindBeatLookup(allBeats) { transport.setBeatLookup(it) }
+    var entrySheet by remember { mutableStateOf<Int?>(null) }
+    var pickFor by remember { mutableStateOf<Int?>(null) }
+    // While a sequence plays, Home shows the beat SOUNDING, not the library pick.
+    val shown = seq.playingBeat ?: beat
+    val sequenceMode = seq.working.entries.any { beatsById[it.beatId] != null }
+
     // The wordmark is the first thing sacrificed when vertical space is scarce.
     //
     // It is pure brand: the splash already introduced the app and the bottom nav
@@ -166,7 +180,7 @@ internal fun HomeScreen(
                 Wordmark(size = 22.dp, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
 
-            if (beat == null) {
+            if (shown == null) {
                 Text(
                     text = stringResource(R.string.home_loading_beats),
                     color = PaletteToken.SYAHI_SOFT.color,
@@ -176,11 +190,11 @@ internal fun HomeScreen(
                 )
             } else {
                 BeatSwitcherRow(
-                    beat = beat,
+                    beat = shown,
                     onPrevious = { library.cycleBeat(-1) },
                     onNext = { library.cycleBeat(1) },
-                    onOpenPicker = { sheet = HomeSheet.PICKER },
-                    onEdit = { onEditBeat(beat) },
+                    onOpenPicker = { pickFor = null; sheet = HomeSheet.PICKER },
+                    onEdit = { onEditBeat(shown) },
                 )
 
                 Box(
@@ -190,7 +204,7 @@ internal fun HomeScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     BeatStrip(
-                        beat = beat,
+                        beat = shown,
                         step = state.step,
                         playing = state.playing,
                         getPhase = { transport.getPhase() },
@@ -199,6 +213,16 @@ internal fun HomeScreen(
                         showBols = state.settings.showBols,
                     )
                 }
+
+                SequencePanel(
+                    seq = seq,
+                    lookup = { beatsById[it] },
+                    onEntry = { entrySheet = it },
+                    onAdd = { pickFor = -1; sheet = HomeSheet.PICKER },
+                    onToggleLoop = { transport.setSequenceLoop(!seq.working.loop) },
+                    onOpen = { sheet = HomeSheet.SEQ_OPEN },
+                    onSave = { sheet = HomeSheet.SEQ_SAVE },
+                )
 
                 TransportControls(
                     bpm = state.bpm,
@@ -229,12 +253,21 @@ internal fun HomeScreen(
 
         // Pinned outside the scroll region: the one control that must never
         // require scrolling to reach.
-        if (beat != null) {
+        // With a sequence on Home, Play plays it from the top; without, the
+        // loaded beat loops as it always has.
+        if (shown != null) {
             PrimaryButton(
-                label = if (state.playing) stringResource(R.string.common_pause) else stringResource(R.string.common_play),
+                label = when {
+                    state.playing -> stringResource(R.string.common_pause)
+                    sequenceMode -> stringResource(R.string.seq_play)
+                    else -> stringResource(R.string.common_play)
+                },
                 icon = if (state.playing) KcIcons.Pause else KcIcons.Play,
                 enabled = state.ready,
-                onClick = { transport.togglePlay(beat) },
+                onClick = {
+                    if (sequenceMode) transport.toggleSequence()
+                    else beat?.let { transport.togglePlay(it) }
+                },
             )
         }
     }
@@ -243,13 +276,43 @@ internal fun HomeScreen(
         HomeSheet.PICKER -> BeatPickerSheet(
             library = library,
             activeCategoryId = libraryState.activeCategoryId,
-            selectedBeatId = beat?.id,
-            onDismiss = { sheet = null },
+            selectedBeatId = when (val target = pickFor) {
+                null -> beat?.id
+                -1 -> null
+                else -> seq.working.entries.getOrNull(target)?.beatId
+            },
+            onDismiss = { sheet = null; pickFor = null },
             onPick = { picked, fromCategory ->
-                library.selectBeat(picked, fromCategory)
-                transport.loadBeat(picked)
+                val id = picked.id
+                when (val target = pickFor) {
+                    null -> {
+                        library.selectBeat(picked, fromCategory)
+                        transport.loadBeat(picked)
+                    }
+                    -1 -> if (id != null) transport.editEntries { Sequences.add(it, id) }
+                    else -> if (id != null) transport.editEntries { Sequences.setBeat(it, target, id) }
+                }
+                sheet = null
+                pickFor = null
+            },
+        )
+
+        HomeSheet.SEQ_SAVE -> SaveSequenceSheet(
+            initialName = seq.working.name,
+            canOverwrite = seq.saved.any { it.id == seq.working.savedId },
+            onSave = { name, asNew ->
+                transport.saveSequence(name, asNew)
                 sheet = null
             },
+            onDismiss = { sheet = null },
+        )
+
+        HomeSheet.SEQ_OPEN -> OpenSequenceSheet(
+            seq = seq,
+            onOpen = { transport.openSequence(it); sheet = null },
+            onDelete = { transport.deleteSequence(it) },
+            onNew = { transport.newSequence(); sheet = null },
+            onDismiss = { sheet = null },
         )
 
         HomeSheet.MIXER -> MixerSheet(transport = transport, onDismiss = { sheet = null })
@@ -277,6 +340,35 @@ internal fun HomeScreen(
         )
 
         null -> Unit
+    }
+
+    entrySheet?.let { i ->
+        val entry = seq.working.entries.getOrNull(i)
+        if (entry == null) {
+            entrySheet = null
+        } else {
+            EntrySheet(
+                entry = entry,
+                index = i,
+                count = seq.working.entries.size,
+                beatName = beatsById[entry.beatId]?.name ?: stringResource(R.string.seq_missing),
+                onBars = { n -> transport.editEntries { Sequences.setBars(it, i, n) } },
+                onMove = { to ->
+                    transport.editEntries { Sequences.move(it, i, to) }
+                    entrySheet = to
+                },
+                onChangeBeat = {
+                    entrySheet = null
+                    pickFor = i
+                    sheet = HomeSheet.PICKER
+                },
+                onRemove = {
+                    transport.editEntries { Sequences.remove(it, i) }
+                    entrySheet = null
+                },
+                onDismiss = { entrySheet = null },
+            )
+        }
     }
 }
 

@@ -32,6 +32,19 @@ sealed interface EngineEvent {
 
     /** The output device went away, or never opened. Playback cannot continue. */
     data object OutputFailed : EngineEvent
+
+    /**
+     * A sequence bar line: entry [index] is playing, on its bar [bar] (1-based).
+     * Emitted from the audio thread at each downbeat of a playing sequence.
+     */
+    data class SequenceAt(val index: Int, val bar: Int) : EngineEvent
+
+    /**
+     * The sequence ran out with loop off, and the engine stopped itself on the
+     * following 1. [Stopped] follows; this one says WHY, so the playback service
+     * can release audio focus and the notification without a user command.
+     */
+    data object SequenceEnded : EngineEvent
 }
 
 /**
@@ -218,6 +231,48 @@ class KirtanEngine(
         sequencer.invalidateGuard()
     }
 
+    // ── Sequences ──────────────────────────────────────────────────────────
+
+    /** The playing sequence: its entries and the cursor counting through them. */
+    private class Plan(val steps: List<SequenceStep>, val cursor: SequenceCursor)
+
+    @Volatile
+    private var plan: Plan? = null
+
+    /** The frame a sequence switch re-anchored at, so its 1 isn't counted twice. */
+    private var switchedAtFrame = Long.MIN_VALUE
+
+    /**
+     * Play [steps] in order, each for its bar count, switching beats on the bar
+     * line. Null (or empty) goes back to looping one beat. Stopped, it loads the
+     * first entry and waits for [start]; playing, an EDIT keeps its place (same
+     * entry and bar where they still exist).
+     */
+    fun setSequence(steps: List<SequenceStep>?, loop: Boolean) {
+        if (steps.isNullOrEmpty()) {
+            plan = null
+            return
+        }
+        val cursor = SequenceCursor(steps.map { it.bars }, loop)
+        val old = plan
+        if (isPlaying && old != null) {
+            cursor.adopt(old.cursor)
+            plan = Plan(steps, cursor)
+            val now = steps[cursor.index].beat
+            if (now != sequencer.beat) setBeat(now)
+        } else {
+            plan = Plan(steps, cursor)
+            setBeat(steps.first().beat)
+        }
+    }
+
+    /** Loop on or off while it plays: takes effect at the end of the last entry. */
+    fun setSequenceLoop(loop: Boolean) {
+        plan?.cursor?.loop = loop
+    }
+
+    val hasSequence: Boolean get() = plan != null
+
     fun setBpm(bpm: Int) {
         pendingBarBpm.set(null) // a direct change overrides one waiting for its bar
         clock.setBpm(bpm.toDouble(), renderer.framesRendered)
@@ -286,6 +341,11 @@ class KirtanEngine(
             return
         }
         if (!arm()) return
+        // A sequence always starts from its top.
+        plan?.let { p ->
+            p.cursor.reset()
+            setBeat(p.steps.first().beat)
+        }
 
         // Position 0 so the visual playhead and the audio both begin on the
         // downbeat, matching the web transport's start(). The anchor itself is
@@ -403,7 +463,6 @@ class KirtanEngine(
      * frame 137 of 256 sounds at frame 137 and not at the next block boundary.
      */
     override fun render(fromFrame: Long, count: Int, out: FloatArray) {
-        val beat = sequencer.beat
 
         // 1. A pending start anchors the clock HERE, on the audio thread, at
         //    this block's first frame — so step 0 is inside this block.
@@ -432,34 +491,88 @@ class KirtanEngine(
             }
         }
 
-        // 3. Sequenced steps falling inside this block.
-        if (beat != null && clock.isRunning) {
+        // 3. Sequenced steps falling inside this block. A LOOP, because a
+        //    sequence can switch beats mid-block: the switch re-anchors the clock
+        //    on that 1 and the rest of the block is collected again under the new
+        //    beat's grid.
+        var cursorFrame = fromFrame
+        val endFrame = fromFrame + count
+        blocks@ while (true) {
+            val beat = sequencer.beat ?: break
+            if (!clock.isRunning) break
             stepScratch.clear()
-            sequencer.collectStepEvents(fromFrame, fromFrame + count, stepScratch)
-
+            sequencer.collectStepEvents(cursorFrame, endFrame, stepScratch)
             for (event in stepScratch) {
-                val offset = (event.frame - fromFrame).toInt().coerceIn(0, count - 1)
-                // Diagnostic: a dropped downbeat shows up in logcat as a gap in
-                // this sequence rather than only being heard. Verbose, so silent
-                // in normal use.
-                Log.v(TAG, "step ${event.step} frame=${event.frame} block=$fromFrame offset=$offset")
-                // Iterated inline rather than via a helper that builds a list:
-                // this runs ten times a second forever, so it allocates nothing.
-                humanizer.advance()
-                val stepMs = 60_000.0 / clock.bpm * beat.beatsPerBar / beat.steps.coerceAtLeast(1)
-                for (lane in LaneId.ORDERED) {
-                    val stroke = beat.strokeAt(lane, event.step) ?: continue
-                    soundPlayer.play(
-                        StrokeKey(lane, stroke == Stroke.OPEN),
-                        offset + humanizer.delayFrames(lane, event.step, stepMs),
-                        humanizer.gain(event.step),
-                    )
+                if (event.step == 0 && event.frame != switchedAtFrame) {
+                    val p = plan
+                    if (p != null) {
+                        when (val outcome = p.cursor.onDownbeat()) {
+                            SequenceCursor.Outcome.End -> {
+                                endSequence()
+                                break@blocks
+                            }
+                            is SequenceCursor.Outcome.Switch -> {
+                                switchSequenceBeat(p.steps[outcome.index].beat, event.frame)
+                                cursorFrame = event.frame
+                                continue@blocks
+                            }
+                            SequenceCursor.Outcome.Stay -> Unit
+                        }
+                        _events.tryEmit(EngineEvent.SequenceAt(p.cursor.index, p.cursor.bar + 1))
+                    }
                 }
-                _events.tryEmit(EngineEvent.Step(event.step))
+                if (event.step == 0 && event.frame == switchedAtFrame) {
+                    plan?.let { p -> _events.tryEmit(EngineEvent.SequenceAt(p.cursor.index, p.cursor.bar + 1)) }
+                }
+                playStep(beat, event, fromFrame, count)
             }
+            break
         }
 
         // 4. Mix: voices → per-end EQ and fader → master.
         soundPlayer.renderBlock(out, count)
+    }
+
+    private fun playStep(beat: Beat, event: StepEvent, fromFrame: Long, count: Int) {
+        val offset = (event.frame - fromFrame).toInt().coerceIn(0, count - 1)
+        // Diagnostic: a dropped downbeat shows up in logcat as a gap in this
+        // sequence rather than only being heard. Verbose, so silent in normal use.
+        Log.v(TAG, "step ${event.step} frame=${event.frame} block=$fromFrame offset=$offset")
+        // Iterated inline rather than via a helper that builds a list: this runs
+        // ten times a second forever, so it allocates nothing.
+        humanizer.advance()
+        val stepMs = 60_000.0 / clock.bpm * beat.beatsPerBar / beat.steps.coerceAtLeast(1)
+        for (lane in LaneId.ORDERED) {
+            val stroke = beat.strokeAt(lane, event.step) ?: continue
+            soundPlayer.play(
+                StrokeKey(lane, stroke == Stroke.OPEN),
+                offset + humanizer.delayFrames(lane, event.step, stepMs),
+                humanizer.gain(event.step),
+            )
+        }
+        _events.tryEmit(EngineEvent.Step(event.step))
+    }
+
+    /**
+     * A sequence moves to its next entry ON this 1. The clock is re-anchored here
+     * (tick 0 = this frame, tempo kept) because the bar line of one meter is not
+     * a bar line of another: 4/4's 768-tick bars and 7/8's 672 only meet every
+     * few bars, so carrying the tick count over would start the new beat
+     * mid-bar. A bar-snapped tempo change was aimed at old ticks, so it goes.
+     */
+    private fun switchSequenceBeat(next: Beat, atFrame: Long) {
+        setBeat(next)
+        clock.start(atFrame)
+        switchedAtFrame = atFrame
+        pendingBarBpm.set(null)
+    }
+
+    /** Loop off and the last entry done: stop on this 1 without playing it. */
+    private fun endSequence() {
+        isPlaying = false
+        pendingBarBpm.set(null)
+        clock.stop()
+        _events.tryEmit(EngineEvent.SequenceEnded)
+        _events.tryEmit(EngineEvent.Stopped)
     }
 }

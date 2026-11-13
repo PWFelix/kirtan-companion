@@ -80,6 +80,18 @@ class KirtanPlayer(
     /** The engine's own view of whether it is producing sound. */
     fun isEnginePlaying(): Boolean = engine.isPlaying
 
+    /**
+     * The engine stopped ITSELF — a sequence reached its end with loop off. No
+     * command came through here, so mirror it: pause state for every controller
+     * (UI, notification, headset) and give the audio focus back.
+     */
+    fun onEngineEnded() {
+        if (!playWhenReady) return
+        playWhenReady = false
+        focus.abandonFocus()
+        invalidateState()
+    }
+
     override fun getState(): State = State.Builder()
         .setAvailableCommands(
             Player.Commands.Builder()
