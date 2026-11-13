@@ -26,7 +26,7 @@ struct AboutView: View {
                 .frame(maxWidth: .infinity)
                 .clipped()
 
-                Text(String(localized: "Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, courageous or heroic in relation to the mṛdaṅga.", bundle: .strings))
+                Text(String(localized: "Kirtanero (from कीर्तन, kīrtana) — one who glorifies the Supreme Lord through song.", bundle: .strings))
                     .font(.subheadline)
                     .foregroundStyle(Palette.syahiSoft)
                 Text("paraṁ vijayate śrī-kṛṣṇa-saṅkīrtanam")

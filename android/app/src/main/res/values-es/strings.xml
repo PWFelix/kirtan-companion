@@ -7,7 +7,7 @@
 
 <resources>
     <string name="about_glories">¡Todas las glorias a Śrīla Prabhupāda!</string>
-    <string name="about_meaning">Mṛdaṅga-dhīra (मृदङ्गधीर): alguien firme, valiente o heroico en relación con la mṛdaṅga.</string>
+    <string name="about_meaning">Kirtanero (de कीर्तन, kīrtana): quien glorifica al Señor Supremo a través del canto.</string>
     <string name="about_production">una producción de World Sankirtan Party</string>
     <string name="about_title">Acerca de</string>
     <string name="about_version">Versión %1$s</string>
@@ -297,7 +297,7 @@
     <string name="note_variation">Variación</string>
     <string name="notif_channel_desc">Mantiene el tambor sonando con la pantalla apagada</string>
     <string name="notif_channel_name">Reproducción</string>
-    <string name="notif_title">Mrdanga Hero</string>
+    <string name="notif_title">Kirtanero</string>
     <string name="playlists_title">Listas</string>
     <string name="promote_body">Se unirá a la lista Incluidos para todos los que usan esta app, la próxima vez que la abran. El ritmo sigue también en la biblioteca de la comunidad, y una lista que ya lo usa sigue funcionando.</string>
     <string name="promote_confirm">Promover</string>

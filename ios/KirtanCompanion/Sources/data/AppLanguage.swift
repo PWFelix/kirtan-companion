@@ -15,7 +15,7 @@ import ObjectiveC
 ///
 /// The usual alternative — writing `AppleLanguages` — only takes effect after a
 /// relaunch, which is a poor answer to "tap Español". The system's own per-app
-/// language (Settings › Mrdanga Hero › Language) still works and is what "System"
+/// language (Settings › Kirtanero › Language) still works and is what "System"
 /// follows.
 enum AppLanguage {
     /// Languages with a full translation, in picker order. Keep in step with the catalog.

@@ -1981,6 +1981,16 @@
         }
       }
     },
+    "Kirtanero (from कीर्तन, kīrtana) — one who glorifies the Supreme Lord through song." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirtanero (de कीर्तन, kīrtana): quien glorifica al Señor Supremo a través del canto."
+          }
+        }
+      }
+    },
     "Laid back" : {
       "localizations" : {
         "es" : {
@@ -2393,16 +2403,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mis etiquetas…"
-          }
-        }
-      }
-    },
-    "Mṛdaṅga-dhīra (मृदङ्गधीर) — someone who is steadfast, courageous or heroic in relation to the mṛdaṅga." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mṛdaṅga-dhīra (मृदङ्गधीर): alguien firme, valiente o heroico en relación con la mṛdaṅga."
           }
         }
       }
