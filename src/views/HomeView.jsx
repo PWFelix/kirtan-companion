@@ -424,21 +424,6 @@ const st = {
   wheelWrap: { position: "relative", marginTop: "var(--space-5)" },
   wheelBand: { position: "absolute", left: 0, right: 0, top: "50%", height: 40, transform: "translateY(-50%)", borderRadius: 12, background: "var(--head-sunken)", pointerEvents: "none" },
 
-  // ── Mixer sheet ──
-  mixerBtn: { width: "100%", minHeight: 46, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 },
-  mixRows: { display: "flex", flexDirection: "column", gap: "var(--space-4)", marginTop: "var(--space-4)" },
-  mixRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  mixLabel: { flexShrink: 0, width: 64, fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
-  muteBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
-  // A lane row plus its (optional) EQ panel — tighter gap than between lanes.
-  mixLane: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
-  eqPanel: { display: "flex", flexDirection: "column", gap: 2 },
-  // Fixed width + tabular digits so −12…+12 readouts never jitter the slider.
-  eqDb: { flexShrink: 0, width: 44, textAlign: "right", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-body-xs)", fontWeight: 600, color: "var(--syahi-soft)" },
-  // The tune readout's wider sibling: it names a note ("D♯2 +45¢"), so the
-  // dB column's 44px won't fit — same fixed-width, tabular treatment.
-  tuneNote: { flexShrink: 0, width: 68, textAlign: "right", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-body-xs)", fontWeight: 600, color: "var(--syahi-soft)" },
-
   playBtn: { flexShrink: 0, width: "100%", minHeight: 58, borderRadius: 16, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
 
   // ── Landscape (the propped-up layout) ──
