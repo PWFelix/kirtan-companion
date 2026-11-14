@@ -16,6 +16,8 @@ import BpmRange from "./ui/BpmRange.jsx";
 import BrahmalokaBurst from "./ui/BrahmalokaBurst.jsx";
 import { leverFor, reshape, resample, pagesFor } from "./data/resolution.js";
 import { MAX_STEPS, MAX_GROUPS } from "./data/shareCodec.js";
+import EditorTimeline from "./ui/EditorTimeline.jsx";
+import { loadEditorView, saveEditorView } from "./data/editorTimeline.js";
 import { METERS, meterFor, emptyGrid, sum, draftFrom, nextGroup } from "./data/editorDraft.js";
 
 /**
@@ -106,6 +108,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   // on any page — moves that end. The clip outlives the run: paste it again
   // and again.
   const [selectAnchor, setSelectAnchor] = useState(null);
+  // Timeline (vertical, the default) or the original strip; remembered per browser.
+  const [view, setView] = useState(loadEditorView);
   const [clip, setClip] = useState(null);
   useEffect(() => {
     onDraftChange?.({ groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags, notes });
@@ -259,6 +263,29 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
     if (!previewing) { const n = soundName(lane, next); if (n) engine.playStroke(n); }
   }
 
+  /**
+   * A tap on a grid cell, in either view. Choosing a run to copy only ever moves
+   * its end. Another cell: select it, and an EMPTY one gets the row's first stroke
+   * at once (a filled one is only selected, so moving never overwrites). The
+   * selected cell: step it on through the palette.
+   */
+  function tapCell(end, i) {
+    const v = { dayan, bayan, kartal }[end][i] ?? null;
+    const isCursor = end === cursorLane && i === cursor;
+    const pick = () => { setCursor(i); setCursorLane(end); };
+    if (selectAnchor != null) pick();
+    else if (isCursor) cycleCell(end, i);
+    else { pick(); if (v == null) cycleCell(end, i); }
+  }
+
+  /** Scrubbing the timeline: sound every hand that plays on the cell crossing the line. */
+  function soundCell(i) {
+    for (const [end] of ROWS) {
+      const n = soundName(end, { dayan, bayan, kartal }[end][i] ?? null);
+      if (n) engine.playStroke(n);
+    }
+  }
+
   async function togglePreview() {
     await engine.unlock();
     if (previewing) { engine.stop(); setPreviewing(false); }
@@ -386,6 +413,24 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
           Save and nav keeps the nav pill at the same y as every other page. */}
       <div style={st.body}>
 
+        <div style={st.viewSwitch} role="group">
+          {["timeline", "strip"].map((v) => (
+            <button key={v} aria-pressed={view === v} onClick={() => { setView(v); saveEditorView(v); }}
+              style={{ ...st.viewChip, ...(view === v ? st.viewChipOn : null) }}>
+              {t(v === "timeline" ? "editor.viewTimeline" : "editor.viewStrip")}
+            </button>
+          ))}
+        </div>
+
+        {view === "timeline" ? (
+          <EditorTimeline rows={ROWS} patterns={{ dayan, bayan, kartal }} groups={groups} labels={labels}
+            cursor={cursor} cursorLane={cursorLane} selection={selection} previewing={previewing} getPhase={getPhase}
+            onCellTap={tapCell}
+            onLaneTap={(end) => setCursorLane(end)}
+            onCursor={setCursor}
+            onPause={() => { if (previewing) togglePreview(); }}
+            onScrubSound={soundCell} />
+        ) : (<>
         {/* ── OVERVIEW: whole beat + a draggable frame over the current page ── */}
         <div ref={overviewRef} style={st.overviewWrap}
           onPointerDown={(e) => { scrubbingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); scrubTo(e.clientX); }}
@@ -445,11 +490,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
                           // Another cell: select it, and an EMPTY one gets the row's first
                           // stroke at once (a filled one is only selected, so moving never
                           // overwrites). The selected cell: step it on through the palette.
-                          onClick={() => {
-                            if (selectAnchor != null) pick(i);
-                            else if (isCursor) cycleCell(end, i);
-                            else { pick(i); if (v == null) cycleCell(end, i); }
-                          }}
+                          onClick={() => tapCell(end, i)}
                           aria-current={isCursor || undefined}
                           aria-label={v ? t("editor.cell", { lane: end, n: i + 1, bol: BOLS[end]?.[v] ?? v }) : t("editor.cellEmpty", { lane: end, n: i + 1 })}
                           style={{ ...st.zoomCell,
@@ -470,6 +511,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
             })}
           </div>
         </div>
+
+        </>)}
 
         {/* ── COPY / PASTE ── */}
         <div style={st.clip}>
@@ -676,6 +719,9 @@ const st = {
   titlePencil: { flexShrink: 0, width: 40, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", cursor: "pointer", display: "grid", placeItems: "center" },
 
   overviewSel: { position: "absolute", top: 4, bottom: 4, borderRadius: 4, background: "var(--clay)", opacity: 0.22, pointerEvents: "none" },
+  viewSwitch: { flexShrink: 0, display: "flex", gap: "var(--space-2)" },
+  viewChip: { minHeight: 36, padding: "0 16px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  viewChipOn: { background: "var(--clay)", borderColor: "var(--clay)", color: "white" },
   clip: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" },
   clipPrompt: { color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600 },
   clipHint: { color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: 12 },

@@ -183,6 +183,8 @@ export default {
   "editor.copyName": "{name} (copia)",
   "editor.saving": "Guardando…",
   "editor.stopPreview": "■ Detener",
+  "editor.viewTimeline": "Línea de tiempo",
+  "editor.viewStrip": "Tira",
   "editor.cellN": "Celda {n}",
   "editor.tapAnyCell": "toca cualquier celda para cambiar de fila",
   "editor.undo": "↶ Deshacer",

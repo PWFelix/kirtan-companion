@@ -184,6 +184,8 @@ export default {
   "editor.copyName": "{name} (copy)",
   "editor.saving": "Saving…",
   "editor.stopPreview": "■ Stop",
+  "editor.viewTimeline": "Timeline",
+  "editor.viewStrip": "Strip",
   "editor.cellN": "Cell {n}",
   "editor.tapAnyCell": "tap any cell to change row",
   "editor.undo": "↶ Undo",
