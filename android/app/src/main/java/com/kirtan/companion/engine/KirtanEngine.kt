@@ -1,0 +1,598 @@
+package com.kirtan.companion.engine
+
+import android.content.res.AssetManager
+import android.util.Log
+import com.kirtan.companion.data.model.Beat
+import com.kirtan.companion.data.model.LaneId
+import com.kirtan.companion.data.model.Stroke
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** What the engine tells the outside world. Commands go down, events come up. */
+sealed interface EngineEvent {
+    /** Sample decoding finished; the engine can now be started. */
+    data object Ready : EngineEvent
+
+    data object Started : EngineEvent
+    data object Stopped : EngineEvent
+
+    /**
+     * A step boundary passed. Emitted from the audio thread as the block
+     * containing it is rendered, so it is sample-aligned with the sound — but
+     * the UI playhead should still read [KirtanEngine.getPhase] per frame rather
+     * than animating off these, because a step event is ~10 per second and a
+     * playhead wants 60.
+     */
+    data class Step(val step: Int) : EngineEvent
+
+    /** The output device went away, or never opened. Playback cannot continue. */
+    data object OutputFailed : EngineEvent
+
+    /**
+     * A sequence bar line: entry [index] is playing, on its bar [bar] (1-based).
+     * Emitted from the audio thread at each downbeat of a playing sequence.
+     */
+    data class SequenceAt(val index: Int, val bar: Int) : EngineEvent
+
+    /**
+     * The sequence ran out with loop off, and the engine stopped itself on the
+     * following 1. [Stopped] follows; this one says WHY, so the playback service
+     * can release audio focus and the notification without a user command.
+     */
+    data object SequenceEnded : EngineEvent
+}
+
+/**
+ * The single front door to the whole engine.
+ *
+ * The UI — and the playback service — talks ONLY to this. It owns the clock, the
+ * mixer and the audio thread internally and wires them together; nothing outside
+ * touches those pieces directly. That rule is the one architectural invariant
+ * carried over unchanged from the web app, and it is why this port was possible
+ * at all: `KirtanEngine.js` already defined the seam, so reimplementing
+ * everything behind it meant no screen needed to know the engine had changed.
+ *
+ * Public vocabulary, deliberately identical to the JS facade so the two can be
+ * reasoned about side by side:
+ *
+ *   loadSounds()            decode the bundled samples (suspending, off-thread)
+ *   arm() / release()       open / close the output device
+ *   setBeat(beat)           choose which beat plays
+ *   setBpm(bpm)             set the tempo
+ *   setVolume(value)        master volume 0..1
+ *   setEndVolume(lane, v)   per-end volume 0..1
+ *   setEndMuted(lane, b)    mute/unmute an instrument
+ *   setEqBand(lane, i, dB)  one EQ band, dayan/bayan only
+ *   setEndPitch(lane, c)    retune an end by cents, dayan/bayan only
+ *   start() / stop()        begin / end playback
+ *   playStroke(lane, open)  sound one stroke now — the editor's pads
+ *   getPhase() / getStep()  bar position, for the playhead
+ *   events                  Ready | Started | Stopped | Step | OutputFailed
+ *
+ * KNOWS NOTHING ABOUT COMPOSE, THE SCREENS, OR ANDROID LIFECYCLE. The one
+ * Android type it takes is [AssetManager], to read the bundled recordings.
+ *
+ * ── WHY arm() IS SEPARATE FROM start() ──
+ * Web Audio renders continuously once its context is running, so the web
+ * engine's `playStroke` works whenever the page is open. A stream-based
+ * AudioTrack only produces blocks while its thread runs, so if the thread lived
+ * only between start() and stop(), the editor's pads — and auditioning a beat
+ * before playing it — would be silent. [arm] therefore opens the device and
+ * starts the thread, which then renders SILENCE until the clock is started. That
+ * is the same trade the browser makes, and it is what makes pad latency
+ * independent of whether the transport happens to be running.
+ */
+class KirtanEngine(
+    private val assets: AssetManager,
+    val sampleRate: Int,
+) : BlockRenderer {
+
+    companion object {
+        private const val TAG = "KirtanEngine"
+
+        /**
+         * Frames rendered per pass. 256 is ~5.3 ms at 48 kHz: small enough that
+         * a stroke is placed within a few samples of its intended position,
+         * large enough that the thread is not waking hundreds of times a second.
+         */
+        const val BLOCK_SIZE = 256
+    }
+
+    private val clock = MusicalClock(sampleRate)
+    private val soundPlayer = SoundPlayer(sampleRate, BLOCK_SIZE)
+    private val sequencer = Sequencer(clock)
+    private val humanizer = Humanizer(sampleRate)
+    private val renderer = AudioRenderer(sampleRate, BLOCK_SIZE, this)
+    private val bank = SampleBank(assets)
+
+    private val _events = MutableSharedFlow<EngineEvent>(extraBufferCapacity = 64)
+    val events: SharedFlow<EngineEvent> = _events.asSharedFlow()
+
+    /**
+     * Pads awaiting a trigger, drained at the top of the next block.
+     *
+     * A pad tap arrives on the UI thread, but the voice list belongs to the
+     * audio thread and is not synchronised — so the request is queued rather
+     * than acted on. The queue costs one block of latency at most, which is
+     * already the buffer delay, and it keeps every mutation of the voice list on
+     * one thread.
+     */
+    private val pendingPads = ConcurrentLinkedQueue<StrokeKey>()
+
+    /**
+     * A start() awaiting the audio thread. The clock must be anchored BY the
+     * audio thread, at the first frame of the block it is about to render.
+     * Anchoring it from the UI thread at `framesRendered` raced the renderer:
+     * if that block was already being rendered (or the count advanced
+     * mid-write), step 0 fell before the next block's `fromFrame` and the
+     * first downbeat was never played. Clearing voices from the UI thread
+     * also raced the unsynchronised voice list.
+     */
+    private val pendingStart = AtomicBoolean(false)
+
+    // Reused across blocks: the audio thread must not allocate.
+    private val stepScratch = ArrayList<StepEvent>(8)
+
+    @Volatile
+    var isReady: Boolean = false
+        private set
+
+    @Volatile
+    var isPlaying: Boolean = false
+        private set
+
+    /** The beat currently loaded, mirrored for the UI. */
+    @Volatile
+    var currentBeat: Beat? = null
+        private set
+
+    val bpm: Int get() = clock.bpm.toInt()
+
+    /** Output device is open and the audio thread is running. */
+    val isArmed: Boolean get() = renderer.isRunning
+
+    /**
+     * Short writes since the thread started. A rising count means the device is
+     * not keeping up — the first thing to look at if playback ever stutters.
+     */
+    val underruns: Int get() = renderer.underruns
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────
+
+    /**
+     * Decode every bundled sample at the output rate.
+     *
+     * Suspending and IO-dispatched because resampling eleven stereo recordings
+     * is tens of milliseconds of work — long enough to drop frames if it ran on
+     * the main thread during the splash screen, which is exactly when it runs.
+     *
+     * A stroke whose files are missing or undecodable is skipped rather than
+     * failing the load, so one absent recording cannot leave the app stuck
+     * waiting for a [EngineEvent.Ready] that never comes.
+     */
+    suspend fun loadSounds(): Boolean = withContext(Dispatchers.IO) {
+        val loaded = try {
+            bank.load(sampleRate)
+        } catch (e: Exception) {
+            Log.e(TAG, "sample load failed", e)
+            emptySet()
+        }
+        if (loaded.isEmpty()) {
+            Log.e(TAG, "no samples decoded; the engine will be silent")
+            false
+        } else {
+            soundPlayer.attach(bank.decoded())
+            isReady = true
+            _events.tryEmit(EngineEvent.Ready)
+            true
+        }
+    }
+
+    /**
+     * Open the output device and start the audio thread.
+     * Safe to call repeatedly; a failure emits [EngineEvent.OutputFailed] and
+     * returns false rather than throwing, so the app can still be browsed.
+     */
+    fun arm(): Boolean {
+        if (renderer.isRunning) return true
+        val ok = renderer.start()
+        if (!ok) {
+            Log.e(TAG, "could not arm the audio output")
+            _events.tryEmit(EngineEvent.OutputFailed)
+        }
+        return ok
+    }
+
+    /** Stop the audio thread and release the device. */
+    fun release() {
+        isPlaying = false
+        clock.stop()
+        renderer.stop()
+    }
+
+    // ── Commands ───────────────────────────────────────────────────────────
+
+    /**
+     * Choose which beat plays. Does NOT restart the clock, so bar phase — and
+     * therefore the musical position — survives the switch. That is deliberate
+     * and is the property the whole phase-derived step model exists to protect:
+     * swapping Forward for Double Time mid-kirtan keeps the downbeat where it
+     * was instead of lurching back to the top of the bar.
+     */
+    fun setBeat(beat: Beat) {
+        currentBeat = beat
+        humanizer.setBeat(beat)
+        // A beat brings its own swing, replacing any live nudge from the mixer.
+        swingOffbeats = com.kirtan.companion.data.Swing.offbeats(com.kirtan.companion.data.groupsFor(beat))
+        swing = beat.swing
+        sequencer.beat = beat
+        sequencer.invalidateGuard()
+    }
+
+    // ── Sequences ──────────────────────────────────────────────────────────
+
+    /** The playing sequence: its entries and the cursor counting through them. */
+    private class Plan(val steps: List<SequenceStep>, val cursor: SequenceCursor)
+
+    @Volatile
+    private var plan: Plan? = null
+
+    /** The frame a sequence switch re-anchored at, so its 1 isn't counted twice. */
+    private var switchedAtFrame = Long.MIN_VALUE
+
+    /**
+     * Play [steps] in order, each for its bar count, switching beats on the bar
+     * line. Null (or empty) goes back to looping one beat. Stopped, it loads the
+     * first entry and waits for [start]; playing, an EDIT keeps its place (same
+     * entry and bar where they still exist).
+     */
+    fun setSequence(steps: List<SequenceStep>?, loop: Boolean) {
+        if (steps.isNullOrEmpty()) {
+            plan = null
+            return
+        }
+        val cursor = SequenceCursor(steps.map { it.bars }, loop)
+        val old = plan
+        if (isPlaying && old != null) {
+            cursor.adopt(old.cursor)
+            plan = Plan(steps, cursor)
+            val now = steps[cursor.index].beat
+            if (now != sequencer.beat) setBeat(now)
+        } else {
+            plan = Plan(steps, cursor)
+            setBeat(steps.first().beat)
+        }
+    }
+
+    /** Loop on or off while it plays: takes effect at the end of the last entry. */
+    fun setSequenceLoop(loop: Boolean) {
+        plan?.cursor?.loop = loop
+    }
+
+    val hasSequence: Boolean get() = plan != null
+
+    fun setBpm(bpm: Int) {
+        pendingBarBpm.set(null) // a direct change overrides one waiting for its bar
+        clock.setBpm(bpm.toDouble(), renderer.framesRendered)
+    }
+
+    /** A tempo waiting for its bar line: (absolute tick of that 1, bpm). */
+    private val pendingBarBpm = java.util.concurrent.atomic.AtomicReference<Pair<Double, Int>?>(null)
+
+    /**
+     * Change tempo ON THE 1 nearest [inSeconds] from now (Learn's hill climb), so
+     * the speed-up starts a bar rather than landing mid-phrase. Applied on the
+     * audio thread at that downbeat's exact frame. Returns the seconds until
+     * then, so the UI can show the new tempo as it is heard; null when stopped
+     * (nothing to snap to — the caller changes tempo directly).
+     */
+    fun setBpmAtBar(bpm: Int, inSeconds: Double): Double? {
+        if (!clock.isRunning) return null
+        val now = renderer.framesRendered
+        val target = now + (inSeconds * clock.sampleRate).toLong()
+        val bar = clock.barTickNear(target, now)
+        pendingBarBpm.set(bar to bpm)
+        return ((clock.frameAt(bar) - now).coerceAtLeast(0)).toDouble() / clock.sampleRate
+    }
+
+    fun setVolume(value: Float) = soundPlayer.setVolume(value)
+
+    /** The user's master setting, unaffected by any ducking in force. */
+    fun volume(): Float = soundPlayer.volume()
+
+    /**
+     * Attenuate for a transient audio-focus loss. Separate from [setVolume] so
+     * that ducking for a navigation prompt cannot clobber the user's level — see
+     * [SoundPlayer.setMasterDuck].
+     */
+    fun setMasterDuck(factor: Float) = soundPlayer.setMasterDuck(factor)
+
+    fun setEndVolume(lane: LaneId, value: Float) = soundPlayer.setEndVolume(lane, value)
+
+    fun setEndMuted(lane: LaneId, muted: Boolean) = soundPlayer.setEndMuted(lane, muted)
+
+    fun isEndMuted(lane: LaneId): Boolean = soundPlayer.isEndMuted(lane)
+
+    fun endVolume(lane: LaneId): Float = soundPlayer.endVolume(lane)
+
+    fun setEqBand(lane: LaneId, bandIndex: Int, db: Double) =
+        soundPlayer.setEqBand(lane, bandIndex, db)
+
+    fun eqBandDb(lane: LaneId, bandIndex: Int): Double? = soundPlayer.eqBandDb(lane, bandIndex)
+
+    fun hasEq(lane: LaneId): Boolean = soundPlayer.hasEq(lane)
+
+    fun setEndPitch(lane: LaneId, cents: Int) = soundPlayer.setEndPitch(lane, cents)
+
+    /** Which cells swing for the current beat; see [com.kirtan.companion.data.Swing]. */
+    @Volatile private var swingOffbeats = BooleanArray(0)
+
+    /** Swing in force, 50–67. Set from the beat on [setBeat]; [setSwing] nudges it live. */
+    @Volatile
+    var swing: Int = com.kirtan.companion.data.Swing.STRAIGHT
+        private set
+
+    fun setSwing(value: Int) {
+        swing = com.kirtan.companion.data.Swing.clamp(value)
+    }
+
+    /** How much human variation the drum plays with. See [Humanizer]. */
+    fun setFeel(feel: Feel) {
+        humanizer.feel = feel
+    }
+
+    fun feel(): Feel = humanizer.feel
+
+    /** Begin playing from the top of the bar. */
+    fun start() {
+        val beat = currentBeat
+        if (beat == null) {
+            Log.w(TAG, "start() with no beat loaded")
+            return
+        }
+        if (!arm()) return
+        // A sequence always starts from its top.
+        plan?.let { p ->
+            p.cursor.reset()
+            setBeat(p.steps.first().beat)
+        }
+
+        // Position 0 so the visual playhead and the audio both begin on the
+        // downbeat, matching the web transport's start(). The anchor itself is
+        // set by the audio thread at the top of its next block — see
+        // [pendingStart] — so step 0 always lands at offset 0 of that block.
+        clock.stop()
+        pendingStart.set(true)
+        isPlaying = true
+        _events.tryEmit(EngineEvent.Started)
+    }
+
+    fun stop() {
+        if (!isPlaying) return
+        isPlaying = false
+        pendingStart.set(false)
+        pendingBarBpm.set(null)
+        clock.stop()
+        // Voices are left to ring out rather than being cut: stopping mid-decay
+        // is a click, and a drum that is allowed to finish sounds like a drum
+        // that was stopped. The clock stopping is what ends the rhythm.
+        _events.tryEmit(EngineEvent.Stopped)
+    }
+
+    /**
+     * Sound one stroke immediately — the editor's pads, and auditioning a beat
+     * from the library. Queued to the audio thread; see [pendingPads].
+     */
+    fun playStroke(lane: LaneId, open: Boolean) {
+        pendingPads.add(StrokeKey(lane, open))
+    }
+
+    // ── Position, for the playhead ─────────────────────────────────────────
+
+    /**
+     * Bar phase in [0,1). 0 while stopped.
+     *
+     * Read this once per frame from the UI (Compose's `withFrameNanos`) rather
+     * than animating off [EngineEvent.Step]: it is a pure function of the frame
+     * position, so it is always exactly in step with the audio and needs no
+     * interpolation between step events.
+     */
+    fun getPhase(): Double = clock.phaseAt(playheadFrame())
+
+    /** The step index in force at the playhead. */
+    fun getStep(): Int = clock.stepAt(playheadFrame())
+
+    /**
+     * The frame the playhead should be drawn at: the one being HEARD now, moved
+     * later by the user's display delay for the current output device.
+     *
+     * The heard frame comes from the device's output timestamp ([OutputClock]),
+     * which includes the whole output path, Bluetooth too on most phones. A
+     * device that reports none falls back to the rendered count minus the
+     * track's buffer.
+     */
+    private fun playheadFrame(): Long = playheadFrameAt(System.nanoTime(), displayDelayFrames)
+
+    private fun playheadFrameAt(nowNanos: Long, delayFrames: Long): Long {
+        val heard = renderer.presentedFrame(nowNanos)
+            ?: (renderer.framesRendered - renderer.bufferFrames)
+        val f = heard - delayFrames
+        return if (f < 0) 0 else f
+    }
+
+    @Volatile
+    private var displayDelayFrames: Long = 0
+
+    /**
+     * Move the playhead later (or, negative, earlier) by [ms], to line the
+     * display up with what is heard on an output whose delay the phone does not
+     * report fully, typically a Bluetooth speaker. Display only: the drum is
+     * untouched, because the sound is the reference the player follows.
+     */
+    fun setDisplayDelayMs(ms: Int) {
+        displayDelayFrames = OutputClock.msToFrames(ms, sampleRate)
+    }
+
+    /**
+     * How far behind the rendered audio the phone says the speaker is, in ms,
+     * or null when it reports no timestamp (not playing, or the device does not
+     * support it). Shown on the sync screen so the user can see what is already
+     * being allowed for.
+     */
+    fun reportedOutputLatencyMs(): Int? {
+        val heard = renderer.presentedFrame(System.nanoTime()) ?: return null
+        return ((renderer.framesRendered - heard) * 1000 / sampleRate).toInt()
+    }
+
+    /**
+     * Where [nowNanos] falls relative to the nearest step, in ms, measured
+     * against what the phone says is being heard and IGNORING the display delay.
+     * Positive means after the step.
+     *
+     * This is the sync screen's measurement. The user taps on each click they
+     * hear; if the phone's own latency figure were complete, the taps would land
+     * on the steps (offset ≈ 0). Whatever they consistently land off by is the
+     * delay the phone did not report, which is exactly the display delay to set.
+     */
+    fun offsetFromNearestStepMs(nowNanos: Long): Double {
+        val beat = sequencer.beat ?: return 0.0
+        val steps = beat.steps.coerceAtLeast(1)
+        val position = clock.phaseAt(playheadFrameAt(nowNanos, 0)) * steps
+        val off = position - kotlin.math.round(position)
+        val stepMs = 60_000.0 / clock.bpm * beat.beatsPerBar / steps
+        return off * stepMs
+    }
+
+    // ── The audio thread's entry point ─────────────────────────────────────
+
+    /**
+     * Render one block. Called by [AudioRenderer] on the audio thread.
+     *
+     * Order matters: triggers are placed FIRST, at their exact offsets within
+     * this block, and only then is the block mixed — so a stroke scheduled for
+     * frame 137 of 256 sounds at frame 137 and not at the next block boundary.
+     */
+    override fun render(fromFrame: Long, count: Int, out: FloatArray) {
+
+        // 1. A pending start anchors the clock HERE, on the audio thread, at
+        //    this block's first frame — so step 0 is inside this block.
+        if (pendingStart.getAndSet(false)) {
+            soundPlayer.stopAllVoices()
+            sequencer.invalidateGuard()
+            humanizer.reset()
+            clock.start(fromFrame)
+        }
+
+        // 2. Pad taps queued from the UI thread.
+        while (true) {
+            val key = pendingPads.poll() ?: break
+            soundPlayer.play(key, 0)
+        }
+
+        // 2b. A tempo waiting for its bar line, if that 1 falls in this block:
+        //     re-anchor exactly there, so the downbeat keeps its place and every
+        //     step after it runs at the new tempo.
+        pendingBarBpm.get()?.let { (barTick, newBpm) ->
+            if (!clock.isRunning) return@let
+            val at = clock.frameAt(barTick)
+            if (at < fromFrame + count) {
+                clock.setBpm(newBpm.toDouble(), maxOf(at, fromFrame))
+                pendingBarBpm.compareAndSet(pendingBarBpm.get(), null)
+            }
+        }
+
+        // 3. Sequenced steps falling inside this block. A LOOP, because a
+        //    sequence can switch beats mid-block: the switch re-anchors the clock
+        //    on that 1 and the rest of the block is collected again under the new
+        //    beat's grid.
+        var cursorFrame = fromFrame
+        val endFrame = fromFrame + count
+        blocks@ while (true) {
+            val beat = sequencer.beat ?: break
+            if (!clock.isRunning) break
+            stepScratch.clear()
+            sequencer.collectStepEvents(cursorFrame, endFrame, stepScratch)
+            for (event in stepScratch) {
+                if (event.step == 0 && event.frame != switchedAtFrame) {
+                    val p = plan
+                    if (p != null) {
+                        when (val outcome = p.cursor.onDownbeat()) {
+                            SequenceCursor.Outcome.End -> {
+                                endSequence()
+                                break@blocks
+                            }
+                            is SequenceCursor.Outcome.Switch -> {
+                                switchSequenceBeat(p.steps[outcome.index].beat, event.frame)
+                                cursorFrame = event.frame
+                                continue@blocks
+                            }
+                            SequenceCursor.Outcome.Stay -> Unit
+                        }
+                        _events.tryEmit(EngineEvent.SequenceAt(p.cursor.index, p.cursor.bar + 1))
+                    }
+                }
+                if (event.step == 0 && event.frame == switchedAtFrame) {
+                    plan?.let { p -> _events.tryEmit(EngineEvent.SequenceAt(p.cursor.index, p.cursor.bar + 1)) }
+                }
+                playStep(beat, event, fromFrame, count)
+            }
+            break
+        }
+
+        // 4. Mix: voices → per-end EQ and fader → master.
+        soundPlayer.renderBlock(out, count)
+    }
+
+    private fun playStep(beat: Beat, event: StepEvent, fromFrame: Long, count: Int) {
+        val offset = (event.frame - fromFrame).toInt().coerceIn(0, count - 1)
+        // Diagnostic: a dropped downbeat shows up in logcat as a gap in this
+        // sequence rather than only being heard. Verbose, so silent in normal use.
+        Log.v(TAG, "step ${event.step} frame=${event.frame} block=$fromFrame offset=$offset")
+        // Iterated inline rather than via a helper that builds a list: this runs
+        // ten times a second forever, so it allocates nothing.
+        humanizer.advance()
+        val stepMs = 60_000.0 / clock.bpm * beat.beatsPerBar / beat.steps.coerceAtLeast(1)
+        // Swing: the 2nd, 4th… cell of an even beat sounds late. Only the sound
+        // moves — the step event (and so the strip) stays on the grid.
+        val swingFrames = if (swingOffbeats.getOrElse(event.step) { false }) {
+            (com.kirtan.companion.data.Swing.lateFraction(swing) * stepMs * sampleRate / 1000.0).toInt()
+        } else 0
+        for (lane in LaneId.ORDERED) {
+            val stroke = beat.strokeAt(lane, event.step) ?: continue
+            soundPlayer.play(
+                StrokeKey(lane, stroke == Stroke.OPEN),
+                offset + swingFrames + humanizer.delayFrames(lane, event.step, stepMs),
+                humanizer.gain(event.step),
+            )
+        }
+        _events.tryEmit(EngineEvent.Step(event.step))
+    }
+
+    /**
+     * A sequence moves to its next entry ON this 1. The clock is re-anchored here
+     * (tick 0 = this frame, tempo kept) because the bar line of one meter is not
+     * a bar line of another: 4/4's 768-tick bars and 7/8's 672 only meet every
+     * few bars, so carrying the tick count over would start the new beat
+     * mid-bar. A bar-snapped tempo change was aimed at old ticks, so it goes.
+     */
+    private fun switchSequenceBeat(next: Beat, atFrame: Long) {
+        setBeat(next)
+        clock.start(atFrame)
+        switchedAtFrame = atFrame
+        pendingBarBpm.set(null)
+    }
+
+    /** Loop off and the last entry done: stop on this 1 without playing it. */
+    private fun endSequence() {
+        isPlaying = false
+        pendingBarBpm.set(null)
+        clock.stop()
+        _events.tryEmit(EngineEvent.SequenceEnded)
+        _events.tryEmit(EngineEvent.Stopped)
+    }
+}

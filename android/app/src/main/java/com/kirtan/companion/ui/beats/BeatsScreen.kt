@@ -1,0 +1,1153 @@
+package com.kirtan.companion.ui.beats
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.kirtan.companion.data.PaletteToken
+import com.kirtan.companion.data.ShareCodec
+import com.kirtan.companion.data.model.Beat
+import com.kirtan.companion.storage.BUILTIN_CATEGORY
+import com.kirtan.companion.storage.CUSTOM_CATEGORY
+import com.kirtan.companion.storage.COMMUNITY_CATEGORY
+import com.kirtan.companion.storage.CommunityTracking
+import com.kirtan.companion.storage.LibraryRepository
+import com.kirtan.companion.storage.ShippedSource
+import com.kirtan.companion.storage.ShippedStatus
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kirtan.companion.ui.components.HairlineIconButton
+import com.kirtan.companion.ui.components.PrimaryButton
+import com.kirtan.companion.ui.components.ScreenFrame
+import com.kirtan.companion.ui.components.SecondaryButton
+import com.kirtan.companion.ui.components.SectionLabel
+import com.kirtan.companion.ui.community.CommunityScreen
+import com.kirtan.companion.ui.community.CommunityViewModel
+import com.kirtan.companion.ui.icons.KcIcons
+import com.kirtan.companion.ui.library.LibraryViewModel
+import com.kirtan.companion.ui.share.ImportConfirmSheet
+import com.kirtan.companion.ui.share.ImportSheet
+import com.kirtan.companion.ui.share.ShareSheet
+import com.kirtan.companion.ui.share.ShareTarget
+import com.kirtan.companion.ui.strip.BeatStrip
+import com.kirtan.companion.ui.theme.KirtanTheme
+import com.kirtan.companion.ui.theme.color
+import com.kirtan.companion.ui.transport.TransportViewModel
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.kirtan.companion.R
+import com.kirtan.companion.Strings
+import com.kirtan.companion.ui.BeatText
+
+/**
+ * Peer-to-peer sharing (codes and links, the Share sheet) is soft-retired:
+ * "Share" now means publishing to the community. The code stays — and imports
+ * of codes and links still work — so this one switch brings it back.
+ */
+private const val P2P_SHARING = false
+
+/** Where the Beats screen has drilled to. Dies with the screen, as on the web. */
+private sealed interface BeatsPage {
+    data object Landing : BeatsPage
+    data class Category(val id: String) : BeatsPage
+
+    /** The community library. A page, not a sheet: it is a list you browse and
+     *  search, and a sheet's fixed height would cram it. */
+    data object Community : BeatsPage
+}
+
+/**
+ * The library screen.
+ *
+ * Ported from `src/views/BeatsView.jsx`. The structural decision worth preserving
+ * is that this is a SHORT LIST OF SECTIONS the user drills into, not a tab bar
+ * over one long list: a library of saved beats and playlists is browsed by
+ * narrowing, and a flat tab strip over everything would make the built-ins, the
+ * user's own work and their progressions compete for the same visual weight.
+ *
+ * NOT PORTED, and the two largest gaps in this screen:
+ *  - **Browse** — the community library (published beats, search, publish). The
+ *    client exists in `storage/CommunityClient.kt`; only its UI is missing.
+ *  - **Share and import** — the share sheet, the paste-a-code field and the
+ *    import preview. The codec and the deep-link intake are both complete and
+ *    tested ([com.kirtan.companion.data.ShareCodec],
+ *    [com.kirtan.companion.data.ShareIntake]); what is missing is the sheet that
+ *    calls them. Inbound links arriving through the manifest intent ARE handled,
+ *    in [com.kirtan.companion.MainActivity].
+ */
+@Composable
+internal fun BeatsScreen(
+    library: LibraryViewModel,
+    transport: TransportViewModel,
+    beat: Beat?,
+    onStart: () -> Unit,
+    onEditBeat: (Beat) -> Unit,
+    /**
+     * Open the editor for a BUILT-IN beat in the mode that saves back onto its own
+     * row, for every install. Separate from [onEditBeat] because the two saves go
+     * to different places and only the caller can tell the editor which one this
+     * session is — see [com.kirtan.companion.ui.KirtanApp].
+     */
+    onEditShippedBeat: (Beat) -> Unit,
+    /**
+     * Retire a built-in beat from the shipped set for every install. Separate from
+     * [onEditBeat] and [onEditShippedBeat] because it is a DELETE rather than an
+     * edit — there is no editor to open, just a confirm and a write.
+     */
+    onRemoveShippedBeat: (Beat) -> Unit,
+    modifier: Modifier = Modifier,
+    /**
+     * A share payload that arrived through a deep link, to be previewed here
+     * rather than written straight to the library. Handed over by
+     * [com.kirtan.companion.ui.KirtanApp], which consumes it from
+     * [com.kirtan.companion.data.ShareIntake] exactly once.
+     */
+    pendingImport: ShareCodec.SharePayload? = null,
+    onPendingImportHandled: () -> Unit = {},
+) {
+    val state by library.state.collectAsState()
+    val allBeats by library.allBeats.collectAsState()
+    val builtIns by library.builtInBeats.collectAsState()
+    val shipped by library.shippedStatus.collectAsState()
+    val isMaintainer by library.isMaintainer.collectAsState()
+    val transportState by transport.state.collectAsState()
+    val communityVm: CommunityViewModel = viewModel(factory = CommunityViewModel.Factory)
+    val shareIndex by communityVm.shareIndex.collectAsState()
+    // Read so the screen recomposes when the originals arrive (update badges).
+    val originals by library.communityOriginals.collectAsState()
+    var page by remember { mutableStateOf<BeatsPage>(BeatsPage.Landing) }
+    var search by remember { mutableStateOf("") }
+    var detail by remember { mutableStateOf<Beat?>(null) }
+    var shareTarget by remember { mutableStateOf<ShareTarget?>(null) }
+    var importOpen by remember { mutableStateOf(false) }
+    var importPreview by remember { mutableStateOf<ShareCodec.SharePayload?>(null) }
+    var importResult by remember { mutableStateOf<String?>(null) }
+    var pendingDelete by remember { mutableStateOf<Beat?>(null) }
+    var tagTarget by remember { mutableStateOf<Beat?>(null) }
+
+    // A deep-linked payload joins the same confirm-then-write path as a pasted
+    // one, so an inbound link can never land in the library unreviewed.
+    LaunchedEffect(pendingImport) {
+        pendingImport?.let {
+            importPreview = it
+            onPendingImportHandled()
+        }
+    }
+
+    fun acceptImport(payload: ShareCodec.SharePayload) {
+        importPreview = null
+        library.importShared(payload) { result ->
+            importResult = when {
+                result.beats.isEmpty() -> Strings.get(R.string.import_nothing)
+                result.categoryId != null ->
+                    Strings.plural(R.plurals.import_added_list, result.beats.size, result.beats.size)
+
+                else -> Strings.get(R.string.import_added_custom)
+            }
+            // A shared list arrives as its own playlist; land the user on it so
+            // they can see what came in rather than guessing where it went.
+            result.categoryId?.let { page = BeatsPage.Category(it) }
+        }
+    }
+
+    val privateTags by library.privateTags.collectAsState()
+    val rowInfo = remember(originals, privateTags) { RowInfo(library::communityStatus, privateTags) }
+
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowInfo provides rowInfo) {
+    ScreenFrame(modifier = modifier) {
+        // The sub-header: a back button on drilled-in pages, a spacer on the
+        // landing so the title stays centred in both.
+        //
+        // "Drilled in" is EVERY page but the landing, not just a category. This
+        // read `page is BeatsPage.Category` until Community was added, which left
+        // that page with no way back at all: the header had a spacer where the
+        // button belonged, and the Beats tab does not reset the sub-page — it is
+        // already the selected tab, so tapping it again is a no-op. The only exit
+        // was to leave for Home and come back, which disposes the screen and loses
+        // the search and the scroll with it.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (page != BeatsPage.Landing) {
+                HairlineIconButton(
+                    icon = KcIcons.Back,
+                    contentDescription = stringResource(R.string.common_back),
+                    onClick = { page = BeatsPage.Landing },
+                )
+            } else {
+                Spacer(Modifier.size(44.dp))
+            }
+            Text(
+                text = when (val p = page) {
+                    BeatsPage.Landing -> stringResource(R.string.tab_beats)
+                    is BeatsPage.Category -> library.categoryName(p.id)
+                    BeatsPage.Community -> stringResource(R.string.community_title)
+                },
+                color = PaletteToken.SYAHI.color,
+                fontSize = 26.sp,
+                modifier = Modifier.weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.size(44.dp))
+        }
+
+        state.error?.let { message ->
+            ErrorStrip(message = message, onDismiss = { library.dismissError() })
+        }
+
+        importResult?.let { message ->
+            ResultStrip(message = message, onDismiss = { importResult = null })
+        }
+
+        when (val p = page) {
+            BeatsPage.Landing -> LandingPage(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                search = search,
+                onSearchChange = { search = it },
+                library = library,
+                state = state,
+                allBeats = allBeats,
+                builtInMeta = shippedSourceLine(shipped.source, builtIns.size),
+                onOpenCategory = { page = BeatsPage.Category(it) },
+                onOpenDetail = { detail = it },
+                onShareBeat = {
+                    if (P2P_SHARING) shareTarget = ShareTarget.BeatTarget(it)
+                    else communityVm.publishBeat(it) { message -> importResult = message }
+                },
+                onDeleteBeat = { pendingDelete = it },
+                onOpenImport = { importOpen = true },
+                onOpenCommunity = { page = BeatsPage.Community },
+            )
+
+            BeatsPage.Community -> CommunityScreen(
+                vm = communityVm,
+                transport = transport,
+                selectedBeat = beat,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+
+            is BeatsPage.Category -> CategoryPage(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                categoryId = p.id,
+                categoryName = library.categoryName(p.id),
+                // Keyed on the built-in set as well as the library state: a check
+                // for updates replaces the built-ins WITHOUT touching `state`, so
+                // without it this `remember` would keep serving the set that was
+                // on screen when the page opened.
+                listBeats = remember(p.id, state, builtIns) { library.categoryBeats(p.id) },
+                library = library,
+                shipped = shipped,
+                canCheckForUpdates = library.canCheckForUpdates,
+                onCheckForUpdates = { library.checkForBeatUpdates() },
+                onOpenDetail = { detail = it },
+                onShareBeat = {
+                    if (P2P_SHARING) shareTarget = ShareTarget.BeatTarget(it)
+                    else communityVm.publishBeat(it) { message -> importResult = message }
+                },
+                onDeleteBeat = { pendingDelete = it },
+                onShareList = { name, beats ->
+                    shareTarget = ShareTarget.CategoryTarget(name, beats)
+                },
+                onPublishList = { name, beats ->
+                    communityVm.publishCategory(name, beats) { message -> importResult = message }
+                },
+            )
+        }
+
+        PrimaryButton(
+            label = if (beat != null) stringResource(R.string.beats_start_named, beat.name) else stringResource(R.string.beats_start),
+            icon = KcIcons.Start,
+            enabled = transportState.ready && beat != null,
+            radius = KirtanTheme.dimens.radiusSectionCard,
+            weight = FontWeight.ExtraBold,
+            onClick = { onStart() },
+        )
+    }
+    }
+
+    pendingDelete?.let { target ->
+        // A swipe is easy to make by accident; deleting someone's beat should
+        // not be. One deliberate tap on the revealed button, then this.
+        com.kirtan.companion.ui.components.KcSheet(
+            title = stringResource(R.string.beats_delete_title, target.name),
+            onDismiss = { pendingDelete = null },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space3)) {
+                Text(
+                    text = stringResource(R.string.beats_delete_body),
+                    color = PaletteToken.SYAHI_SOFT.color,
+                    fontSize = 13.4.sp,
+                )
+                PrimaryButton(
+                    label = stringResource(R.string.common_delete),
+                    icon = KcIcons.Trash,
+                    onClick = {
+                        target.id?.let { library.deleteBeat(it) }
+                        pendingDelete = null
+                    },
+                )
+                SecondaryButton(label = stringResource(R.string.common_cancel), onClick = { pendingDelete = null })
+            }
+        }
+    }
+
+    detail?.let { target ->
+        BeatDetailSheet(
+            beat = target,
+            library = library,
+            onDismiss = { detail = null },
+            onPlay = {
+                library.selectBeat(target)
+                transport.play(target)
+                detail = null
+                onStart()
+            },
+            onEdit = {
+                onEditBeat(target)
+                detail = null
+            },
+            // A maintainer looking at a built-in gets both: forking a private copy
+            // is still what you want when you are experimenting, and correcting the
+            // shipped beat is what you want when it is simply wrong.
+            canEditShipped = isMaintainer && target.isBuiltIn,
+            onEditShipped = {
+                onEditShippedBeat(target)
+                detail = null
+            },
+            // Retiring a beat is the third shipped-set write, alongside promote and
+            // edit-for-everyone. Same confirm-first pattern: the blast radius is
+            // named in the confirm sheet before the write happens.
+            canRemoveShipped = isMaintainer && target.isBuiltIn,
+            onRemoveShipped = {
+                onRemoveShippedBeat(target)
+                detail = null
+            },
+            onShare = {
+                shareTarget = ShareTarget.BeatTarget(target)
+                detail = null
+            },
+            onPublish = {
+                detail = null
+                communityVm.publishBeat(target) { message -> importResult = message }
+            },
+            shareStatus = shareIndex.status(target),
+            communityStatus = remember(target, originals) { library.communityStatus(target) },
+            tagRow = {
+                // The author's tags are part of the beat (edit them in the editor);
+                // "My tags" are this user's alone and work on any beat.
+                if (target.tags.isNotEmpty()) {
+                    com.kirtan.companion.ui.components.TagLine(stringResource(R.string.tags_title), target.tags, onEdit = null)
+                }
+                if (target.id != null) {
+                    com.kirtan.companion.ui.components.TagLine(
+                        stringResource(R.string.tags_mine),
+                        privateTags[target.id].orEmpty(),
+                        onEdit = { tagTarget = target; detail = null },
+                    )
+                }
+            },
+            onUpdate = {
+                library.updateFromCommunity(target) { ok ->
+                    importResult = if (ok) Strings.get(R.string.community_updated, target.name) else Strings.get(R.string.community_update_failed)
+                }
+                detail = null
+            },
+        )
+    }
+
+    tagTarget?.let { target ->
+        val id = target.id
+        if (id != null) {
+            com.kirtan.companion.ui.components.TagPickerSheet(
+                title = stringResource(R.string.tags_mine),
+                hint = stringResource(R.string.tags_private_hint),
+                selected = privateTags[id].orEmpty(),
+                onDismiss = { tagTarget = null },
+                onDone = { library.setPrivateTags(id, it); tagTarget = null },
+            )
+        }
+    }
+
+    shareTarget?.let { target ->
+        ShareSheet(target = target, onDismiss = { shareTarget = null })
+    }
+
+    if (importOpen) {
+        ImportSheet(
+            onDismiss = { importOpen = false },
+            onDecoded = { payload ->
+                importOpen = false
+                importPreview = payload
+            },
+        )
+    }
+
+    importPreview?.let { payload ->
+        ImportConfirmSheet(
+            payload = payload,
+            onDismiss = { importPreview = null },
+            onAccept = { acceptImport(payload) },
+        )
+    }
+}
+
+@Composable
+private fun LandingPage(
+    modifier: Modifier = Modifier,
+    search: String,
+    onSearchChange: (String) -> Unit,
+    library: LibraryViewModel,
+    state: LibraryRepository.State,
+    allBeats: List<Beat>,
+    builtInMeta: String,
+    onOpenCategory: (String) -> Unit,
+    onOpenDetail: (Beat) -> Unit,
+    onShareBeat: (Beat) -> Unit,
+    onDeleteBeat: (Beat) -> Unit,
+    onOpenImport: () -> Unit,
+    onOpenCommunity: () -> Unit,
+) {
+    val dimens = KirtanTheme.dimens
+
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(dimens.space3),
+    ) {
+        item {
+            SearchCard(
+                query = search,
+                onQueryChange = onSearchChange,
+                allBeats = allBeats,
+                onOpenDetail = onOpenDetail,
+                onShareBeat = onShareBeat,
+                onDeleteBeat = onDeleteBeat,
+            )
+        }
+
+        item {
+            SectionCard(
+                title = stringResource(R.string.cat_builtin),
+                meta = builtInMeta,
+                onClick = { onOpenCategory(BUILTIN_CATEGORY) },
+            )
+        }
+
+        item {
+            SectionCard(
+                title = stringResource(R.string.cat_custom),
+                meta = state.customBeats.count { !it.isCommunity }.let { own ->
+                    if (own == 0) stringResource(R.string.beats_nothing_saved)
+                    else pluralStringResource(R.plurals.beats_saved_count, own, own)
+                },
+                onClick = { onOpenCategory(CUSTOM_CATEGORY) },
+            )
+        }
+
+        val community = state.customBeats.filter { it.isCommunity }
+        if (community.isNotEmpty()) item {
+            val updates = community.count { library.communityStatus(it) is CommunityTracking.Status.UpdateAvailable }
+            SectionCard(
+                title = stringResource(R.string.cat_community),
+                meta = pluralStringResource(R.plurals.beat_count, community.size, community.size) +
+                    (if (updates > 0) " · " + pluralStringResource(R.plurals.community_updates, updates, updates) else ""),
+                onClick = { onOpenCategory(COMMUNITY_CATEGORY) },
+            )
+        }
+
+        item {
+            SectionCard(
+                title = stringResource(R.string.community_browse),
+                meta = stringResource(R.string.community_meta),
+                onClick = onOpenCommunity,
+            )
+        }
+
+        item {
+            SectionCard(
+                title = stringResource(R.string.import_title),
+                meta = stringResource(R.string.import_meta),
+                onClick = onOpenImport,
+            )
+        }
+
+        if (state.categories.isNotEmpty()) {
+            item { SectionLabel(stringResource(R.string.playlists_title)) }
+            items(count = state.categories.size) { index ->
+                val category = state.categories[index]
+                SectionCard(
+                    title = category.name,
+                    meta = pluralStringResource(R.plurals.beat_count, category.beatIds.size, category.beatIds.size),
+                    onClick = { onOpenCategory(category.id) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Search, unfurling its matches inline beneath the field.
+ *
+ * Deliberately never leaves the landing page: a search is a question about the
+ * whole library, and navigating away to answer it would lose the query the moment
+ * the user went back.
+ */
+@Composable
+private fun SearchCard(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    allBeats: List<Beat>,
+    onOpenDetail: (Beat) -> Unit,
+    onShareBeat: (Beat) -> Unit,
+    onDeleteBeat: (Beat) -> Unit,
+) {
+    val dimens = KirtanTheme.dimens
+    val shape = RoundedCornerShape(dimens.radiusSectionCard)
+    // Reset with the query: a row left open under one search shouldn't stay
+    // open when the results change around it.
+    var openRow by remember(query) { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(PaletteToken.HEAD_WORN.color)
+            .border(BorderStroke(dimens.hairline, KirtanTheme.colors.rule), shape)
+            .padding(dimens.space4),
+        verticalArrangement = Arrangement.spacedBy(dimens.space3),
+    ) {
+        SectionLabel(stringResource(R.string.search_title))
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = {
+                Text(stringResource(R.string.search_placeholder), fontSize = 15.2.sp, color = KirtanTheme.colors.faint)
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = KcIcons.Search,
+                    contentDescription = null,
+                    tint = PaletteToken.SYAHI_SOFT.color,
+                    modifier = Modifier.size(18.dp),
+                )
+            },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    HairlineIconButton(
+                        icon = KcIcons.Back,
+                        contentDescription = stringResource(R.string.search_clear),
+                        onClick = { onQueryChange("") },
+                        size = 28.dp,
+                    )
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(dimens.radiusPad),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PaletteToken.CLAY.color,
+                unfocusedBorderColor = KirtanTheme.colors.rule,
+                focusedContainerColor = PaletteToken.HEAD.color,
+                unfocusedContainerColor = PaletteToken.HEAD.color,
+                focusedTextColor = PaletteToken.SYAHI.color,
+                unfocusedTextColor = PaletteToken.SYAHI.color,
+                cursorColor = PaletteToken.CLAY.color,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        when {
+            query.isBlank() -> Hint(stringResource(R.string.search_hint))
+
+            else -> {
+                val rowInfo = LocalRowInfo.current
+                val matches = remember(query, allBeats, rowInfo) {
+                    val needle = query.trim().lowercase()
+                    // A tag's label matches too ("keherwa" finds every Keherwa beat),
+                    // the author's tags and the user's private ones alike.
+                    fun tagHit(beat: Beat) = com.kirtan.companion.data.TagVocabulary
+                        .known(beat.tags + rowInfo?.privateTags?.get(beat.id).orEmpty())
+                        .any { Strings.get(it.label).lowercase().contains(needle) }
+                    allBeats.filter { it.name.lowercase().contains(needle) || tagHit(it) }
+                }
+                if (matches.isEmpty()) {
+                    Hint(stringResource(R.string.search_none, query))
+                } else {
+                    matches.forEach { beat ->
+                        SwipeBeatRow(
+                            beat = beat,
+                            openRow = openRow,
+                            onOpenRowChange = { openRow = it },
+                            onOpenDetail = onOpenDetail,
+                            onShareBeat = onShareBeat,
+                            onDeleteBeat = onDeleteBeat,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(
+        text = text,
+        color = PaletteToken.SYAHI_SOFT.color,
+        fontSize = 13.4.sp,
+    )
+}
+
+/**
+ * Which of the three built-in sets is on screen, in one line.
+ *
+ * Worth saying out loud because "Built in" stopped meaning "compiled into this
+ * APK": a user who was told a pattern had been corrected should be able to see
+ * whether the app is showing the server's answer, the one it cached on an earlier
+ * launch, or the fallback it shipped with.
+ */
+private fun shippedSourceLine(source: ShippedSource, count: Int): String = when (source) {
+    ShippedSource.SERVER -> Strings.plural(R.plurals.shipped_server, count, count)
+    ShippedSource.CACHED -> Strings.plural(R.plurals.shipped_cached, count, count)
+    ShippedSource.COMPILED -> Strings.plural(R.plurals.shipped_compiled, count, count)
+}
+
+/**
+ * The line under the update button.
+ *
+ * A manual check's answer stays until the next check: this is a status line, not a
+ * toast, and "already up to date" is worth still being there when the user looks
+ * back up from the button. An AUTOMATIC check sets no notice at all, so a launch
+ * never announces itself.
+ */
+private fun shippedLine(status: ShippedStatus, canCheck: Boolean): String = when {
+    !canCheck -> shippedSourceLine(ShippedSource.COMPILED, status.count)
+    status.checking -> Strings.get(R.string.shipped_checking_server)
+    status.notice != null -> status.notice!!
+    else -> shippedSourceLine(status.source, status.count)
+}
+
+@Composable
+private fun SectionCard(title: String, meta: String, onClick: () -> Unit) {
+    val dimens = KirtanTheme.dimens
+    val shape = RoundedCornerShape(dimens.radiusSectionCard)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .clip(shape)
+            .background(PaletteToken.HEAD_WORN.color)
+            .border(BorderStroke(dimens.hairline, KirtanTheme.colors.rule), shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(dimens.space4),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = PaletteToken.SYAHI.color,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = meta,
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 13.4.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(
+            // A chevron on the right says "this opens a page", which is how a
+            // section card is told apart from a beat row at a glance.
+            imageVector = KcIcons.ChevronRight,
+            contentDescription = null,
+            tint = PaletteToken.SYAHI_SOFT.color,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun CategoryPage(
+    modifier: Modifier = Modifier,
+    categoryId: String,
+    categoryName: String,
+    listBeats: List<Beat>,
+    library: LibraryViewModel,
+    shipped: ShippedStatus,
+    canCheckForUpdates: Boolean,
+    onCheckForUpdates: () -> Unit,
+    onOpenDetail: (Beat) -> Unit,
+    onShareBeat: (Beat) -> Unit,
+    onDeleteBeat: (Beat) -> Unit,
+    onShareList: (String, List<Beat>) -> Unit,
+    onPublishList: (String, List<Beat>) -> Unit,
+) {
+    val dimens = KirtanTheme.dimens
+    // One open row at a time: opening another closes the last.
+    var openRow by remember(categoryId) { mutableStateOf<String?>(null) }
+
+    // Tag filter: the author's tags and the user's private ones count alike.
+    // Only tags some beat on this page carries are offered.
+    val privateTags by library.privateTags.collectAsState()
+    var tagFilter by remember(categoryId) { mutableStateOf<String?>(null) }
+    fun tagsOf(beat: Beat) = beat.tags + privateTags[beat.id].orEmpty()
+    val pageTags = listBeats.flatMap { tagsOf(it) }.toSet()
+    val beats = tagFilter?.takeIf { it in pageTags }?.let { tag -> listBeats.filter { tag in tagsOf(it) } } ?: listBeats
+
+    @Composable
+    fun SwipeBeat(beat: Beat) = SwipeBeatRow(
+        beat = beat,
+        openRow = openRow,
+        onOpenRowChange = { openRow = it },
+        onOpenDetail = onOpenDetail,
+        onShareBeat = onShareBeat,
+        onDeleteBeat = onDeleteBeat,
+    )
+
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(dimens.space2),
+    ) {
+        // Sharing a progression is what turns it into something a friend can
+        // actually play. The built-in set is excluded: everyone already has it,
+        // and its link would be enormous for nothing.
+        // Not on "Your beats": sharing a whole library at once was too easy to
+        // tap by accident. Sharing is per beat there (atomic), per list elsewhere.
+        if (categoryId != BUILTIN_CATEGORY && categoryId != CUSTOM_CATEGORY && categoryId != COMMUNITY_CATEGORY && listBeats.isNotEmpty()) {
+            if (P2P_SHARING) item(key = "share-list") {
+                SecondaryButton(
+                    label = stringResource(R.string.share_list),
+                    icon = KcIcons.Share,
+                    onClick = { onShareList(categoryName, listBeats) },
+                )
+            }
+            // Publishing uploads a SNAPSHOT: editing the private copy later never
+            // rewrites what the community already took, which is the same rule a
+            // share link follows.
+            item(key = "publish-list") {
+                SecondaryButton(
+                    label = stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.share_list),
+                    icon = if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
+                    onClick = { onPublishList(categoryName, listBeats) },
+                )
+            }
+        }
+
+        if (pageTags.isNotEmpty()) item(key = "tag-filter") {
+            com.kirtan.companion.ui.components.TagFilterRow(tags = pageTags, selected = tagFilter, onSelect = { tagFilter = it })
+        }
+
+        if (categoryId == BUILTIN_CATEGORY) {
+            // The one page that can say where its beats came from. The set is
+            // served rather than compiled in, so "Built in" no longer means "in
+            // this APK", and a user looking at a beat they were told had been
+            // corrected deserves to be able to look again themselves.
+            item(key = "beat-updates") {
+                Column(verticalArrangement = Arrangement.spacedBy(dimens.space2)) {
+                    if (canCheckForUpdates) {
+                        SecondaryButton(
+                            label = if (shipped.checking) {
+                                stringResource(R.string.shipped_checking)
+                            } else {
+                                stringResource(R.string.shipped_check)
+                            },
+                            icon = KcIcons.Globe,
+                            enabled = !shipped.checking,
+                            onClick = onCheckForUpdates,
+                        )
+                    }
+                    Hint(shippedLine(shipped, canCheckForUpdates))
+                }
+            }
+
+            // The built-ins are sub-divided by their `group` heading, in the order
+            // the beats first declare them. DERIVED FROM THIS LIST rather than read
+            // from a constant: a beat promoted after this APK was built carries a
+            // heading that appears in no compiled list, and a heading nobody uses
+            // any more must stop rendering as an empty section.
+            //
+            // Headings need not be contiguous in the data — "Building up" holds both
+            // Da Ge Te Te and Double Time with "Gentle" between them — so each
+            // section filters the whole list rather than slicing it.
+            beats.mapNotNull { it.group }.distinct().forEach { group ->
+                val inGroup = beats.filter { it.group == group }
+                if (inGroup.isNotEmpty()) {
+                    item(key = "heading-$group") { SectionLabel(BeatText.group(group)) }
+                    items(count = inGroup.size, key = { i -> "beat-${inGroup[i].id}" }) { index ->
+                        SwipeBeat(inGroup[index])
+                    }
+                }
+            }
+        } else if (beats.isEmpty()) {
+            item { Hint(stringResource(R.string.beats_nothing_here)) }
+        } else {
+            items(count = beats.size, key = { i -> "beat-${beats[i].id}" }) { index ->
+                SwipeBeat(beats[index])
+            }
+        }
+    }
+}
+
+/**
+ * A library row that swipes left for Share (and Delete, for the user's own beats).
+ * Shared by the list pages and the landing page's search results; [openRow] is
+ * the list's one open row, so opening another closes the last.
+ */
+@Composable
+private fun SwipeBeatRow(
+    beat: Beat,
+    openRow: String?,
+    onOpenRowChange: (String?) -> Unit,
+    onOpenDetail: (Beat) -> Unit,
+    onShareBeat: (Beat) -> Unit,
+    onDeleteBeat: (Beat) -> Unit,
+) {
+    val key = "beat-${beat.id}"
+    val actions = buildList {
+        // Someone else's beat can't be shared; it has Delete alone.
+        if (!beat.isCommunity) {
+            add(SwipeAction(Strings.get(R.string.common_share), KcIcons.Share, SwipeColors.shareBg, SwipeColors.shareFg) { onShareBeat(beat) })
+        }
+        // Built-ins can't be deleted, only customised; theirs is Share alone.
+        if (!beat.isBuiltIn && beat.id != null) {
+            add(SwipeAction(Strings.get(R.string.common_delete), KcIcons.Trash, SwipeColors.deleteBg, SwipeColors.deleteFg) { onDeleteBeat(beat) })
+        }
+    }
+    SwipeActionsRow(
+        open = openRow == key,
+        onOpenChange = { open -> onOpenRowChange(if (open) key else openRow.takeIf { it != key }) },
+        actions = actions,
+    ) {
+        // A tap on an open row closes it rather than opening the beat.
+        BeatRow(beat = beat, onClick = {
+            if (openRow != null) onOpenRowChange(null) else onOpenDetail(beat)
+        })
+    }
+}
+
+@Composable
+private fun BeatRow(beat: Beat, onClick: () -> Unit) {
+    val dimens = KirtanTheme.dimens
+    val shape = RoundedCornerShape(dimens.radiusPad)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(PaletteToken.HEAD_WORN.color)
+            .border(BorderStroke(dimens.hairline, KirtanTheme.colors.rule), shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = dimens.space3, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(dimens.space2),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = beat.name,
+                color = PaletteToken.SYAHI.color,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.2.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "${BeatText.note(beat.note)} · " + pluralStringResource(R.plurals.beat_cells, beat.steps, beat.steps),
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
+            )
+        }
+        RowBadges(beat)
+        BeatStrip(beat = beat, mini = true)
+    }
+}
+
+/**
+ * What the rows need to know beyond the beat: its community standing and the
+ * user's private tags. Provided once by [BeatsScreen] rather than threaded
+ * through every list that draws a row.
+ */
+internal class RowInfo(
+    val status: (Beat) -> CommunityTracking.Status,
+    val privateTags: Map<String, List<String>>,
+)
+
+internal val LocalRowInfo = androidx.compose.runtime.staticCompositionLocalOf<RowInfo?> { null }
+
+/** "Update available" / "No longer shared", then the beat's tags, on one line. */
+@Composable
+private fun RowBadges(beat: Beat) {
+    val info = LocalRowInfo.current ?: return
+    val status = if (beat.isCommunity) info.status(beat) else CommunityTracking.Status.Current
+    val tags = com.kirtan.companion.data.TagVocabulary.known((beat.tags + info.privateTags[beat.id].orEmpty()).toSet())
+    val flag = when (status) {
+        is CommunityTracking.Status.UpdateAvailable -> stringResource(R.string.community_badge_update)
+        CommunityTracking.Status.Gone -> stringResource(R.string.community_badge_gone)
+        else -> null
+    }
+    if (flag == null && tags.isEmpty()) return
+    Row(horizontalArrangement = Arrangement.spacedBy(KirtanTheme.dimens.space2), verticalAlignment = Alignment.CenterVertically) {
+        flag?.let {
+            Text(text = it, color = PaletteToken.CLAY.color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+        if (tags.isNotEmpty()) {
+            Text(
+                text = tags.joinToString(" · ") { Strings.get(it.label) },
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BeatDetailSheet(
+    beat: Beat,
+    library: LibraryViewModel,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onEdit: () -> Unit,
+    canEditShipped: Boolean,
+    onEditShipped: () -> Unit,
+    canRemoveShipped: Boolean,
+    onRemoveShipped: () -> Unit,
+    onShare: () -> Unit,
+    onPublish: () -> Unit,
+    /** Whether this beat is already in the community library; see [ShareIndex]. */
+    shareStatus: com.kirtan.companion.ui.community.ShareStatus =
+        com.kirtan.companion.ui.community.ShareStatus.New,
+    /** For a community beat: how it stands against its original. */
+    communityStatus: CommunityTracking.Status = CommunityTracking.Status.Current,
+    onUpdate: () -> Unit = {},
+    tagRow: @Composable () -> Unit = {},
+) {
+    val dimens = KirtanTheme.dimens
+    com.kirtan.companion.ui.components.KcSheet(title = beat.name, onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(dimens.space3)) {
+            Text(
+                text = "${BeatText.note(beat.note)} · ${beat.bpm} BPM · " + pluralStringResource(R.plurals.beat_cells, beat.steps, beat.steps),
+                color = PaletteToken.SYAHI_SOFT.color,
+                fontSize = 13.4.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            BeatStrip(beat = beat)
+            tagRow()
+            if (beat.isCommunity) CommunityNote(communityStatus, onUpdate)
+            beat.description?.let { description ->
+                Text(
+                    text = description,
+                    color = PaletteToken.SYAHI_SOFT.color,
+                    fontSize = 13.4.sp,
+                    lineHeight = 20.sp,
+                )
+            }
+            PrimaryButton(label = stringResource(R.string.beats_play_this), icon = KcIcons.Play, onClick = onPlay)
+            com.kirtan.companion.ui.components.SecondaryButton(
+                label = when {
+                    beat.isBuiltIn -> stringResource(R.string.common_customize)
+                    beat.isCommunity -> stringResource(R.string.community_edit_copy)
+                    else -> stringResource(R.string.common_edit)
+                },
+                icon = KcIcons.Pencil,
+                onClick = onEdit,
+            )
+            if (canEditShipped) {
+                // Wording is the safety mechanism here: the button above it edits
+                // one person's library and this one edits every install of the app,
+                // and the two look identical apart from the label. Same cap icon as
+                // Community's promote, so "affects what ships" reads the same way in
+                // both places.
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = stringResource(R.string.maint_edit_for_everyone),
+                    icon = KcIcons.Cap,
+                    onClick = onEditShipped,
+                )
+            }
+            if (canRemoveShipped) {
+                // Retiring a beat is the third shipped-set write. Same cap icon as
+                // edit-for-everyone and promote, so "affects what ships" reads the
+                // same way in all three places. The confirm sheet names the blast
+                // radius before the write happens.
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = stringResource(R.string.maint_remove_builtin),
+                    icon = KcIcons.Cap,
+                    onClick = onRemoveShipped,
+                )
+            }
+            if (P2P_SHARING) {
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = stringResource(R.string.common_share),
+                    icon = KcIcons.Share,
+                    onClick = onShare,
+                )
+            }
+            // Atomic, and never a silent duplicate: an unchanged shared beat
+            // can't be shared again, and an edited one updates its community copy.
+            // Someone else's beat has no Share at all; see ShareStatus.NotYours.
+            if (shareStatus != com.kirtan.companion.ui.community.ShareStatus.NotYours) {
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = when (shareStatus) {
+                        com.kirtan.companion.ui.community.ShareStatus.Shared -> stringResource(R.string.share_already_shared)
+                        com.kirtan.companion.ui.community.ShareStatus.UnchangedCopy -> stringResource(R.string.share_edit_to_share)
+                        is com.kirtan.companion.ui.community.ShareStatus.Changed -> stringResource(R.string.share_update)
+                        else -> stringResource(if (P2P_SHARING) R.string.publish_to_community else R.string.common_share)
+                    },
+                    icon = if (shareStatus == com.kirtan.companion.ui.community.ShareStatus.Shared) KcIcons.Check
+                        else if (P2P_SHARING) KcIcons.Globe else KcIcons.Share,
+                    enabled = shareStatus.canShare,
+                    onClick = onPublish,
+                )
+            }
+            if (!beat.isBuiltIn && beat.id != null) {
+                com.kirtan.companion.ui.components.SecondaryButton(
+                    label = stringResource(R.string.common_delete),
+                    onClick = {
+                        library.deleteBeat(beat.id)
+                        onDismiss()
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Where a community beat stands: a line saying it follows the original, plus
+ * the Update button when the author has changed it, or a note when they have
+ * unpublished it (the user keeps their copy either way).
+ */
+@Composable
+private fun CommunityNote(status: CommunityTracking.Status, onUpdate: () -> Unit) {
+    val line = when (status) {
+        CommunityTracking.Status.Gone -> stringResource(R.string.community_gone)
+        is CommunityTracking.Status.UpdateAvailable -> stringResource(R.string.community_update_available)
+        else -> stringResource(R.string.community_follows)
+    }
+    Text(
+        text = line,
+        color = if (status is CommunityTracking.Status.UpdateAvailable) PaletteToken.CLAY.color else PaletteToken.SYAHI_SOFT.color,
+        fontSize = 13.4.sp,
+        lineHeight = 19.sp,
+    )
+    if (status is CommunityTracking.Status.UpdateAvailable) {
+        PrimaryButton(label = stringResource(R.string.community_update), icon = KcIcons.Check, onClick = onUpdate)
+    }
+}
+
+/**
+ * A success strip, shown after an import lands.
+ *
+ * Separate from [ErrorStrip] rather than reusing it with a different colour: an
+ * import writes to the user's library, and saying nothing about it leaves them
+ * guessing whether the paste worked. Clay rather than danger, same shape and
+ * dismissal as the error case so the two read as one family.
+ */
+@Composable
+private fun ResultStrip(message: String, onDismiss: () -> Unit) {
+    val dimens = KirtanTheme.dimens
+    val shape = RoundedCornerShape(dimens.radiusPad)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(PaletteToken.CLAY.color.copy(alpha = 0.10f))
+            .border(BorderStroke(dimens.hairline, PaletteToken.CLAY.color), shape)
+            .padding(dimens.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = message,
+            color = PaletteToken.CLAY.color,
+            fontSize = 13.4.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(dimens.space2))
+        HairlineIconButton(
+            icon = KcIcons.Check,
+            contentDescription = stringResource(R.string.common_dismiss),
+            onClick = onDismiss,
+            size = 28.dp,
+            tint = PaletteToken.CLAY.color,
+        )
+    }
+}
+
+@Composable
+private fun ErrorStrip(message: String, onDismiss: () -> Unit) {
+    val dimens = KirtanTheme.dimens
+    val shape = RoundedCornerShape(dimens.radiusPad)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(PaletteToken.DANGER.color.copy(alpha = 0.10f))
+            .border(BorderStroke(dimens.hairline, PaletteToken.DANGER.color), shape)
+            .padding(dimens.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = message,
+            color = PaletteToken.DANGER.color,
+            fontSize = 13.4.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(dimens.space2))
+        HairlineIconButton(
+            icon = KcIcons.Back,
+            contentDescription = stringResource(R.string.common_dismiss),
+            onClick = onDismiss,
+            size = 28.dp,
+            tint = PaletteToken.DANGER.color,
+        )
+    }
+}

@@ -58,6 +58,7 @@ Split by **state ownership**, not by screen count. If a piece of state is only m
 
 ## Conventions
 
+- **Android interface text** lives in `res/values/strings.xml` with Spanish in `res/values-es/` (same names; `LocalisationTest` checks parity and placeholders). Composables use `stringResource`; code below the UI (storage errors, view-model messages) uses `com.kirtan.companion.Strings`, bound to Resources in `KirtanApplication`. Beat names, bols and user text are never translated; built-in notes and groups go through `ui/BeatText`.
 - **Sound files live in `public/sounds/`** and the manifest passed to `engine.loadSounds()` uses the prefix routing convention above. Currently: `dayan_open.wav`, `dayan_closed.wav`, `bayan_open.wav`, `bayan_closed.wav`.
 - **Adding a new instrument row** (e.g. karatalas) is a three-step pattern, no engine refactor needed:
   1. Add an entry to `LANES` in `src/data/lanes.js` (the strip, the mixer and the editor all read it).

@@ -1,0 +1,867 @@
+package com.kirtan.companion.ui.transport
+
+import com.kirtan.companion.engine.Feel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.kirtan.companion.AppContainer
+import com.kirtan.companion.container
+import com.kirtan.companion.data.DEFAULT_BEAT
+import com.kirtan.companion.data.MAX_BPM
+import com.kirtan.companion.data.MIN_BPM
+import com.kirtan.companion.data.NORMAL_MAX_BPM
+import com.kirtan.companion.data.brahmalokaFor
+import com.kirtan.companion.data.TUNE_MAX_CENTS
+import com.kirtan.companion.data.TUNE_MIN_CENTS
+import com.kirtan.companion.data.clampEqDb
+import com.kirtan.companion.data.model.Beat
+import com.kirtan.companion.data.model.LaneId
+import com.kirtan.companion.data.BeatSequence
+import com.kirtan.companion.data.SequenceEntry
+import com.kirtan.companion.data.Sequences
+import com.kirtan.companion.data.WorkingSequence
+import com.kirtan.companion.engine.EngineEvent
+import com.kirtan.companion.engine.SequenceStep
+import com.kirtan.companion.engine.KirtanEngine
+import com.kirtan.companion.playback.OutputRoute
+import com.kirtan.companion.storage.EndSoundPrefs
+import com.kirtan.companion.storage.EqPrefs
+import com.kirtan.companion.storage.EqPrefsSnapshot
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.roundToInt
+
+/**
+ * Everything the transport screens render, as one immutable snapshot.
+ *
+ * The web app keeps these as eight separate `useState` slots inside
+ * `useTransport`. Collapsing them into one value is not just tidiness: a mixer
+ * change that touches a fader and a mute together is then ONE recomposition
+ * rather than two, so the UI can never be observed half-updated.
+ */
+/**
+ * Home's sequencer: the working sequence, the saved ones, and — while a sequence
+ * plays — which ENTRY (index into `working.entries`) and bar (1-based) is sounding.
+ * `playingBeat` is the sequence's beat last heard, kept after a stop; Home shows
+ * it instead of the library selection until a beat is chosen by hand.
+ */
+data class SequenceState(
+    val working: WorkingSequence = WorkingSequence(),
+    val saved: List<BeatSequence> = emptyList(),
+    val playingEntry: Int? = null,
+    val playingBar: Int? = null,
+    val playingBeat: Beat? = null,
+) {
+    val dirty: Boolean get() = working.dirty(saved)
+}
+
+data class TransportState(
+    /** Samples finished decoding. Nothing plays until this is true. */
+    val ready: Boolean = false,
+    val playing: Boolean = false,
+    /** The step most recently fired, or -1 when stopped. */
+    val step: Int = -1,
+    val bpm: Int = DEFAULT_BEAT.bpm,
+    val beatName: String? = null,
+    val settings: EqPrefsSnapshot = EqPrefsSnapshot.DEFAULT,
+    /** The output device would not open. Sound is impossible until it clears. */
+    val outputFailed: Boolean = false,
+    /** Where the drum is playing: the phone speaker, headphones, a Bluetooth speaker. */
+    val route: OutputRoute = OutputRoute.SPEAKER,
+    /**
+     * Set when a Bluetooth device is playing that the user has never been asked
+     * to sync the display for. Drives the one-time banner on the playing screen.
+     */
+    val syncPrompt: OutputRoute? = null,
+    /** Brahmaloka time: the tempo slider's high range (see data/Meter.kt). */
+    val brahmaloka: Boolean = false,
+    /** Counts unlocks; the overlay plays once each time it changes. */
+    val burstKey: Int = 0,
+    /** Swing in force: the playing beat's own, unless nudged in the mixer. */
+    val swing: Int = com.kirtan.companion.data.Swing.STRAIGHT,
+) {
+    /** The display delay in force for the current output. */
+    val displayDelayMs: Int get() = settings.displayDelay(route.key)
+}
+
+/**
+ * The engine and its Compose mirror, as one unit.
+ *
+ * Ported from `src/hooks/useTransport.js`, which is the single place in the web
+ * app that calls `engine.*` — and this is the single place here. That rule is
+ * what keeps "the UI talks to the engine only through KirtanEngine" enforceable
+ * rather than aspirational. The one sanctioned exception is the beat editor,
+ * which takes the transport over entirely while it is open; [engine] is exposed
+ * for exactly that, mirroring `BeatEditor.jsx` being handed the engine outright.
+ *
+ * ── WHAT DID NOT PORT, AND WHY ──
+ * The web hook is dominated by `useRef` mirrors of its own state (`bpmRef`,
+ * `eqBandsRef`, `eqOpenRef`, `tuneOpenRef`), because a React handler closes over
+ * the values from the render it was created in. Rapid taps on ± would otherwise
+ * stack from a stale `bpm` and do nothing; a fast EQ drag would otherwise persist
+ * a value a later re-render had already superseded.
+ *
+ * None of that applies here. A ViewModel is not recreated per frame and holds its
+ * own authoritative state, so `bpmRef` and `bpm` collapse into one field. The refs
+ * were a workaround for a React lifecycle, not a domain requirement, and porting
+ * them would mean porting the prevention machinery for a bug this architecture
+ * cannot have.
+ *
+ * What DID port is the clamping discipline: every value is clamped against the
+ * shared bounds in `data/` on the way in, so the UI state, the persisted prefs
+ * and the engine's DSP can never disagree about what is legal.
+ *
+ * ── TRANSPORT GOES THROUGH MEDIA3, MIXER DOES NOT ──
+ * Play and pause route via [PlaybackConnection] so the notification, lock-screen
+ * controls and foreground-service promotion all follow. Tempo, volumes, EQ and
+ * tuning go straight to the engine: the notification has no opinion about an EQ
+ * band, and routing a slider drag through IPC at 60 Hz would be slow and pointless.
+ */
+class TransportViewModel(
+    app: Application,
+    private val prefs: EqPrefs,
+) : AndroidViewModel(app) {
+
+    private val container: AppContainer = app.container
+
+    /** See the class header: exposed for the beat editor only. */
+    val engine: KirtanEngine get() = container.engine
+
+    val connection = PlaybackConnection(app)
+
+    private val _state = MutableStateFlow(TransportState())
+    val state: StateFlow<TransportState> = _state.asStateFlow()
+
+    // Sequencer state — declared before init, which subscribes to engine events.
+    private val sequenceStore = container.sequences
+    private val _sequence = MutableStateFlow(
+        SequenceState(working = sequenceStore.loadWorking(), saved = sequenceStore.loadSaved()),
+    )
+    val sequence: StateFlow<SequenceState> = _sequence.asStateFlow()
+
+    /** Looks a beat up by id; Home keeps it current with the library. */
+    private var beatLookup: (String) -> Beat? = { null }
+
+    /** The played steps of the sequence in the engine, each with its entry index. */
+    private var playingSteps: List<Pair<Int, Beat>> = emptyList()
+
+    /**
+     * The bar phase is deliberately NOT in [state].
+     *
+     * It changes 60 times a second while playing, and putting it in a StateFlow
+     * would invalidate every collector on every frame — the whole screen would
+     * recompose to move one vertical line. The strip reads it directly from the
+     * engine inside `withFrameNanos`, which recomposes only the playhead. This is
+     * the Compose equivalent of the web strip's rAF loop writing to `style.left`
+     * without going through React state.
+     */
+    fun getPhase(): Double = engine.getPhase()
+
+    /**
+     * The tempo the app was closed at (capped at 200, see SessionPrefs), applied
+     * by the first [loadBeat] of the restored beat in place of its suggested
+     * tempo. Null once used, or when there is nothing to restore.
+     */
+    private var restoreBpm: Int? = container.session.bpm
+    private val restoreBeatId: String? = container.session.beatId
+
+    /** Authoritative tempo, mutated synchronously so rapid ± taps stack. */
+    private var bpm: Int = restoreBpm ?: _state.value.bpm
+    private var tempoLocked: Boolean = false
+
+    /**
+     * The last beat whose suggested tempo [loadBeat] adopted.
+     *
+     * Re-loading the SAME beat must not re-adopt: the selection bridge in
+     * KirtanApp re-fires whenever its LaunchedEffect is re-launched (a rotation
+     * re-runs it), and an unconditional changeBpm would clobber a tempo the user
+     * nudged in the meantime. Different beat, same locked tempo, fresh process
+     * (this field resets with the ViewModel, as does the engine) all behave.
+     */
+    private var loadedBeatId: String? = null
+    private var settings: EqPrefsSnapshot = EqPrefsSnapshot.DEFAULT
+
+    private var prefsSaveJob: Job? = null
+    private val tapTimes = ArrayList<Long>(4)
+
+    init {
+        // ORDER MATTERS HERE, and getting it wrong is a silent dead app.
+        //
+        // The engine's event flow has no replay, so a Ready emitted before this
+        // ViewModel's collector subscribes is DROPPED — and Ready is the only thing
+        // that flips `ready`, which gates the Play button. Kicking off the load
+        // before subscribing is exactly that ordering. So: subscribe first, then
+        // load.
+        observeEngine()
+
+        // Belt-and-braces for the case where the load finished before THIS
+        // ViewModel existed at all (the engine is process-scoped; a second
+        // ViewModel after a rotation would otherwise wait forever for a Ready
+        // that already fired). Seeding from `isReady` covers it.
+        if (engine.isReady) {
+            _state.value = _state.value.copy(ready = true)
+            applyPrefsToEngine()
+        }
+
+        container.ensureSoundsLoaded()
+        loadPrefs()
+        observeRoute()
+    }
+
+    /**
+     * Follow the output device, applying its display delay as it changes. A
+     * Bluetooth speaker connecting mid-kirtan takes its own delay with it, and
+     * disconnecting falls back to the phone speaker's.
+     */
+    private fun observeRoute() {
+        viewModelScope.launch {
+            container.outputRoute.route.collect { route ->
+                _state.value = _state.value.copy(route = route)
+                applyDisplayDelay()
+                updateSyncPrompt()
+            }
+        }
+    }
+
+    private fun applyDisplayDelay() {
+        engine.setDisplayDelayMs(settings.displayDelay(_state.value.route.key))
+    }
+
+    /** Offer to sync once per Bluetooth device, and only while it is actually playing. */
+    private fun updateSyncPrompt() {
+        val s = _state.value
+        val prompt = s.route.takeIf {
+            it.bluetooth && s.playing && it.key !in settings.syncPrompted &&
+                it.key !in settings.displayDelays
+        }
+        if (prompt != s.syncPrompt) _state.value = s.copy(syncPrompt = prompt)
+    }
+
+    // ── Display sync ───────────────────────────────────────────────────────
+
+    /**
+     * Start the sync test: a plain click on every beat, with the humanizer off
+     * so each click lands exactly on its step. Runs through the preview path,
+     * like the editor, so Home's transport is left as it was.
+     */
+    suspend fun startSyncTest() {
+        engine.setFeel(Feel.OFF)
+        startPreview(SYNC_TEST_BEAT, SYNC_TEST_BPM)
+    }
+
+    /** End the sync test and give the drum its feel back. */
+    fun stopSyncTest() {
+        stopPreview()
+        engine.setFeel(settings.feel)
+    }
+
+    /** Set the display delay for the CURRENT output device and apply it now. */
+    fun setDisplayDelay(ms: Int) {
+        val clamped = ms.coerceIn(EqPrefsSnapshot.DISPLAY_DELAY_MIN_MS, EqPrefsSnapshot.DISPLAY_DELAY_MAX_MS)
+        val key = _state.value.route.key
+        engine.setDisplayDelayMs(clamped)
+        publish(settings.copy(displayDelays = settings.displayDelays + (key to clamped)))
+        updateSyncPrompt()
+    }
+
+    /** Close the "sync the display?" banner for this device, for good. */
+    fun dismissSyncPrompt() {
+        val key = _state.value.syncPrompt?.key ?: return
+        publish(settings.copy(syncPrompted = settings.syncPrompted + key))
+        _state.value = _state.value.copy(syncPrompt = null)
+    }
+
+    private fun observeEngine() {
+        viewModelScope.launch {
+            engine.events.collect { event ->
+                when (event) {
+                    // Hydrating from the Ready handler rather than right after the
+                    // load resolves is load-bearing: tuning walks a pool of players
+                    // that is empty until decoding finishes, so applying it any
+                    // earlier is silently dropped.
+                    EngineEvent.Ready -> {
+                        _state.value = _state.value.copy(ready = true)
+                        applyPrefsToEngine()
+                    }
+
+                    EngineEvent.Started -> {
+                        _state.value = _state.value.copy(playing = true)
+                        // A Bluetooth switch is not always announced as a device
+                        // change, so look again whenever the drum starts.
+                        container.outputRoute.refresh()
+                        updateSyncPrompt()
+                    }
+
+                    EngineEvent.Stopped -> {
+                        _state.value = _state.value.copy(playing = false, step = -1)
+                        clearSequencePosition()
+                    }
+
+                    is EngineEvent.Step -> _state.value = _state.value.copy(step = event.step)
+
+                    is EngineEvent.SequenceAt -> {
+                        val (entry, beat) = playingSteps.getOrNull(event.index) ?: return@collect
+                        val was = _sequence.value
+                        _sequence.value = was.copy(playingEntry = entry, playingBar = event.bar, playingBeat = beat)
+                        if (was.playingBeat != beat) {
+                            container.currentBeatName.value = beat.name
+                            _state.value = _state.value.copy(beatName = beat.name, swing = engine.swing)
+                        }
+                    }
+
+                    // Stopped follows and clears the position.
+                    EngineEvent.SequenceEnded -> Unit
+
+                    EngineEvent.OutputFailed -> _state.value =
+                        _state.value.copy(outputFailed = true)
+                }
+            }
+        }
+
+        // The controller owns "should we be playing"; the engine owns "are we".
+        // Mirroring the controller is what keeps the UI honest when playback stops
+        // from the notification or a headset button rather than from us.
+        viewModelScope.launch {
+            connection.playWhenReady.collect { playing ->
+                _state.value = _state.value.copy(playing = playing)
+                updateSyncPrompt()
+            }
+        }
+    }
+
+    private fun loadPrefs() {
+        viewModelScope.launch {
+            // EqPrefs.load() never throws and already sanitises against the shared
+            // bounds, so there is nothing to recover from here.
+            val loaded = prefs.load()
+            settings = loaded
+            tempoLocked = loaded.tempoLocked
+            _state.value = _state.value.copy(settings = loaded)
+            applyDisplayDelay()
+            updateSyncPrompt()
+            // Applied immediately in case samples decoded first, and again from
+            // the Ready handler if they did not. Two-phase hydration, as in the
+            // web hook, for the reason given above.
+            applyPrefsToEngine()
+        }
+    }
+
+    /** Push every persisted setting into the engine's DSP. */
+    private fun applyPrefsToEngine() {
+        if (!engine.isReady) return
+        engine.setVolume(settings.masterVolume)
+        for (lane in LaneId.ORDERED) {
+            engine.setEndVolume(lane, settings.volume(lane))
+            engine.setEndMuted(lane, settings.isMuted(lane))
+        }
+        for (lane in LaneId.ORDERED) {
+            val end = settings.end(lane) ?: continue
+            end.bands.forEachIndexed { i, db -> engine.setEqBand(lane, i, db) }
+            engine.setEndPitch(lane, end.tuneCents)
+        }
+        engine.setFeel(settings.feel)
+    }
+
+    // ── Tempo ──────────────────────────────────────────────────────────────
+
+    fun changeBpm(value: Int) {
+        barChange?.cancel()
+        bpm = value.coerceIn(MIN_BPM, MAX_BPM)
+        engine.setBpm(bpm)
+        val s = _state.value
+        _state.value = s.copy(bpm = bpm, brahmaloka = brahmalokaFor(bpm, s.brahmaloka))
+        container.session.saveBpm(bpm)
+    }
+
+    private var barChange: kotlinx.coroutines.Job? = null
+
+    /**
+     * Hill climb's step: the new tempo starts on the 1 nearest [inSeconds] from
+     * now rather than mid-bar. The display follows when it is HEARD. Stopped,
+     * there's no bar to wait for, so it's an ordinary change.
+     */
+    fun changeBpmAtBar(value: Int, inSeconds: Double) {
+        val target = value.coerceIn(MIN_BPM, MAX_BPM)
+        val wait = engine.setBpmAtBar(target, inSeconds) ?: return changeBpm(target)
+        barChange?.cancel()
+        barChange = viewModelScope.launch {
+            kotlinx.coroutines.delay((wait * 1000).toLong())
+            // Stopped before that bar: the engine dropped it, so must the display.
+            if (!_state.value.playing) return@launch
+            bpm = target
+            val s = _state.value
+            _state.value = s.copy(bpm = bpm, brahmaloka = brahmalokaFor(bpm, s.brahmaloka))
+            container.session.saveBpm(bpm)
+        }
+    }
+
+    /** Clamp to what the slider reaches now: 200, or 500 in Brahmaloka. */
+    private fun clampToMode(value: Int): Int =
+        value.coerceIn(MIN_BPM, if (_state.value.brahmaloka) MAX_BPM else NORMAL_MAX_BPM)
+
+    /** + at the top of the normal range opens Brahmaloka, like holding the slider there. */
+    fun nudgeBpm(delta: Int) {
+        if (delta > 0 && !_state.value.brahmaloka && bpm >= NORMAL_MAX_BPM) unlockBrahmaloka()
+        else changeBpm(clampToMode(bpm + delta))
+    }
+
+    fun commitBpm(value: Int) = changeBpm(clampToMode(value))
+
+    /**
+     * Open Brahmaloka time: the high range, plus the storm (the overlay in
+     * KirtanApp watches [TransportState.burstKey]) and its thunder.
+     */
+    fun unlockBrahmaloka() {
+        if (_state.value.brahmaloka) return
+        _state.value = _state.value.copy(brahmaloka = true)
+        celebrateBrahmaloka()
+    }
+
+    /** The storm and thunder alone — the editor keeps its own mode but shares the weather. */
+    fun celebrateBrahmaloka() {
+        _state.value = _state.value.copy(burstKey = _state.value.burstKey + 1)
+        com.kirtan.companion.ui.components.Rumble.play()
+    }
+
+    /** The badge's way out: back to 40–200, at its top. */
+    fun leaveBrahmaloka() {
+        _state.value = _state.value.copy(brahmaloka = false)
+        changeBpm(bpm.coerceAtMost(NORMAL_MAX_BPM))
+    }
+
+    /**
+     * "Keep this speed while I change beats mid-kirtan." A locked tempo makes
+     * [loadBeat] leave the BPM alone instead of adopting the beat's suggestion.
+     */
+    fun setTempoLocked(locked: Boolean) {
+        tempoLocked = locked
+        publish(settings.copy(tempoLocked = locked))
+    }
+
+    /**
+     * Nudge the playing beat's swing. Live only: the beat keeps its saved swing,
+     * and choosing a beat brings that back. Set a beat's own swing in the editor.
+     */
+    fun setSwing(value: Int) {
+        engine.setSwing(value)
+        _state.value = _state.value.copy(swing = engine.swing)
+    }
+
+    /** How much human variation the drum plays with. See [com.kirtan.companion.engine.Humanizer]. */
+    fun setFeel(feel: Feel) {
+        engine.setFeel(feel)
+        publish(settings.copy(feel = feel))
+    }
+
+    /** Mirror the Learn highway for a left-handed player. Display only. */
+    fun setLearnLeftHanded(leftHanded: Boolean) {
+        publish(settings.copy(learnLeftHanded = leftHanded))
+    }
+
+    /** Which part Learn teaches: the karatalas', or (false) the mridanga's. Display only. */
+    fun setLearnKartal(kartal: Boolean) {
+        publish(settings.copy(learnKartal = kartal))
+    }
+
+    /** Remember Learn's hill-climb choice (BPM per step, seconds between steps). */
+    fun setHillClimb(step: Int, seconds: Int) {
+        publish(settings.copy(hillClimbStep = step, hillClimbSeconds = seconds))
+    }
+
+    /**
+     * Tap tempo: average the gaps between the last few taps.
+     *
+     * A gap over two seconds means the user started a new count rather than
+     * continuing one, so the history resets instead of averaging a pause into the
+     * tempo — which would otherwise report something near zero BPM.
+     */
+    fun tapTempo() {
+        val now = System.currentTimeMillis()
+        tapTimes.add(now)
+        if (tapTimes.size > 4) tapTimes.removeAt(0)
+        if (tapTimes.size < 2) return
+
+        val gaps = (1 until tapTimes.size).map { tapTimes[it] - tapTimes[it - 1] }
+        if (gaps.last() > TAP_RESET_MS) {
+            tapTimes.clear()
+            tapTimes.add(now)
+            return
+        }
+        val avgGap = gaps.average()
+        if (avgGap > 0) changeBpm(clampToMode((60_000.0 / avgGap).roundToInt()))
+    }
+
+    // ── Mixer ──────────────────────────────────────────────────────────────
+
+    fun changeVolume(value: Float) {
+        val v = value.coerceIn(0f, 1f)
+        publish(settings.copy(masterVolume = v))
+        engine.setVolume(v)
+    }
+
+    fun changeEndVolume(lane: LaneId, value: Float) {
+        val v = value.coerceIn(0f, 1f)
+        publish(settings.copy(endVolumes = settings.endVolumes + (lane to v)))
+        engine.setEndVolume(lane, v)
+    }
+
+    fun toggleMute(lane: LaneId) {
+        val muted = !settings.isMuted(lane)
+        val next = if (muted) settings.mutedEnds + lane else settings.mutedEnds - lane
+        publish(settings.copy(mutedEnds = next))
+        engine.setEndMuted(lane, muted)
+    }
+
+    fun changeEqBand(lane: LaneId, bandIndex: Int, db: Double) {
+        // Clamped HERE rather than only in the engine, so the state, the persisted
+        // value and the DSP cannot disagree about what is legal.
+        val gain = clampEqDb(if (db.isFinite()) db else 0.0)
+        val updated = updateEnd(lane) { end ->
+            val bands = end.bands.toMutableList()
+            if (bandIndex in bands.indices) bands[bandIndex] = gain
+            end.copy(bands = bands)
+        }
+        if (updated) engine.setEqBand(lane, bandIndex, gain)
+    }
+
+    fun changeTune(lane: LaneId, cents: Int) {
+        val clamped = cents.coerceIn(TUNE_MIN_CENTS, TUNE_MAX_CENTS)
+        if (updateEnd(lane) { it.copy(tuneCents = clamped) }) {
+            engine.setEndPitch(lane, clamped)
+        }
+    }
+
+    fun toggleEqPanel(lane: LaneId) {
+        updateEnd(lane) { it.copy(eqPanelOpen = !it.eqPanelOpen) }
+    }
+
+    fun toggleTunePanel(lane: LaneId) {
+        updateEnd(lane) { it.copy(tunePanelOpen = !it.tunePanelOpen) }
+    }
+
+    fun setShowBols(show: Boolean) = publish(settings.copy(showBols = show))
+
+    fun setShowStepLabels(show: Boolean) = publish(settings.copy(showStepLabels = show))
+
+    /**
+     * The whole-interface scale. No engine involvement: this is purely
+     * presentational, applied by [com.kirtan.companion.ui.KirtanApp] providing a
+     * scaled [androidx.compose.ui.unit.Density] at the composition root.
+     */
+    fun setUiScale(scale: Float) = publish(
+        settings.copy(
+            uiScale = scale.coerceIn(
+                com.kirtan.companion.storage.EqPrefsSnapshot.UI_SCALE_MIN,
+                com.kirtan.companion.storage.EqPrefsSnapshot.UI_SCALE_MAX,
+            )
+        )
+    )
+
+    /**
+     * Apply [transform] to one end's settings and republish.
+     *
+     * Returns false for a lane that has no EQ or tuning — the karatalas — so a
+     * caller cannot accidentally invent settings for an instrument the engine
+     * deliberately does not shape.
+     */
+    private fun updateEnd(lane: LaneId, transform: (EndSoundPrefs) -> EndSoundPrefs): Boolean {
+        val end = settings.end(lane) ?: return false
+        val next = transform(end)
+        val snapshot = when (lane) {
+            LaneId.DAYAN -> settings.copy(dayan = next)
+            LaneId.BAYAN -> settings.copy(bayan = next)
+            else -> return false
+        }
+        publish(snapshot)
+        return true
+    }
+
+    /** Publish a new snapshot and schedule its persistence. */
+    private fun publish(next: EqPrefsSnapshot) {
+        settings = next
+        _state.value = _state.value.copy(settings = next)
+        schedulePrefsSave()
+    }
+
+    /**
+     * Persistence is DEBOUNCED while the DSP is not.
+     *
+     * A slider drag fires dozens of changes a second; the engine must hear every
+     * one (that is what makes the drag feel connected to the sound), but writing
+     * to disk on each would queue I/O behind the gesture. So the state and the DSP
+     * update immediately and only the write coalesces, last one winning.
+     *
+     * The save reads `settings` when it FIRES rather than capturing a snapshot
+     * when it is scheduled, so a fast drag always persists the final position.
+     */
+    private fun schedulePrefsSave() {
+        prefsSaveJob?.cancel()
+        prefsSaveJob = viewModelScope.launch {
+            delay(EqPrefs.SAVE_DEBOUNCE_MS)
+            prefs.save(settings)
+        }
+    }
+
+    // ── Beat selection and transport ───────────────────────────────────────
+
+    /**
+     * Point the engine at a beat WITHOUT starting it, adopting the beat's own
+     * suggested tempo unless the user has locked it.
+     */
+    fun loadBeat(beat: Beat) {
+        // Choosing a beat by hand while a sequence plays leaves the sequence:
+        // the chosen beat carries on looping, from the same bar position.
+        leaveSequence()
+        engine.setBeat(beat)
+        container.currentBeatName.value = beat.name
+        _state.value = _state.value.copy(beatName = beat.name, swing = beat.swing)
+        val restore = restoreBpm?.takeIf { loadedBeatId == null && beat.id == restoreBeatId }
+        restoreBpm = null
+        when {
+            restore != null -> changeBpm(restore)
+            !tempoLocked && beat.id != loadedBeatId -> changeBpm(beat.bpm)
+        }
+        loadedBeatId = beat.id
+        beat.id?.let(container.session::saveBeat)
+    }
+
+    /**
+     * Start [beat]. A no-op while samples are still decoding, and a no-op while
+     * ALREADY playing — the same rule the web's `play()` states: the selection
+     * that preceded this tap loadBeat'd the beat, which switched the loop live
+     * with bar phase preserved. Calling engine.start() on top of that would
+     * re-anchor the clock to the bar top and kill the still-ringing voices: a
+     * lurch, not a switch.
+     */
+    fun play(beat: Beat) {
+        if (!_state.value.ready) return
+        if (_state.value.playing) return
+        leaveSequence()
+        engine.setBeat(beat)
+        engine.setBpm(bpm)
+        container.currentBeatName.value = beat.name
+        _state.value = _state.value.copy(beatName = beat.name, swing = beat.swing)
+        connection.setPlayWhenReady(true)
+    }
+
+    fun togglePlay(beat: Beat) {
+        if (!_state.value.ready) return
+        if (_state.value.playing) connection.setPlayWhenReady(false) else play(beat)
+    }
+
+    fun stop() = connection.setPlayWhenReady(false)
+
+    // ── Sequencer ──────────────────────────────────────────────────────────
+
+
+    fun setBeatLookup(lookup: (String) -> Beat?) {
+        beatLookup = lookup
+        // A beat edited in the library while its sequence plays: take the new one.
+        if (engine.hasSequence) pushSequence()
+    }
+
+    /** True when Home's Play button plays the sequence rather than one beat. */
+    fun sequencePlayable(): Boolean =
+        Sequences.resolve(_sequence.value.working.entries, beatLookup).isNotEmpty()
+
+    /** Play the working sequence from its top, or stop it. */
+    fun toggleSequence() {
+        if (!_state.value.ready) return
+        if (_state.value.playing) return connection.setPlayWhenReady(false)
+        if (!pushSequence()) return
+        engine.setBpm(bpm)
+        connection.setPlayWhenReady(true)
+    }
+
+    /** Hand the working sequence to the engine. False when nothing in it can play. */
+    private fun pushSequence(): Boolean {
+        val w = _sequence.value.working
+        playingSteps = Sequences.resolve(w.entries, beatLookup)
+        if (playingSteps.isEmpty()) {
+            leaveSequence()
+            return false
+        }
+        engine.setSequence(playingSteps.map { (i, beat) -> SequenceStep(beat, w.entries[i].bars) }, w.loop)
+        return true
+    }
+
+    private fun leaveSequence() {
+        if (!engine.hasSequence) return
+        engine.setSequence(null, false)
+        playingSteps = emptyList()
+        _sequence.value = _sequence.value.copy(playingEntry = null, playingBar = null, playingBeat = null)
+    }
+
+    /**
+     * Stopped (by hand or at the end): no entry is lit any more, but the beat last
+     * heard stays on Home — snapping back to the library pick would show a beat
+     * that never played. Choosing a beat by hand ([leaveSequence]) clears it.
+     */
+    private fun clearSequencePosition() {
+        _sequence.value = _sequence.value.copy(playingEntry = null, playingBar = null)
+    }
+
+    private fun updateWorking(next: WorkingSequence) {
+        _sequence.value = _sequence.value.copy(working = next)
+        sequenceStore.saveWorking(next)
+        // Edits apply live, keeping the place (see KirtanEngine.setSequence).
+        if (engine.hasSequence && _state.value.playing) pushSequence()
+    }
+
+    fun editEntries(edit: (List<SequenceEntry>) -> List<SequenceEntry>) {
+        val w = _sequence.value.working
+        updateWorking(w.copy(entries = edit(w.entries)))
+    }
+
+    fun setSequenceLoop(loop: Boolean) {
+        updateWorking(_sequence.value.working.copy(loop = loop))
+        engine.setSequenceLoop(loop)
+    }
+
+    /** Overwrite the saved sequence this one came from, or save it new as [name]. */
+    fun saveSequence(name: String, asNew: Boolean) {
+        val s = _sequence.value
+        val id = s.working.savedId?.takeUnless { asNew || s.saved.none { it.id == s.working.savedId } }
+            ?: java.util.UUID.randomUUID().toString()
+        val item = BeatSequence(id, name.trim().ifEmpty { s.working.name }, s.working.entries)
+        val saved = if (s.saved.any { it.id == id }) s.saved.map { if (it.id == id) item else it } else s.saved + item
+        sequenceStore.saveSaved(saved)
+        _sequence.value = s.copy(saved = saved)
+        updateWorking(s.working.copy(savedId = id, name = item.name))
+    }
+
+    fun openSequence(id: String) {
+        val item = _sequence.value.saved.firstOrNull { it.id == id } ?: return
+        updateWorking(_sequence.value.working.copy(entries = item.entries, savedId = id, name = item.name))
+    }
+
+    fun newSequence() = updateWorking(WorkingSequence(loop = _sequence.value.working.loop))
+
+    fun deleteSequence(id: String) {
+        val saved = _sequence.value.saved.filterNot { it.id == id }
+        sequenceStore.saveSaved(saved)
+        _sequence.value = _sequence.value.copy(saved = saved)
+        if (_sequence.value.working.savedId == id) updateWorking(_sequence.value.working.copy(savedId = null))
+    }
+
+    /**
+     * Start the editor's preview loop.
+     *
+     * The sequencing here is the fix for "preview is silent". The naive version
+     * called [stop] — an ASYNCHRONOUS binder round-trip through Media3 — and then
+     * started the engine synchronously. The controller's stop reaches the engine
+     * whenever the binder delivers it, which on a real device is after our start,
+     * so it killed the preview a few milliseconds after it began. The emulator
+     * raced the other way often enough to hide it; the phone did not.
+     *
+     * So: ask the controller to stop, then WAIT for the engine to actually be
+     * stopped before starting. The wait is bounded; if the binder never delivers
+     * we start anyway rather than hanging the tap.
+     */
+    suspend fun startPreview(beat: Beat, previewBpm: Int) {
+        if (!_state.value.ready) return
+        if (_state.value.playing) {
+            connection.setPlayWhenReady(false)
+            withTimeoutOrNull(1_000) {
+                while (engine.isPlaying) delay(16)
+            }
+        }
+        leaveSequence()
+        engine.setBeat(beat)
+        engine.setBpm(previewBpm)
+        engine.start()
+        _state.value = _state.value.copy(playing = true, beatName = beat.name)
+    }
+
+    /**
+     * End the preview. Synchronous, unlike [stop]: nothing needs to round-trip,
+     * and the editor's unmount path cannot suspend.
+     *
+     * Also why Home's Play stays safe afterwards: [play] no-ops while the mirror
+     * says playing, so leaving the editor MUST call this or the first Play tap on
+     * Home would appear dead.
+     */
+    fun stopPreview() {
+        if (!_state.value.playing) return
+        engine.stop()
+        _state.value = _state.value.copy(playing = false)
+    }
+
+    /**
+     * The splash's Begin tap. On the web this exists to satisfy the browser's "no
+     * sound before a user gesture" rule; Android has no such rule, but the tap is
+     * still the right moment to bind the controller and open the output device,
+     * because that is when the user has said they want sound.
+     */
+    suspend fun begin() {
+        connection.connect()
+        engine.arm()
+    }
+
+    override fun onCleared() {
+        // Flush a pending debounced save so the last drag position isn't lost.
+        // On the PROCESS scope, not viewModelScope: viewModelScope is cancelled
+        // before onCleared returns, so a launch there would silently never run
+        // and drop the final position on exactly the exit path this flush exists
+        // to cover.
+        prefsSaveJob?.cancel()
+        container.scope.launch { prefs.save(settings) }
+
+        // The engine and its audio device belong to the service, not to this
+        // ViewModel, so they are deliberately left running: rotating the phone
+        // must not stop a kirtan.
+        connection.release()
+        super.onCleared()
+    }
+
+    companion object {
+        /** A gap longer than this starts a new tap-tempo count. */
+        const val TAP_RESET_MS = 2000L
+
+        val BPM_RANGE = MIN_BPM..MAX_BPM
+
+        /**
+         * The sync test's tempo. Slow on purpose: a tap is matched to the NEAREST
+         * click, so the largest delay it can measure is half the gap between
+         * clicks. At 70 BPM that is ±430 ms, comfortably past any Bluetooth
+         * speaker's unreported delay.
+         */
+        const val SYNC_TEST_BPM = 70
+
+        /** One closed dayan stroke on every beat: the sharpest attack the kit has. */
+        val SYNC_TEST_BEAT = Beat(
+            id = "sync-test",
+            name = "Sync test",
+            note = "",
+            bpm = SYNC_TEST_BPM,
+            steps = 4,
+            beatsPerBar = 4.0,
+            cellsPerGroup = 1,
+            groups = null,
+            description = null,
+            lanePatterns = mapOf(
+                LaneId.DAYAN to List(4) { com.kirtan.companion.data.model.Stroke.CLOSED },
+            ),
+        )
+
+        /**
+         * [prefs] is injected rather than constructed here so a test can pass a
+         * fake — the same seam `useBeatLibrary(provider)` has on the web, and for
+         * the same reason.
+         */
+        fun factory(prefs: EqPrefs): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                TransportViewModel(this[APPLICATION_KEY]!!, prefs)
+            }
+        }
+    }
+}

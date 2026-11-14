@@ -3,11 +3,11 @@
  * -----------------------
  * The BeatsProvider backed by this device's localStorage.
  *
- * THIS FILE, migrate.js AND eqPrefs.js ARE THE ONLY PLACES IN THE APP THAT
- * MAY CALL THE localStorage API DIRECTLY. The word may appear in comments
- * elsewhere; what must not happen is a localStorage.getItem / .setItem call
- * outside src/storage/ — that is the layer failing at the one job it exists
- * to do.
+ * THIS FILE, migrate.js, eqPrefs.js AND shippedBeatsCache.js ARE THE ONLY
+ * PLACES IN THE APP THAT MAY CALL THE localStorage API DIRECTLY. The word may
+ * appear in comments elsewhere; what must not happen is a localStorage.getItem
+ * / .setItem call outside src/storage/ — that is the layer failing at the one
+ * job it exists to do.
  *
  * Two things worth knowing about the implementation:
  *
