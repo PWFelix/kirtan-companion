@@ -14,6 +14,13 @@ import { MAX_STEPS, MAX_GROUP_CELLS } from "./shareCodec.js";
 
 export const SIMPLE_RESOLUTIONS = [1, 2, 3, 4, 6, 8];
 export const MULTIPLIERS = [1, 2, 3];
+/** The tala-style feels' beat sizes (editorDraft METERS t5/t7/t9). */
+export const TALA_BASES = [5, 7, 9];
+
+/** The 5/7/9 a cells-per-beat count is a whole multiple (1–3×) of, or null. */
+export function talaBase(cpq) {
+  return [...TALA_BASES].reverse().find((b) => cpq % b === 0 && cpq / b >= 1 && cpq / b <= 3) ?? null;
+}
 
 const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
 
@@ -25,6 +32,8 @@ export function resolutionFactor(groups, cpq) {
 /** The lever for a grid: { multiplier, current, options }. */
 export function leverFor(groups, cpq) {
   if (groups.length && groups.every((g) => g === cpq)) {
+    const b = talaBase(cpq);
+    if (b) return { multiplier: false, current: cpq, options: [b, 2 * b, 3 * b] };
     return { multiplier: false, current: cpq, options: [...new Set([...SIMPLE_RESOLUTIONS, cpq])].sort((a, b) => a - b) };
   }
   const k = resolutionFactor(groups, cpq);
@@ -33,7 +42,7 @@ export function leverFor(groups, cpq) {
 
 /**
  * The grid at `option` on the lever: { groups, cpq, unit }, or null when it would
- * pass the format's caps (MAX_STEPS cells in all, 12 in one beat) — older apps reject those.
+ * pass the format's caps (MAX_STEPS cells in all, MAX_GROUP_CELLS in one beat) — older apps reject those.
  */
 export function reshape(groups, cpq, unit, option) {
   const lever = leverFor(groups, cpq);
@@ -77,10 +86,25 @@ export function resample(cells, fromCpq, toCpq, steps, report) {
  * The zoom's pages: whole beats packed up to `max` cells, so a page never starts
  * mid-beat. A beat wider than `max` gets a page to itself. Returns [start, end) pairs.
  */
+export const MAX_PAGE_CELLS = 12;
 export function pagesFor(groups, max = 8) {
   const pages = [];
   let start = 0, end = 0;
   for (const g of groups) {
+    // A tala beat finer than 12 cells (14, 21, 27…) would be too narrow to tap
+    // on one page: it gets several, in near-equal parts (21 = 11+10).
+    if (g > MAX_PAGE_CELLS) {
+      if (end > start) pages.push([start, end]);
+      const parts = Math.ceil(g / MAX_PAGE_CELLS);
+      let at = end;
+      for (let i = 0; i < parts; i++) {
+        const len = Math.floor(g / parts) + (i < g % parts ? 1 : 0);
+        pages.push([at, at + len]);
+        at += len;
+      }
+      end += g; start = end;
+      continue;
+    }
     if (end > start && end - start + g > max) { pages.push([start, end]); start = end; }
     end += g;
   }

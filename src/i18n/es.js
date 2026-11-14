@@ -312,6 +312,12 @@ export default {
   "meter.78": "Siete por ocho",
   "meter.custom": "Personalizado",
   "meter.dbl": "Doble tiempo",
+  "meter.t5": "Cinco",
+  "meter.t7": "Siete",
+  "meter.t9": "Nueve",
+  "meterSig.t5": "5 celdas por pulso",
+  "meterSig.t7": "7 celdas por pulso",
+  "meterSig.t9": "9 celdas por pulso",
   "meter.std": "Estándar",
   "meter.trip": "Tresillos",
 

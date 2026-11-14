@@ -71,9 +71,9 @@ const REST_CHAR = "-";
 const MAX_CODE_LEN = 8000;   // ~a category of ten beats, with headroom
 const MAX_NAME_LEN = 40;
 export const MAX_GROUPS = 32;      // numbered beats in one pattern
-export const MAX_GROUP_CELLS = 12;  // cells in one numbered beat
+export const MAX_GROUP_CELLS = 27;  // cells in one numbered beat (9-matra tala ×3); 12 before 0.4.41
 export const MAX_STEPS = 384;       // total cells — this is the DoS bound that matters
-const MAX_CPQ = 12;
+const MAX_CPQ = 27; // a 9-matra tala ×3; 12 before 0.4.41
 const MAX_CAT_BEATS = 50;
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);

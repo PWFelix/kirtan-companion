@@ -313,6 +313,12 @@ export default {
   "meter.78": "Seven-eight",
   "meter.custom": "Custom",
   "meter.dbl": "Double-time",
+  "meter.t5": "Five",
+  "meter.t7": "Seven",
+  "meter.t9": "Nine",
+  "meterSig.t5": "5 cells per beat",
+  "meterSig.t7": "7 cells per beat",
+  "meterSig.t9": "9 cells per beat",
   "meter.std": "Standard",
   "meter.trip": "Triplets",
 

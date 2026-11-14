@@ -15,7 +15,7 @@ import BpmRange from "./ui/BpmRange.jsx";
 import BrahmalokaBurst from "./ui/BrahmalokaBurst.jsx";
 import { leverFor, reshape, resample, pagesFor } from "./data/resolution.js";
 import { MAX_STEPS, MAX_GROUPS } from "./data/shareCodec.js";
-import { METERS, meterFor, emptyGrid, sum, draftFrom } from "./data/editorDraft.js";
+import { METERS, meterFor, emptyGrid, sum, draftFrom, nextGroup } from "./data/editorDraft.js";
 
 /**
  * BeatEditor — three zones, phone-first
@@ -128,8 +128,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   const zoomCells = windowEnd - windowStart;
 
   // The two levers: beats (±, capped so the beat stays within MAX_STEPS cells, 384) and resolution.
-  const canAddBeat = steps + sum(meter.unit) <= MAX_STEPS && groups.length + meter.unit.length <= MAX_GROUPS;
-  const canRemoveBeat = groups.length > meter.unit.length;
+  // + and − move one beat at a time (a whole 3+3 cycle at once made 6/8 unable to land on 4 bars).
+  const addSize = nextGroup(meter, groups);
+  const canAddBeat = steps + addSize <= MAX_STEPS && groups.length + 1 <= MAX_GROUPS;
+  const canRemoveBeat = groups.length > 1;
   const lever = leverFor(groups, cpq);
   // What the last resolution change moved or dropped, shown until the next edit.
   const [resampleReport, setResampleReport] = useState(null);
@@ -201,17 +203,17 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
 
   function addGroup() {
     if (!canAddBeat) return;
-    const u = meter.unit, pad = Array(sum(u)).fill(null);
-    setGroups((g) => [...g, ...u]);
+    const pad = Array(addSize).fill(null);
+    setGroups((g) => [...g, addSize]);
     setDayan((p) => [...p, ...pad]);
     setBayan((p) => [...p, ...pad]);
     setKartal((p) => [...p, ...pad]);
     resetUndo();
   }
   function removeGroup() {
-    if (groups.length <= meter.unit.length) return;
-    const drop = sum(meter.unit);
-    setGroups((g) => g.slice(0, -meter.unit.length));
+    if (!canRemoveBeat) return;
+    const drop = groups[groups.length - 1];
+    setGroups((g) => g.slice(0, -1));
     setDayan((p) => p.slice(0, -drop));
     setBayan((p) => p.slice(0, -drop));
     setKartal((p) => p.slice(0, -drop));

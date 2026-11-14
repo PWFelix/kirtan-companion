@@ -11,7 +11,7 @@
  *
  * The meter helpers moved here from BeatEditor.jsx because seeding needs them.
  */
-import { resolutionFactor } from "./resolution.js";
+import { resolutionFactor, talaBase } from "./resolution.js";
 import { clampSwing, SWING_STRAIGHT } from "./swing.js";
 
 export const emptyGrid = (n) => Array(n).fill(null);
@@ -25,7 +25,15 @@ export const METERS = [
   { id: "dbl",  label: "Double-time", sig: "16ths",            bar: [4, 4, 4, 4], unit: [4],       cpq: 4 },
   { id: "68",   label: "Six-eight",   sig: "6/8 · 3+3",        bar: [3, 3],       unit: [3, 3],    cpq: 2 },
   { id: "78",   label: "Seven-eight", sig: "7/8 · 2+2+3",      bar: [2, 2, 3],    unit: [2, 2, 3], cpq: 2 },
+  // Tala-style: every beat holds 5, 7 or 9 cells (matras), and the resolution
+  // lever only offers whole multiples of that, so a beat never stops being one.
+  { id: "t5",   label: "Five",        sig: "5 per beat",       bar: [5, 5, 5, 5], unit: [5],       cpq: 5 },
+  { id: "t7",   label: "Seven",       sig: "7 per beat",       bar: [7, 7, 7, 7], unit: [7],       cpq: 7 },
+  { id: "t9",   label: "Nine",        sig: "9 per beat",       bar: [9, 9, 9, 9], unit: [9],       cpq: 9 },
 ];
+
+/** The beat + appends: the feel's next group, so 6/8 grows by one 3, 7/8 by its next 2 or 3. */
+export const nextGroup = (meter, groups) => meter.unit[groups.length % meter.unit.length];
 
 // Does `arr` consist of whole repetitions of `pattern`?
 function repeats(pattern, arr) {
@@ -40,6 +48,9 @@ export function meterFor(groups, cpq) {
   if (uniform && groups[0] === cpq) {
     const m = METERS.find((x) => x.cpq === cpq && x.unit.length === 1 && x.unit[0] === cpq);
     if (m) return m;
+    // A tala feel at ×2 or ×3 (7 → 14) is still that feel.
+    const b = talaBase(cpq);
+    if (b) { const tm = METERS.find((x) => x.id === "t" + b); const k = cpq / b; return k === 1 ? tm : { ...tm, bar: tm.bar.map((x) => x * k), unit: [cpq], cpq }; }
   }
   // Odd meters at a finer resolution (6/8 ×2 is [6,6] at cpq 4) are still that
   // meter: divide the common factor out, match, and scale the preset back up so
