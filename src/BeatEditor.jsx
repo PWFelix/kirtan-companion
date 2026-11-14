@@ -242,9 +242,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   }
 
   /**
-   * A tap on the cell that is ALREADY selected steps it through its row's
-   * palette — rest → open → closed → rest — so a cell can be edited without
-   * moving. The cursor stays put; the stroke sounds; undo takes it back.
+   * Steps a cell on through its row's palette — rest → open → closed → rest —
+   * so a cell is edited without moving. The cursor stays put; the stroke sounds; undo takes it back.
    */
   function cycleCell(lane, i) {
     const order = [null, ...padsFor(lane).filter((p) => !p.rest).map((p) => p.value)];
@@ -433,7 +432,14 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
                       return (
                         <button key={end + i}
                           // Choosing a run to copy only ever moves its end.
-                          onClick={() => (isCursor && selectAnchor == null ? cycleCell(end, i) : pick(i))}
+                          // Another cell: select it, and an EMPTY one gets the row's first
+                          // stroke at once (a filled one is only selected, so moving never
+                          // overwrites). The selected cell: step it on through the palette.
+                          onClick={() => {
+                            if (selectAnchor != null) pick(i);
+                            else if (isCursor) cycleCell(end, i);
+                            else { pick(i); if (v == null) cycleCell(end, i); }
+                          }}
                           aria-current={isCursor || undefined}
                           aria-label={v ? t("editor.cell", { lane: end, n: i + 1, bol: BOLS[end]?.[v] ?? v }) : t("editor.cellEmpty", { lane: end, n: i + 1 })}
                           style={{ ...st.zoomCell,

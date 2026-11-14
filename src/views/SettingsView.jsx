@@ -4,6 +4,7 @@ import { t, DICTS, LANGUAGE_NAMES, languageChoice, setLanguageChoice, pickLocale
 import { BackIcon, ChevronRightIcon } from "../ui/icons.jsx";
 import AboutView from "./AboutView.jsx";
 import SyncView from "./SyncView.jsx";
+import MixerSheet from "./MixerSheet.jsx";
 
 /**
  * SettingsView — a near-empty shell, plus the way into About.
@@ -15,6 +16,7 @@ import SyncView from "./SyncView.jsx";
 function SettingsView({ onBack, nav, transport }) {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
+  const [mixerOpen, setMixerOpen] = useState(false);
   if (aboutOpen) return <AboutView onBack={() => setAboutOpen(false)} nav={nav} />;
   if (syncOpen) return <SyncView transport={transport} onBack={() => setSyncOpen(false)} nav={nav} />;
 
@@ -29,6 +31,14 @@ function SettingsView({ onBack, nav, transport }) {
       </header>
       <section style={{ ...sh.controls, flex: 1 }}>
         <p style={st.subtitle}>{t("settings.comingSoon")}</p>
+        {/* The mixer lives here rather than on Home: set once, rarely touched mid-kirtan. */}
+        <button onClick={() => setMixerOpen(true)} style={st.row} aria-haspopup="dialog" aria-expanded={mixerOpen}>
+          <span style={st.rowText}>
+            <span>{t("mixer.title")}</span>
+            <span style={st.rowSub}>{t("mixer.rowSub")}</span>
+          </span>
+          <ChevronRightIcon />
+        </button>
         <button onClick={() => setSyncOpen(true)} style={st.row}>
           <span style={st.rowText}>
             <span>{t("sync.rowTitle")}</span>
@@ -58,6 +68,7 @@ function SettingsView({ onBack, nav, transport }) {
         </button>
       </section>
       {nav}
+      {mixerOpen && <MixerSheet transport={transport} onClose={() => setMixerOpen(false)} />}
     </div>
   );
 }

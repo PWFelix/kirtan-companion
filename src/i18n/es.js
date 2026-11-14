@@ -343,6 +343,7 @@ export default {
   "mixer.master": "General",
   "mixer.masterVolume": "Volumen general",
   "mixer.mute": "Silenciar {lane}",
+  "mixer.rowSub": "Volumen, ecualizador, afinación y swing",
   "mixer.title": "Mezclador",
   "mixer.tune": "Afinar",
   "mixer.tuneCents": "Afinación de {lane} en cents",

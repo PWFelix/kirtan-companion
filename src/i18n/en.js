@@ -344,6 +344,7 @@ export default {
   "mixer.master": "Master",
   "mixer.masterVolume": "Master volume",
   "mixer.mute": "Mute {lane}",
+  "mixer.rowSub": "Volume, EQ, tuning and swing",
   "mixer.title": "Mixer",
   "mixer.tune": "Tune",
   "mixer.tuneCents": "{lane} tuning in cents",
