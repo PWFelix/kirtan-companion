@@ -171,6 +171,8 @@
     <string name="editor_unsaved_body">You have unsaved changes to %1$s.</string>
     <string name="editor_unsaved_new">a new beat</string>
     <string name="editor_unsaved_title">Unsaved changes</string>
+    <string name="editor_view_strip">Strip</string>
+    <string name="editor_view_timeline">Timeline</string>
     <string name="err_bad_credentials">That email and password didn\'t match. Try again.</string>
     <string name="err_beat_format">One of your saved beats (\"%1$s\") is in a format this version of the app can\'t read.</string>
     <string name="err_beat_gone">That beat no longer exists.</string>

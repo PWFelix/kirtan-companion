@@ -144,6 +144,9 @@ internal fun BeatEditorScreen(
     var saving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
     var step by remember { mutableIntStateOf(-1) }
+    // Timeline (vertical, the default) or the original strip; remembered per device.
+    val viewPrefs = androidx.compose.ui.platform.LocalContext.current.let { EditorViewPref(it) }
+    var timelineView by remember { mutableStateOf(viewPrefs.timeline) }
 
     // Follow the engine's step so the zoom lights the sounding column while
     // previewing, and stop the preview whenever the editor leaves composition —
@@ -336,7 +339,26 @@ internal fun BeatEditorScreen(
                     onDone = { notes = it; notesOpen = false },
                 )
             }
-            OverviewZone(
+            EditorViewSwitch(timeline = timelineView) { timelineView = it; viewPrefs.timeline = it }
+            if (timelineView) TimelineZone(
+                draft = draft,
+                previewing = previewing,
+                getPhase = { engine.getPhase() },
+                onCellTap = { lane, index ->
+                    val before = draft
+                    draft = draft.tapCell(lane, index)
+                    val landed = draft.pattern(lane).getOrNull(index)
+                    if (draft.lanes != before.lanes && landed != null) engine.playStroke(lane, landed == Stroke.OPEN)
+                },
+                onLaneTap = { lane -> draft = draft.pickCell(lane, draft.cursor) },
+                onCursor = { draft = draft.setCursor(it) },
+                onPause = { if (previewing) togglePreview() },
+                onScrubSound = { index ->
+                    for (lane in LaneId.ORDERED) {
+                        draft.pattern(lane).getOrNull(index)?.let { engine.playStroke(lane, it == Stroke.OPEN) }
+                    }
+                },
+            ) else OverviewZone(
                 draft = draft,
                 step = step,
                 previewing = previewing,
@@ -344,7 +366,7 @@ internal fun BeatEditorScreen(
                 onScrub = { draft = draft.scrubToFraction(it) },
             )
 
-            ZoomZone(
+            if (!timelineView) ZoomZone(
                 draft = draft,
                 step = step,
                 previewing = previewing,

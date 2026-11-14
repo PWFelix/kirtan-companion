@@ -165,6 +165,8 @@
     <string name="editor_unsaved_body">Tienes cambios sin guardar en %1$s.</string>
     <string name="editor_unsaved_new">un ritmo nuevo</string>
     <string name="editor_unsaved_title">Cambios sin guardar</string>
+    <string name="editor_view_strip">Tira</string>
+    <string name="editor_view_timeline">Línea de tiempo</string>
     <string name="err_bad_credentials">Ese correo y esa contraseña no coinciden. Inténtalo de nuevo.</string>
     <string name="err_beat_format">Uno de tus ritmos guardados («%1$s») tiene un formato que esta versión de la app no puede leer.</string>
     <string name="err_beat_gone">Ese ritmo ya no existe.</string>
