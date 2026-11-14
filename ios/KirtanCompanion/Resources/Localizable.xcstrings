@@ -3273,6 +3273,16 @@
         }
       }
     },
+    "Scrub or tap to the last cell" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desliza o toca hasta la última celda"
+          }
+        }
+      }
+    },
     "Search by author" : {
       "localizations" : {
         "es" : {
@@ -3825,16 +3835,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zona de toque: toca en cada clic"
-          }
-        }
-      }
-    },
-    "Tap the last cell to copy" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Toca la última celda a copiar"
           }
         }
       }

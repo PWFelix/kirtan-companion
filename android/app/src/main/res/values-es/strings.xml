@@ -156,7 +156,7 @@
     <string name="editor_save_as_new">Guardar como ritmo nuevo</string>
     <string name="editor_save_copy">Guardar como mi versión</string>
     <string name="editor_select">Copiar celdas</string>
-    <string name="editor_select_hint">Toca la última celda a copiar</string>
+    <string name="editor_select_hint">Desliza o toca hasta la última celda</string>
     <string name="editor_selection">Celdas %1$d–%2$d</string>
     <string name="editor_start_over">Empezar de nuevo</string>
     <string name="editor_start_over_body">¿Borrar este ritmo sin guardar y empezar de nuevo con la cuadrícula vacía?</string>

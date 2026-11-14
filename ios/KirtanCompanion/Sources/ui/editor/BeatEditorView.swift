@@ -519,7 +519,7 @@ struct BeatEditorView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let sel = selection {
                 Text(String(localized: "Cells \(sel.lowerBound + 1)–\(sel.upperBound + 1)", bundle: .strings)
-                     + " · " + String(localized: "Tap the last cell to copy", bundle: .strings))
+                     + " · " + String(localized: "Scrub or tap to the last cell", bundle: .strings))
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Palette.clay)
                 HStack(spacing: 8) {

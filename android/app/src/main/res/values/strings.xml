@@ -162,7 +162,7 @@
     <string name="editor_save_as_new">Save as new beat</string>
     <string name="editor_save_copy">Save as my version</string>
     <string name="editor_select">Copy cells</string>
-    <string name="editor_select_hint">Tap the last cell to copy</string>
+    <string name="editor_select_hint">Scrub or tap to the last cell</string>
     <string name="editor_selection">Cells %1$d–%2$d</string>
     <string name="editor_start_over">Start over</string>
     <string name="editor_start_over_body">Clear this unsaved beat and start again from a blank grid?</string>
