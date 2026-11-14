@@ -41,9 +41,10 @@ Split by **state ownership**, not by screen count. If a piece of state is only m
 - `src/hooks/useTransport.js` — the engine plus its React mirror (`playing`, `step`, `bpm`, volumes, mutes) and every command that writes to it. **This is the only place that calls `engine.*`**, apart from `BeatEditor`, which is handed the engine outright because it takes the transport over while open. Also exports `MIN_BPM` / `MAX_BPM`.
 - `src/hooks/useBeatLibrary.js` — custom beats and categories (kirtan progressions), plus all their `localStorage` persistence (`kirtan-custom-beats`, `kirtan-user-categories`, `kirtan-active-category`). Pure data; touches no audio.
 - `src/hooks/useLandscape.js` — the media query behind Home's two layouts.
-- `src/views/HomeView.jsx` — the playing screen, portrait and landscape, plus the quick-pick, mixer and tempo sheets they share. Owns only which sheet is open.
+- `src/views/HomeView.jsx` — the playing screen, portrait and landscape, plus the quick-pick and tempo sheets they share. Owns only which sheet is open.
+- `src/views/MixerSheet.jsx` — the mixer (master, per-lane faders/mutes, EQ, tuning, swing), opened from Settings. Stateless; reads and writes the transport it is handed.
 - `src/views/BeatsView.jsx` — the library list, category tabs, drag-to-reorder, and its four sheets. Owns the browsed tab, the open sheet and the pending confirmation.
-- `src/views/SettingsView.jsx` — placeholder shell.
+- `src/views/SettingsView.jsx` — Mixer, Sync, Language and About rows.
 - `src/ui/` — shared chrome: `icons.jsx` (every inline SVG), `BottomNav.jsx`, `ScrollFadeRow.jsx`, and `styles.js` (only the style objects two or more screens use).
 - `src/BeatStrip.jsx` — the beat visualiser used by every screen. Reads `LANES` from `src/data/lanes.js`; mini variant renders `primary` lanes only.
 - `src/BeatEditor.jsx` — custom-beat creation. Its own file because it owns ~14 pieces of draft state (grids, cursor, meter groups, undo stack) that mean nothing outside editing; unmounting discards the draft for free. Contract is four props in, `onSave(beat)` out.
