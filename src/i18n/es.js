@@ -143,7 +143,7 @@ export default {
   "editor.cellEmpty": "{lane} celda {n}, vacía",
   "editor.clear": "Borrar",
   "editor.select": "Copiar celdas",
-  "editor.selectHint": "Toca la última celda a copiar",
+  "editor.selectHint": "Desliza o toca hasta la última celda",
   "editor.selection": "Celdas {from}–{to}",
   "editor.copy": "Copiar",
   "editor.paste": "Pegar",

@@ -144,7 +144,7 @@ export default {
   "editor.cellEmpty": "{lane} cell {n}, empty",
   "editor.clear": "Clear",
   "editor.select": "Copy cells",
-  "editor.selectHint": "Tap the last cell to copy",
+  "editor.selectHint": "Scrub or tap to the last cell",
   "editor.selection": "Cells {from}–{to}",
   "editor.copy": "Copy",
   "editor.paste": "Paste",
