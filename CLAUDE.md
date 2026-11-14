@@ -45,7 +45,7 @@ Split by **state ownership**, not by screen count. If a piece of state is only m
 - `src/views/MixerSheet.jsx` — the mixer (master, per-lane faders/mutes, EQ, tuning, swing), opened from Settings. Stateless; reads and writes the transport it is handed.
 - `src/views/BeatsView.jsx` — the library list, category tabs, drag-to-reorder, and its four sheets. Owns the browsed tab, the open sheet and the pending confirmation.
 - `src/views/SettingsView.jsx` — Mixer, Sync, Language and About rows.
-- `src/ui/` — shared chrome: `icons.jsx` (every inline SVG), `BottomNav.jsx`, `ScrollFadeRow.jsx`, and `styles.js` (only the style objects two or more screens use).
+- `src/ui/` — shared chrome: `icons.jsx` (every inline SVG), `BottomNav.jsx`, `ScrollFadeRow.jsx`, `RhythmNotes.jsx` (a rhythm's notes — stored as `beat.description`, written in the editor, read on Home and Learn), and `styles.js` (only the style objects two or more screens use).
 - `src/BeatStrip.jsx` — the beat visualiser used by every screen. Reads `LANES` from `src/data/lanes.js`; mini variant renders `primary` lanes only.
 - `src/BeatEditor.jsx` — custom-beat creation. Its own file because it owns ~14 pieces of draft state (grids, cursor, meter groups, undo stack) that mean nothing outside editing; unmounting discards the draft for free. Contract is four props in, `onSave(beat)` out.
 

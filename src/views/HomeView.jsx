@@ -10,6 +10,7 @@ import Wordmark from "../Wordmark.jsx";
 import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
 import * as sh from "../ui/styles.js";
 import { t, noteLabel } from "../i18n/index.js";
+import { NotesLink, NotesSheet } from "../ui/RhythmNotes.jsx";
 import {
   LockIcon, PencilIcon, CheckIcon,
   PlayIcon, PauseIcon,
@@ -116,6 +117,10 @@ function HomeView({
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [bpmEntryOpen, setBpmEntryOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const notesSheet = notesOpen && shown.description && (
+    <NotesSheet title={shown.name} notes={shown.description} onClose={() => setNotesOpen(false)} />
+  );
   const [bpmDraft, setBpmDraft] = useState("");     // raw text in the entry field
   const bpmFocusRef = useRef(false);                // is the field being typed in
 
@@ -251,6 +256,8 @@ function HomeView({
             {shown.name} <span style={st.nameCaret}>▾</span>
           </button>
           <button onClick={() => onCycle(1)} aria-label={t("common.nextBeat")} style={st.chevBtnSm}>›</button>
+          <NotesLink notes={shown.description} onOpen={() => setNotesOpen(true)} />
+          {notesSheet}
           <button onClick={() => setBpmEntryOpen(true)} style={{ ...st.bpmBtn, ...st.landBpmBtn }}
             aria-haspopup="dialog" aria-label={t("tempo.tapToSet", { bpm })}>
             <span style={st.landBpmNum}>{bpm}</span>
@@ -306,6 +313,8 @@ function HomeView({
           <PencilIcon />
         </button>
       </div>
+      <NotesLink notes={shown.description} onOpen={() => setNotesOpen(true)} style={{ alignSelf: "center", flexShrink: 0, marginTop: -6 }} />
+      {notesSheet}
 
       {/* The strip — vertically centred in whatever space is left. */}
       <main style={st.stripWrap}>

@@ -92,6 +92,8 @@ export function draftFrom(seed) {
     cursor: 0,
     cursorLane: "dayan",
     tags: seed?.tags ?? [],
+    // The rhythm's notes, saved as the beat's description (ui/RhythmNotes.jsx).
+    notes: seed?.description ?? "",
     swing: clampSwing(seed?.swing ?? SWING_STRAIGHT),
   };
 }
@@ -108,7 +110,8 @@ export function sameContent(a, b) {
     a.meter.cpq === b.meter.cpq && a.bpm === b.bpm &&
     (a.swing ?? SWING_STRAIGHT) === (b.swing ?? SWING_STRAIGHT) && a.name.trim() === b.name.trim() &&
     sameCells(a.dayan, b.dayan, n) && sameCells(a.bayan, b.bayan, n) && sameCells(a.kartal, b.kartal, n) &&
-    (a.tags ?? []).join() === (b.tags ?? []).join();
+    (a.tags ?? []).join() === (b.tags ?? []).join() &&
+    (a.notes ?? "").trim() === (b.notes ?? "").trim();
 }
 
 /** True when the session's draft differs from where it started. */

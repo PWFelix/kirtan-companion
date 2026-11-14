@@ -17,6 +17,7 @@ const loadInstrument = () => {
   try { return localStorage.getItem(INSTRUMENT_KEY) === "kartal" ? "kartal" : "mrdanga"; } catch { return "mrdanga"; }
 };
 import { cpqFor } from "../data/meter.js";
+import { NotesLink, NotesSheet } from "../ui/RhythmNotes.jsx";
 // Hill climb: the last ACCEPTED choice is remembered; on/off is per session, so a
 // lesson never starts speeding up unasked.
 const CLIMB_KEY = "kirtan-learn-hill-climb";
@@ -44,6 +45,7 @@ const intervalLabel = (s) => (s < 60 ? t("learn.climbSec", { n: s }) : t("learn.
  */
 function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const { playing, ready, bpm, nudgeBpm, changeBpm, togglePlay, getPhase, brahmaloka } = transport;
 
   // ── Hill climb ──
@@ -115,12 +117,16 @@ function LearnView({ transport, beat, onCycle, library, beatId, onSelect, nav })
             <h1 style={st.title}>{beat.name} <span style={st.caret}>▾</span></h1>
           </button>
           <span style={st.subtitle}>{t("learn.subtitle")}</span>
+          <NotesLink notes={beat.description} onOpen={() => setNotesOpen(true)} />
         </div>
         <button onClick={() => onCycle(1)} style={sh.backBtn} aria-label={t("common.nextBeat")}>
           <ChevronRightIcon />
         </button>
       </header>
 
+      {notesOpen && beat.description && (
+        <NotesSheet title={beat.name} notes={beat.description} onClose={() => setNotesOpen(false)} />
+      )}
       {pickerOpen && (
         <BeatPickerSheet library={library} beatId={beatId} onSelect={onSelect}
           onClose={() => setPickerOpen(false)} />

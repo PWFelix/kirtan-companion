@@ -7,6 +7,7 @@ import { labelsFromGroups } from "./data/stepLabels.js";
 import { BOLS } from "./data/bols.js";
 import { t, tOr } from "./i18n/index.js";
 import { tagLine } from "./data/tags.js";
+import { NotesEditorSheet } from "./ui/RhythmNotes.jsx";
 import { TagPicker } from "./ui/TagPicker.jsx";
 import { MAX_NAME_LEN, clampName } from "./data/names.js";
 import { closedMarkBackground } from "./data/strokes.js";
@@ -98,6 +99,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   const [feelOpen, setFeelOpen] = useState(false);
   // The author's tags, published with the beat (data/tags.js).
   const [tags, setTags] = useState(start.tags ?? []);
+  const [notes, setNotes] = useState(start.notes ?? "");
   const [discardOpen, setDiscardOpen] = useState(false);
   // Copy and paste (data/clipboard.js). While choosing a run, selectAnchor is
   // the cell it started at and the cursor is its other end, so tapping cells —
@@ -106,9 +108,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
   const [selectAnchor, setSelectAnchor] = useState(null);
   const [clip, setClip] = useState(null);
   useEffect(() => {
-    onDraftChange?.({ groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags });
-  }, [groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags, onDraftChange]);
+    onDraftChange?.({ groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags, notes });
+  }, [groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags, notes, onDraftChange]);
   const [tagsOpen, setTagsOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const overviewRef = useRef(null);
   const scrubbingRef = useRef(false);
@@ -300,6 +303,7 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
       cellsPerGroup: uniform ? groups[0] : cpq, groups, dayan, bayan,
       ...(hasKartal ? { kartal } : {}),
       ...(tags.length ? { tags } : {}),
+      ...(notes.trim() ? { description: notes.trim() } : {}),
       ...(swing > SWING_STRAIGHT ? { swing } : {}),
       // A copy of a community beat remembers its original (see communityTracking.js).
       ...(initialBeat?.forkedFrom ? { forkedFrom: initialBeat.forkedFrom } : {}) });
@@ -369,6 +373,10 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
       <button onClick={() => setTagsOpen(true)} style={st.tagsLine} aria-label={t("tags.editAuthor")}>
         <span style={st.tagsLabel}>{t("tags.title")}</span>
         <span style={st.tagsValue}>{tagLine(tags) || t("tags.none")}</span>
+      </button>
+      <button onClick={() => setNotesOpen(true)} style={st.tagsLine} aria-label={t("notes.edit")}>
+        <span style={st.tagsLabel}>{t("notes.title")}</span>
+        <span style={st.tagsValue}>{notes.trim().split("\n")[0] || t("tags.none")}</span>
       </button>
 
       {/* Everything between the title and Save scrolls as one region. The
@@ -596,6 +604,9 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft
         </button>
       </div>
 
+      {notesOpen && (
+        <NotesEditorSheet initial={notes} onDone={(v) => { setNotes(v); setNotesOpen(false); }} onClose={() => setNotesOpen(false)} />
+      )}
       {tagsOpen && (
         <TagPicker title={t("tags.title")} hint={t("tags.authorHint")}
           selected={tags} onChange={setTags} onClose={() => setTagsOpen(false)} />

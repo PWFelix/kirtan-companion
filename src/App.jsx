@@ -200,7 +200,7 @@ function App() {
           id: null,
           name: target.name + " (custom)",
           note: "Custom",
-          description: undefined,
+          // The built-in's prose comes along as the copy's starting notes.
           readOnly: undefined,
         };
     beginEdit(seed, returnTo);

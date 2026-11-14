@@ -22,6 +22,7 @@ export const TAG_GROUPS = [
   group("use", ["kirtan", "bhajan", "arati", "prayers"]),
   group("part", ["main", "fill", "turnaround", "ending"]),
   group("level", ["beginner", "intermediate", "advanced"]),
+  group("practice", ["exercise-beginner", "exercise-intermediate", "exercise-advanced"]),
 ];
 
 export const ALL_TAGS = TAG_GROUPS.flatMap((g) => g.tags);
