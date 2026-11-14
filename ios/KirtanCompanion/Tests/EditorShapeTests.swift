@@ -44,8 +44,8 @@ final class EditorShapeTests: XCTestCase {
         XCTAssertEqual(doubled.groups, [4, 4, 6])
         XCTAssertEqual(doubled.cpq, 4)
         XCTAssertEqual(doubled.resolution, 2)
-        XCTAssertEqual(doubled.addingBeat().groups, [4, 4, 6, 4, 4, 6])
-        // A saved ×2 seven-eight (and six-eight) reopens with a whole-cycle ± unit.
+        XCTAssertEqual(doubled.addingBeat().groups, [4, 4, 6, 4])
+        // A saved ×2 seven-eight (and six-eight) reopens with its group pattern.
         XCTAssertEqual(EditorShape.seeded(groups: [4, 4, 6], cpq: 4).unit, [4, 4, 6])
         XCTAssertEqual(EditorShape.seeded(groups: [6, 6], cpq: 4).unit, [6, 6])
     }
@@ -68,5 +68,27 @@ final class EditorShapeTests: XCTestCase {
         XCTAssertFalse(shape.canAddBeat)  // a 33rd beat breaks the 32-beat cap
         // 32 beats of 12 is exactly the cell bound.
         XCTAssertEqual(EditorShape(groups: Array(repeating: 12, count: 32), cpq: 12, unit: [12]).steps, ShareCodec.MAX_STEPS)
+    }
+
+    func testPlusAndMinusMoveOneBeat() {
+        let six = EditorShape(groups: [3, 3], cpq: 2, unit: [3, 3])
+        XCTAssertEqual(six.addingBeat().groups, [3, 3, 3])
+        XCTAssertEqual(six.addingBeat().addingBeat().groups, [3, 3, 3, 3])
+        XCTAssertEqual(seven.addingBeat().addingBeat().addingBeat().groups, [2, 2, 3, 2, 2, 3])
+        XCTAssertEqual(seven.removingBeat().groups, [2, 2])
+        let one = six.removingBeat()
+        XCTAssertEqual(one.groups, [3])
+        XCTAssertFalse(one.canRemoveBeat)
+    }
+
+    func testTalaFeelsOfferOnlyMultiplesOfTheirBeat() {
+        let t7 = EditorShape(groups: [7, 7, 7, 7], cpq: 7, unit: [7])
+        XCTAssertEqual(t7.resolutionOptions, [7, 14, 21])
+        let fine = t7.atResolution(21)!
+        XCTAssertEqual(fine.groups, [21, 21, 21, 21])
+        XCTAssertEqual(fine.resolutionOptions, [7, 14, 21])
+        XCTAssertEqual(fine.addingBeat().groups.count, 5)
+        XCTAssertNotNil(EditorShape(groups: [9, 9, 9, 9], cpq: 9, unit: [9]).atResolution(27))
+        XCTAssertEqual(EditorShape(groups: [5, 5], cpq: 5, unit: [5]).resolutionOptions, [5, 10, 15])
     }
 }

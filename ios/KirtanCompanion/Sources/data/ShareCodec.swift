@@ -35,9 +35,9 @@ enum ShareCodec {
     static let MAX_CODE_LEN = 8000
     static let MAX_NAME_LEN = 40
     static let MAX_GROUPS = 32
-    static let MAX_GROUP_CELLS = 12
+    static let MAX_GROUP_CELLS = 27  // a 9-matra tala ×3; 12 before 0.4.35
     static let MAX_STEPS = 384
-    static let MAX_CPQ = 12
+    static let MAX_CPQ = 27  // a 9-matra tala ×3; 12 before 0.4.35
     static let MAX_CAT_BEATS = 50
 
     static let DEFAULT_NAME_BEAT = "Shared Beat"

@@ -363,6 +363,16 @@
         }
       }
     },
+    "%lld cells per beat" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld celdas por pulso"
+          }
+        }
+      }
+    },
     "%lld copies" : {
       "localizations" : {
         "en" : {

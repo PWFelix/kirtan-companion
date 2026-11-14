@@ -197,7 +197,7 @@ struct BeatEditorView: View {
                     if EditorMeter.matching(shape) == nil {
                         Text(String(localized: "As written (\(steps))", bundle: .strings)).tag(EditorMeter?.none)
                     }
-                    ForEach(EditorMeter.all) { m in Text(m.label).tag(EditorMeter?.some(m)) }
+                    ForEach(EditorMeter.all) { m in Text(m.display).tag(EditorMeter?.some(m)) }
                 }
                 .pickerStyle(.menu)
             }
@@ -825,6 +825,12 @@ struct EditorMeter: Identifiable, Hashable {
     let shape: EditorShape
     var id: String { label }
 
+    /// What the picker shows: the label, or for a tala feel its beat size in words.
+    var display: String {
+        guard !shape.isMultiplier, let b = EditorShape.talaBase(shape.cpq) else { return label }
+        return String(localized: "\(b) cells per beat", bundle: .strings)
+    }
+
     static func == (a: EditorMeter, b: EditorMeter) -> Bool { a.label == b.label }
     func hash(into h: inout Hasher) { h.combine(label) }
 
@@ -833,6 +839,10 @@ struct EditorMeter: Identifiable, Hashable {
         .init(label: "3/4", shape: EditorShape(groups: [2, 2, 2], cpq: 2, unit: [2])),
         .init(label: "6/8 · 3+3", shape: EditorShape(groups: [3, 3], cpq: 2, unit: [3, 3])),
         .init(label: "7/8 · 2+2+3", shape: EditorShape(groups: [2, 2, 3], cpq: 2, unit: [2, 2, 3])),
+        // Tala-style: every beat 5, 7 or 9 cells; the lever offers only whole multiples.
+        .init(label: "tala5", shape: EditorShape(groups: [5, 5, 5, 5], cpq: 5, unit: [5])),
+        .init(label: "tala7", shape: EditorShape(groups: [7, 7, 7, 7], cpq: 7, unit: [7])),
+        .init(label: "tala9", shape: EditorShape(groups: [9, 9, 9, 9], cpq: 9, unit: [9])),
     ]
 
     /// The preset this shape is, at any resolution — or nil for a shape no preset
@@ -840,7 +850,8 @@ struct EditorMeter: Identifiable, Hashable {
     static func matching(_ shape: EditorShape) -> EditorMeter? {
         all.first { m in
             m.shape.resolutionOptions.contains { m.shape.atResolution($0)?.groups == shape.groups && m.shape.atResolution($0)?.cpq == shape.cpq }
-                || (!m.shape.isMultiplier && !shape.isMultiplier && shape.groups.count == m.shape.groups.count)
+                || (!m.shape.isMultiplier && !shape.isMultiplier && shape.groups.count == m.shape.groups.count
+                    && EditorShape.talaBase(m.shape.cpq) == EditorShape.talaBase(shape.cpq))
         }
     }
 }

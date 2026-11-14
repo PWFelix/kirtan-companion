@@ -3,8 +3,9 @@ import Foundation
 // The editor grid's SHAPE, kept apart from the view so its maths is testable.
 //
 // Two levers change it, and they mean different things:
-//   • Beats: how many numbered beats the bar has. ± adds or removes one `unit`
-//     (a single beat in 4/4, a whole 3+3 or 2+2+3 cycle in 6/8 or 7/8).
+//   • Beats: how many numbered beats the bar has. ± adds or removes ONE beat: the
+//     next group of the feel's `unit` pattern, so 6/8 grows by a 3 and 7/8 by its
+//     next 2 or 3 (a whole cycle at once kept 6/8 from landing on 4 bars).
 //   • Resolution: how finely each beat is divided. In a SIMPLE meter (every beat
 //     one quarter, groups == cpq) it is cells per beat, 1–8. In an ODD meter it is
 //     a multiplier on the meter's own grouping, so 7/8's 2+2+3 becomes 4+4+6 and
@@ -16,7 +17,7 @@ struct EditorShape: Equatable {
     var groups: [Int]
     /// Cells per quarter note, which sets the timing.
     var cpq: Int
-    /// What one press of ± adds or removes.
+    /// The feel's group pattern; + appends its next entry.
     var unit: [Int]
 
     static let simpleResolutions = [1, 2, 3, 4, 6, 8]
@@ -26,20 +27,31 @@ struct EditorShape: Equatable {
     var beatCount: Int { groups.count }
     var beatsPerBar: Double { Double(steps) / Double(cpq) }
 
-    /// ± is refused past MAX_STEPS (384 cells, 32 beats at 12 per beat). Versions before 0.4.35 / iOS 0.4.29 capped beats at 64 cells and drop longer ones.
+    /// The beat + appends: the next group of the feel's pattern.
+    var nextGroup: Int { unit.isEmpty ? cpq : unit[groups.count % unit.count] }
+
+    /// ± is refused past MAX_STEPS (384 cells) or MAX_GROUPS beats. Versions before 0.4.35 / iOS 0.4.29 capped beats at 64 cells and drop longer ones.
     var canAddBeat: Bool {
-        steps + unit.reduce(0, +) <= ShareCodec.MAX_STEPS && groups.count + unit.count <= ShareCodec.MAX_GROUPS
+        steps + nextGroup <= ShareCodec.MAX_STEPS && groups.count + 1 <= ShareCodec.MAX_GROUPS
     }
-    var canRemoveBeat: Bool { groups.count > unit.count }
+    var canRemoveBeat: Bool { groups.count > 1 }
 
     func addingBeat() -> EditorShape {
         guard canAddBeat else { return self }
-        var s = self; s.groups += unit; return s
+        var s = self; s.groups.append(nextGroup); return s
     }
 
     func removingBeat() -> EditorShape {
         guard canRemoveBeat else { return self }
-        var s = self; s.groups.removeLast(unit.count); return s
+        var s = self; s.groups.removeLast(); return s
+    }
+
+    /// The tala-style feels' beat sizes: every beat 5, 7 or 9 cells (matras).
+    static let talaBases = [5, 7, 9]
+
+    /// The 5/7/9 a cells-per-beat count is a whole multiple (1–3×) of, or nil.
+    static func talaBase(_ cpq: Int) -> Int? {
+        talaBases.last { cpq % $0 == 0 && (1...3).contains(cpq / $0) }
     }
 
     // MARK: resolution
@@ -51,11 +63,13 @@ struct EditorShape: Equatable {
     var resolution: Int { isMultiplier ? EditorShape.factor(groups, cpq) : cpq }
 
     var resolutionOptions: [Int] {
-        Array(Set((isMultiplier ? EditorShape.multipliers : EditorShape.simpleResolutions) + [resolution])).sorted()
+        // A tala feel only ever divides into whole multiples of its beat (7 · 14 · 21).
+        if !isMultiplier, let b = EditorShape.talaBase(cpq) { return [b, 2 * b, 3 * b] }
+        return Array(Set((isMultiplier ? EditorShape.multipliers : EditorShape.simpleResolutions) + [resolution])).sorted()
     }
 
     /// The shape at [option] on the lever, or nil when it would pass the format's
-    /// caps (MAX_STEPS cells in all, 12 in one beat).
+    /// caps (MAX_STEPS cells in all, MAX_GROUP_CELLS in one beat).
     func atResolution(_ option: Int) -> EditorShape? {
         let k = resolution
         let shape: EditorShape
