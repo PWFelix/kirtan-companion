@@ -101,6 +101,7 @@ internal fun LearnScreen(
     val libraryState by library.state.collectAsState()
     // Tapping the name opens Home's quick-pick: built-ins, your beats, your lists.
     var pickerOpen by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    var notesOpen by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     if (pickerOpen) {
         com.kirtan.companion.ui.home.BeatPickerSheet(
             library = library,
@@ -179,6 +180,9 @@ internal fun LearnScreen(
             return@Column
         }
 
+        if (notesOpen && !beat.description.isNullOrBlank()) {
+            com.kirtan.companion.ui.components.NotesSheet(beat.name, beat.description, onDismiss = { notesOpen = false })
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             HairlineIconButton(
                 icon = KcIcons.Back,
@@ -204,6 +208,7 @@ internal fun LearnScreen(
                     color = PaletteToken.SYAHI_SOFT.color,
                     fontSize = 12.sp,
                 )
+                com.kirtan.companion.ui.components.NotesLink(beat.description) { notesOpen = true }
             }
             HairlineIconButton(
                 icon = KcIcons.ChevronRight,

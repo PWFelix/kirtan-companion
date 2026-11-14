@@ -330,7 +330,8 @@ class ShippedBeatsClient(
                 heading = meta.heading,
                 beat = edited,
                 sourcePublishedId = meta.sourcePublishedId,
-                description = meta.description,
+                // The editor now carries the notes, so the edited prose is the row's.
+                description = edited.description,
             ),
             Strings.get(R.string.err_edit_invalid),
         )

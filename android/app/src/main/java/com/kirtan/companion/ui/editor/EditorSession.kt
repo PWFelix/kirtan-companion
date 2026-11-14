@@ -39,22 +39,26 @@ internal class EditorSession(
     var returnTo: com.kirtan.companion.ui.nav.Tab?,
     draft: EditorDraft = EditorDraft.from(seed),
     tags: List<String> = seed?.tags.orEmpty(),
+    notes: String = seed?.description.orEmpty(),
 ) {
     var draft by mutableStateOf(draft)
     var tags by mutableStateOf(tags)
+    /** The rhythm's notes (saved as the beat's description); see RhythmNotes.kt. */
+    var notes by mutableStateOf(notes)
 
     /**
      * True when the draft's CONTENT differs from [seed] — not "was touched", so
      * undoing back to the original clears it.
      */
-    val dirty: Boolean get() = isDirty(seed, draft, tags)
+    val dirty: Boolean get() = isDirty(seed, draft, tags, notes)
 
     /** The same edit, back at its starting point: Revert, or Start over for a new beat. */
     fun fresh() = EditorSession(seed, forEveryone, returnTo)
 
     companion object {
-        fun isDirty(seed: Beat?, draft: EditorDraft, tags: List<String>): Boolean =
-            !sameContent(draft, EditorDraft.from(seed)) || tags != seed?.tags.orEmpty()
+        fun isDirty(seed: Beat?, draft: EditorDraft, tags: List<String>, notes: String = seed?.description.orEmpty()): Boolean =
+            !sameContent(draft, EditorDraft.from(seed)) || tags != seed?.tags.orEmpty() ||
+                notes.trim() != seed?.description.orEmpty().trim()
 
         /** What a save would write, compared field by field; cursor and undo don't count. */
         fun sameContent(a: EditorDraft, b: EditorDraft): Boolean =
@@ -90,6 +94,7 @@ internal class EditorDraftStore(context: Context) {
             put("draft", LibraryJson.encodeStored(s.draft.toBeat(null).copy(name = s.draft.name.ifEmpty { "-" })))
             put("cursor", s.draft.cursor)
             put("tags", buildJsonArray { s.tags.forEach { add(JsonPrimitive(it)) } })
+            put("notes", s.notes)
         }.toString()
 
         fun decode(raw: String?): EditorSession? = runCatching {
@@ -100,7 +105,8 @@ internal class EditorDraftStore(context: Context) {
             val cursor = o["cursor"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.coerceIn(0, base.steps - 1) ?: 0
             val draft = base.copy(name = o["name"]?.jsonPrimitive?.contentOrNull.orEmpty(), cursor = cursor)
             val tags = o["tags"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
-            EditorSession(seed, o["forEveryone"]?.jsonPrimitive?.boolean == true, null, draft, tags)
+            val notes = o["notes"]?.jsonPrimitive?.contentOrNull ?: seed?.description.orEmpty()
+            EditorSession(seed, o["forEveryone"]?.jsonPrimitive?.boolean == true, null, draft, tags, notes)
         }.getOrNull()
     }
 }

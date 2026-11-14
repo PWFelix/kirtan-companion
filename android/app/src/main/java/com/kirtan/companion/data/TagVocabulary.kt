@@ -47,6 +47,11 @@ object TagVocabulary {
             Tag("intermediate", R.string.tag_intermediate),
             Tag("advanced", R.string.tag_advanced),
         )),
+        Group("practice", R.string.tag_group_practice, listOf(
+            Tag("exercise-beginner", R.string.tag_exercise_beginner),
+            Tag("exercise-intermediate", R.string.tag_exercise_intermediate),
+            Tag("exercise-advanced", R.string.tag_exercise_advanced),
+        )),
     )
 
     private val byId: Map<String, Tag> = groups.flatMap { it.tags }.associateBy { it.id }

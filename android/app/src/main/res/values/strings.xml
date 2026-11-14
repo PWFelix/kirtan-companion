@@ -306,6 +306,9 @@
     <string name="note_lively">Lively</string>
     <string name="note_swing">Swing</string>
     <string name="note_variation">Variation</string>
+    <string name="notes_hint">About the rhythm: its history, when to use it, how to play it, which fingers to use. Saved and published with the beat; share links leave it out.</string>
+    <string name="notes_open">About this rhythm</string>
+    <string name="notes_title">Notes</string>
     <string name="notif_channel_desc">Keeps the drum playing while the screen is off</string>
     <string name="notif_channel_name">Playback</string>
     <string name="notif_title">Kirtanero</string>
@@ -441,10 +444,14 @@
     <string name="tag_dadra">Dadra</string>
     <string name="tag_double_time">Double time</string>
     <string name="tag_ending">Ending</string>
+    <string name="tag_exercise_advanced">Advanced exercise</string>
+    <string name="tag_exercise_beginner">Beginner exercise</string>
+    <string name="tag_exercise_intermediate">Intermediate exercise</string>
     <string name="tag_fill">Fill</string>
     <string name="tag_group_feel">Feel</string>
     <string name="tag_group_level">Level</string>
     <string name="tag_group_part">Part</string>
+    <string name="tag_group_practice">Hasta sadhana (practice)</string>
     <string name="tag_group_tala">Tala</string>
     <string name="tag_group_use">Use</string>
     <string name="tag_intermediate">Intermediate</string>

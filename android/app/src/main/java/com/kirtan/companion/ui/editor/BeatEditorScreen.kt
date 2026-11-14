@@ -137,6 +137,8 @@ internal fun BeatEditorScreen(
     var tags by session::tags
     var discardOpen by remember { mutableStateOf(false) }
     var tagsOpen by remember { mutableStateOf(false) }
+    var notes by session::notes
+    var notesOpen by remember { mutableStateOf(false) }
     var previewing by remember { mutableStateOf(false) }
     var feelOpen by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -222,6 +224,7 @@ internal fun BeatEditorScreen(
             built.copy(
                 name = name,
                 tags = tags,
+                description = notes.trim().ifEmpty { null },
                 // Credit for an edited copy of a community beat (and what stops it
                 // being re-shared until the music actually differs).
                 forkedFrom = if (savesAsCopy) initialBeat?.sourceItemId else null,
@@ -323,6 +326,14 @@ internal fun BeatEditorScreen(
                     selected = tags,
                     onDismiss = { tagsOpen = false },
                     onDone = { tags = it; tagsOpen = false },
+                )
+            }
+            com.kirtan.companion.ui.components.NotesLine(notes = notes, onEdit = { notesOpen = true })
+            if (notesOpen) {
+                com.kirtan.companion.ui.components.NotesEditorSheet(
+                    initial = notes,
+                    onDismiss = { notesOpen = false },
+                    onDone = { notes = it; notesOpen = false },
                 )
             }
             OverviewZone(

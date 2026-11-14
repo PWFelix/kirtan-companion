@@ -300,6 +300,9 @@
     <string name="note_lively">Animado</string>
     <string name="note_swing">Swing</string>
     <string name="note_variation">Variación</string>
+    <string name="notes_hint">Sobre el ritmo: su historia, cuándo usarlo, cómo tocarlo, qué dedos usar. Se guarda y se publica con el ritmo; los enlaces para compartir no lo incluyen.</string>
+    <string name="notes_open">Sobre este ritmo</string>
+    <string name="notes_title">Notas</string>
     <string name="notif_channel_desc">Mantiene el tambor sonando con la pantalla apagada</string>
     <string name="notif_channel_name">Reproducción</string>
     <string name="notif_title">Kirtanero</string>
@@ -435,10 +438,14 @@
     <string name="tag_dadra">Dadra</string>
     <string name="tag_double_time">Doble tiempo</string>
     <string name="tag_ending">Final</string>
+    <string name="tag_exercise_advanced">Ejercicio avanzado</string>
+    <string name="tag_exercise_beginner">Ejercicio de principiante</string>
+    <string name="tag_exercise_intermediate">Ejercicio intermedio</string>
     <string name="tag_fill">Relleno</string>
     <string name="tag_group_feel">Sensación</string>
     <string name="tag_group_level">Nivel</string>
     <string name="tag_group_part">Parte</string>
+    <string name="tag_group_practice">Hasta sadhana (práctica)</string>
     <string name="tag_group_tala">Tala</string>
     <string name="tag_group_use">Uso</string>
     <string name="tag_intermediate">Intermedio</string>

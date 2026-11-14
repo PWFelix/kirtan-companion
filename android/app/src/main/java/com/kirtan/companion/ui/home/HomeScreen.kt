@@ -380,6 +380,10 @@ private fun BeatSwitcherRow(
     onEdit: () -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
+    var notesOpen by remember { mutableStateOf(false) }
+    if (notesOpen && !beat.description.isNullOrBlank()) {
+        com.kirtan.companion.ui.components.NotesSheet(beat.name, beat.description, onDismiss = { notesOpen = false })
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -428,6 +432,7 @@ private fun BeatSwitcherRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            com.kirtan.companion.ui.components.NotesLink(beat.description) { notesOpen = true }
         }
 
         HairlineIconButton(

@@ -80,4 +80,22 @@ class EditorSessionTest {
         assertNull(EditorDraftStore.decode("not json"))
         assertNull(EditorDraftStore.decode(null))
     }
+
+    @Test
+    fun `notes count as a change and survive a round trip to disk`() {
+        val s = EditorSession(keherva, false, null)
+        assertEquals(keherva.description.orEmpty(), s.notes)
+        s.notes = s.notes + "  "
+        assertFalse(s.dirty)
+        s.notes = "Play the na with the ring finger."
+        assertTrue(s.dirty)
+        val back = EditorDraftStore.decode(EditorDraftStore.encode(s))
+        assertEquals("Play the na with the ring finger.", back?.notes)
+    }
+
+    @Test
+    fun `the practice group holds the three exercise tags`() {
+        val g = com.kirtan.companion.data.TagVocabulary.groups.first { it.id == "practice" }
+        assertEquals(listOf("exercise-beginner", "exercise-intermediate", "exercise-advanced"), g.tags.map { it.id })
+    }
 }
