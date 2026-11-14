@@ -24,4 +24,12 @@ enum EditorTimelineMath {
     static func cycle(of row: Int, steps: Int) -> Int {
         steps <= 0 ? 0 : Int((Double(row) / Double(steps)).rounded(.down))
     }
+
+    /// The columns left to right, as on the Learn highway: a right-handed player's bayan
+    /// (left hand) on the left and dayan on the right; `leftHanded` mirrors the drum.
+    /// Kartal has no side, so it stays on the far right either way.
+    static func columns(leftHanded: Bool) -> [LaneId] {
+        let drum: [LaneId] = leftHanded ? [.dayan, .bayan] : [.bayan, .dayan]
+        return drum + LaneId.ordered.filter { !drum.contains($0) }
+    }
 }

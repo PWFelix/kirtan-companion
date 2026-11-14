@@ -413,6 +413,8 @@ struct BeatEditorView: View {
             selection: selection,
             previewing: previewing,
             getPhase: { transport.getPhase() },
+            leftHanded: transport.settings.learnLeftHanded,
+            onFlip: { transport.setLearnLeftHanded(!transport.settings.learnLeftHanded) },
             onCellTap: { lane, step in tapCell(lane: lane, step: step) },
             onLaneTap: { lane in setCursor(lane: lane, step: cursor.step) },
             onCursor: { step in setCursor(lane: cursor.lane, step: step) },

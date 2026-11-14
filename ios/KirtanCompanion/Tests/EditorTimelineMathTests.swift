@@ -21,4 +21,9 @@ final class EditorTimelineMathTests: XCTestCase {
         XCTAssertEqual(EditorTimelineMath.nearest(7, from: 0, steps: 8), -1)
         XCTAssertEqual(EditorTimelineMath.nearest(3, from: 2.6, steps: 8), 3)
     }
+
+    func testBayanSitsLeftForARightHandedPlayerAndKartalStaysRight() {
+        XCTAssertEqual(EditorTimelineMath.columns(leftHanded: false), [.bayan, .dayan, .kartal])
+        XCTAssertEqual(EditorTimelineMath.columns(leftHanded: true), [.dayan, .bayan, .kartal])
+    }
 }

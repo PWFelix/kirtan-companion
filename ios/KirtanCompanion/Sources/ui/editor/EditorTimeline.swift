@@ -34,6 +34,9 @@ struct EditorTimeline: View {
     let selection: ClosedRange<Int>?
     let previewing: Bool
     let getPhase: () -> Double
+    /// Shared with Learn's handedness setting: flipping it here flips it there.
+    let leftHanded: Bool
+    let onFlip: () -> Void
     let onCellTap: (_ lane: Int, _ step: Int) -> Void
     let onLaneTap: (_ lane: Int) -> Void
     let onCursor: (_ step: Int) -> Void
@@ -47,18 +50,28 @@ struct EditorTimeline: View {
     @State private var box: TimelinePosition?
 
     private var steps: Int { groups.reduce(0, +) }
+    /// Screen columns, left to right. `cursorLane` and the callbacks speak LaneId.ordered indices.
+    private var columns: [LaneId] { EditorTimelineMath.columns(leftHanded: leftHanded) }
+    private func orderedIndex(_ lane: LaneId) -> Int { LaneId.ordered.firstIndex(of: lane) ?? 0 }
 
     var body: some View {
         let position = box ?? TimelinePosition(Double(cursorStep))
         VStack(spacing: 4) {
             HStack(spacing: 0) {
-                Color.clear.frame(width: Self.gutter, height: 1)
-                ForEach(LaneId.ordered.indices, id: \.self) { i in
+                // ⇄ mirrors the drum, as Learn's handedness button does (the same setting).
+                Button(action: onFlip) {
+                    Text("⇄").font(.system(size: 18, weight: .bold)).foregroundStyle(Palette.clay)
+                        .frame(width: Self.gutter, height: 30)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(leftHanded ? String(localized: "Left-handed · dayan on the left", bundle: .strings) : String(localized: "Right-handed · dayan on the right", bundle: .strings))
+                ForEach(columns, id: \.self) { lane in
+                    let i = orderedIndex(lane)
                     Button { onLaneTap(i) } label: {
-                        Text(LaneId.ordered[i].label.uppercased())
+                        Text(lane.label.uppercased())
                             .font(.system(size: 11, weight: i == cursorLane ? .bold : .medium))
                             .tracking(0.8)
-                            .foregroundStyle(Palette.lane(LaneId.ordered[i]))
+                            .foregroundStyle(Palette.lane(lane))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
@@ -66,8 +79,11 @@ struct EditorTimeline: View {
                 }
             }
             GeometryReader { geo in
-                TimelineView(.animation) { _ in
+                // The canvas must READ the frame's date, or a device never redraws it.
+                TimelineView(.animation) { timeline in
+                    let frameDate = timeline.date
                     Canvas { ctx, size in
+                        _ = frameDate
                         advance(position)
                         draw(ctx, size: size, pos: position.pos)
                     }
@@ -124,8 +140,8 @@ struct EditorTimeline: View {
                 // A tap: which lane column, which row.
                 let x = v.location.x, y = v.location.y
                 guard x >= Self.gutter, steps > 0 else { return }
-                let colW = (size.width - Self.gutter) / Double(LaneId.ordered.count)
-                let lane = min(LaneId.ordered.count - 1, Int((x - Self.gutter) / colW))
+                let colW = (size.width - Self.gutter) / Double(columns.count)
+                let lane = orderedIndex(columns[min(columns.count - 1, Int((x - Self.gutter) / colW))])
                 let row = EditorTimelineMath.row(at: p.pos, dyUp: size.height / 2 - y, cell: Self.cell)
                 if previewing { onPause() }
                 onCellTap(lane, EditorTimelineMath.wrap(row, steps: steps))
@@ -136,7 +152,7 @@ struct EditorTimeline: View {
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Palette.headWorn))
         guard steps > 0 else { return }
         let cell = Self.cell, gutter = Self.gutter
-        let colW = (size.width - gutter) / Double(LaneId.ordered.count)
+        let colW = (size.width - gutter) / Double(columns.count)
         let cy = size.height / 2
         let half = size.height / 2 / cell
         let lineCycle = EditorTimelineMath.cycle(of: Int(pos.rounded()), steps: steps)
@@ -169,7 +185,7 @@ struct EditorTimeline: View {
                     at: CGPoint(x: gutter / 2, y: y),
                 )
             }
-            for (i, lane) in LaneId.ordered.enumerated() {
+            for (i, lane) in columns.enumerated() {
                 let cx = gutter + colW * Double(i) + colW / 2
                 let color = Palette.lane(lane).opacity(a)
                 let pattern = lanes[lane] ?? []
@@ -186,7 +202,7 @@ struct EditorTimeline: View {
                 case nil:
                     ctx.fill(Path(ellipseIn: CGRect(x: cx - 2, y: y - 2, width: 4, height: 4)), with: .color(Palette.rule.opacity(a)))
                 }
-                if !faint, idx == cursorStep, i == cursorLane, abs(Double(row) - pos) < 0.5 {
+                if !faint, idx == cursorStep, orderedIndex(lane) == cursorLane, abs(Double(row) - pos) < 0.5 {
                     ctx.stroke(
                         Path(roundedRect: CGRect(x: gutter + colW * Double(i) + 4, y: y - cell / 2 + 3, width: colW - 8, height: cell - 6), cornerRadius: 8),
                         with: .color(Palette.clay), lineWidth: 2,

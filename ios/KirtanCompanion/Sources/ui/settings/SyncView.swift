@@ -70,7 +70,8 @@ struct SyncView: View {
                     .foregroundStyle(Palette.syahiSoft)
 
                 HStack(spacing: 16) {
-                    TimelineView(.animation(paused: !clicking)) { _ in
+                    TimelineView(.animation(paused: !clicking)) { timeline in
+                        let _ = timeline.date
                         Circle()
                             .fill(Palette.clay.opacity(0.12 + 0.88 * flash()))
                             .frame(width: 56, height: 56)

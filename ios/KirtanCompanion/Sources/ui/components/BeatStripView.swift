@@ -28,8 +28,12 @@ struct BeatStripView: View {
     var lanes: [LaneId] { stripLanes(for: beat, mini: mini) }
 
     var body: some View {
-        TimelineView(.animation(paused: !playing)) { _ in
+        // The canvas must READ the frame's date: on a real device SwiftUI otherwise
+        // treats the content as unchanged and never redraws it (the simulator does).
+        TimelineView(.animation(paused: !playing)) { timeline in
+            let frameDate = timeline.date
             Canvas { context, size in
+                _ = frameDate
                 draw(&context, size: size, phase: getPhase?() ?? 0)
             }
         }
