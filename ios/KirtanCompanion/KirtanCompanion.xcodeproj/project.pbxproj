@@ -250,7 +250,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 46;
+				CURRENT_PROJECT_VERSION = 47;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Support/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Kirtanero;
@@ -263,7 +263,7 @@
 					"@executable_path/Frameworks",
 				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				MARKETING_VERSION = 0.4.36;
+				MARKETING_VERSION = 0.4.37;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kirtan.companion.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -279,7 +279,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 46;
+				CURRENT_PROJECT_VERSION = 47;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Support/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Kirtanero;
@@ -292,7 +292,7 @@
 					"@executable_path/Frameworks",
 				);
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				MARKETING_VERSION = 0.4.36;
+				MARKETING_VERSION = 0.4.37;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kirtan.companion.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

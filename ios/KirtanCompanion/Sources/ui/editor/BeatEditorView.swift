@@ -41,6 +41,8 @@ struct BeatEditorView: View {
     @State private var kartal: [Stroke?] = Array(repeating: nil, count: 8)
     @State private var cursor: (lane: Int, step: Int) = (0, 0)
     @State private var previewing = false
+    /// Timeline (vertical, the default) or the original strip; remembered per device.
+    @AppStorage("kirtanEditorView") private var editorView = "timeline"
     /// Grid cell size, rescaled by a pinch. Bounded so it stays tappable on a phone.
     @State private var cellSize: CGFloat = 32
     /// The cell size when the current pinch began, so `magnification` scales relative to it.
@@ -91,7 +93,8 @@ struct BeatEditorView: View {
                     .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 10))
                     lengthRow
                     resolutionRow
-                    grid
+                    viewSwitch
+                    if editorView == "strip" { grid } else { timeline }
                     clipRow
                     pads
                     saveRow
@@ -378,6 +381,48 @@ struct BeatEditorView: View {
         }
         }
         .simultaneousGesture(magnify)
+    }
+
+    private var viewSwitch: some View {
+        HStack(spacing: 8) {
+            ForEach(["timeline", "strip"], id: \.self) { v in
+                let on = editorView == v
+                Button {
+                    editorView = v
+                } label: {
+                    Text(v == "timeline" ? String(localized: "Timeline", bundle: .strings) : String(localized: "Strip", bundle: .strings))
+                        .font(.subheadline.weight(.bold))
+                        .padding(.horizontal, 16).frame(minHeight: 36)
+                        .foregroundStyle(on ? Color.white : Palette.syahi)
+                        .background(on ? Palette.clay : Color.clear, in: Capsule())
+                        .overlay(Capsule().stroke(on ? Palette.clay : Palette.rule))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+    }
+
+    /// The vertical view: the beat runs past a centre line that is the cursor.
+    private var timeline: some View {
+        EditorTimeline(
+            lanes: lanes,
+            groups: shape.groups,
+            cursorLane: cursor.lane,
+            cursorStep: cursor.step,
+            selection: selection,
+            previewing: previewing,
+            getPhase: { transport.getPhase() },
+            onCellTap: { lane, step in tapCell(lane: lane, step: step) },
+            onLaneTap: { lane in setCursor(lane: lane, step: cursor.step) },
+            onCursor: { step in setCursor(lane: cursor.lane, step: step) },
+            onPause: { if previewing { stopPreview() } },
+            onScrubSound: { step in
+                for (i, lane) in LaneId.ordered.enumerated() {
+                    if let s = patternValue(i, step) { transport.engineHandle.playStroke(lane, open: s == .open) }
+                }
+            },
+        )
     }
 
     /// Pinch the grid to rescale its cells. The base is frozen at the gesture's start so the

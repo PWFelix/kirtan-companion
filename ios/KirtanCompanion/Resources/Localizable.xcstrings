@@ -3673,6 +3673,16 @@
         }
       }
     },
+    "Strip" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tira"
+          }
+        }
+      }
+    },
     "Swing" : {
       "localizations" : {
         "es" : {
@@ -4291,6 +4301,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Preciso"
+          }
+        }
+      }
+    },
+    "Timeline" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Línea de tiempo"
           }
         }
       }
