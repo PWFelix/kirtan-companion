@@ -32,6 +32,18 @@ export const STROKES = {
 export const REST = { shape: "rest", color: "transparent", label: "rest" };
 
 /**
+ * The closed-stroke X as a CSS background: two diagonal bars of `color`,
+ * `half` px either side of the diagonal. The strip draws the same mark in
+ * index.css (.ks-closed); this is for marks styled inline (the editor pads).
+ */
+export function closedMarkBackground(color, half) {
+  const bar = (deg) =>
+    `linear-gradient(${deg}deg, transparent calc(50% - ${half}px), ${color} calc(50% - ${half}px), ` +
+    `${color} calc(50% + ${half}px), transparent calc(50% + ${half}px))`;
+  return `${bar(45)}, ${bar(-45)}`;
+}
+
+/**
  * Look up the visual for a stroke value.
  * @param {string|null} value - e.g. "O", "X", or null
  * @returns the stroke definition, or REST if empty/unknown.

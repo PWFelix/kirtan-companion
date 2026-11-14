@@ -126,6 +126,59 @@ input[type="range"].kc-range::-moz-range-thumb {
   background: var(--surface-paper); border: 2px solid var(--accent-action);
 }
 
+/* ── Brahmaloka time (see data/meter.js) ──
+   .kc-brahma: the slider in the high range — a fire track and a gold thumb.
+   .kc-charging: the thumb held at 200, its glow swelling over the hold time
+   (1400ms, BRAHMA_HOLD_MS in ui/BpmRange.jsx) until the range unlocks, while
+   .kc-building shakes the slider harder and harder. */
+input[type="range"].kc-range.kc-brahma::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, oklch(0.80 0.15 85) 0%, oklch(0.60 0.20 35) var(--fill,50%), var(--cell) var(--fill,50%), var(--cell) 100%);
+}
+input[type="range"].kc-range.kc-brahma::-moz-range-progress { background: oklch(0.62 0.20 40); }
+input[type="range"].kc-range.kc-brahma::-webkit-slider-thumb { border-color: oklch(0.70 0.17 60); box-shadow: 0 0 10px oklch(0.80 0.15 75 / 0.7); }
+input[type="range"].kc-range.kc-brahma::-moz-range-thumb { border-color: oklch(0.70 0.17 60); box-shadow: 0 0 10px oklch(0.80 0.15 75 / 0.7); }
+input[type="range"].kc-range.kc-charging::-webkit-slider-thumb { animation: kc-charge 1400ms ease-in forwards; }
+input[type="range"].kc-range.kc-charging::-moz-range-thumb { animation: kc-charge 1400ms ease-in forwards; }
+/* The push-back: a wobble that grows from a tremor to a shudder over the hold. */
+.kc-building { animation: kc-build 1400ms linear forwards; }
+@keyframes kc-build {
+  0%   { transform: translate(0, 0); }
+  8%   { transform: translate(1px, 0); }   16% { transform: translate(-1px, 0); }
+  24%  { transform: translate(1.5px, -0.5px); } 32% { transform: translate(-1.5px, 0.5px); }
+  40%  { transform: translate(2.5px, -1px) rotate(0.2deg); } 46% { transform: translate(-2.5px, 1px) rotate(-0.2deg); }
+  52%  { transform: translate(3px, -1px) rotate(0.3deg); } 58% { transform: translate(-3.5px, 1px) rotate(-0.3deg); }
+  64%  { transform: translate(4px, -1.5px) rotate(0.4deg); } 69% { transform: translate(-4.5px, 1.5px) rotate(-0.4deg); }
+  74%  { transform: translate(5px, -2px) rotate(0.5deg); } 78% { transform: translate(-5.5px, 2px) rotate(-0.5deg); }
+  82%  { transform: translate(6px, -2px) rotate(0.6deg); } 86% { transform: translate(-6.5px, 2.5px) rotate(-0.6deg); }
+  89%  { transform: translate(7px, -2.5px) rotate(0.7deg); } 92% { transform: translate(-7px, 3px) rotate(-0.7deg); }
+  95%  { transform: translate(7.5px, -3px) rotate(0.8deg); } 98% { transform: translate(-7.5px, 3px) rotate(-0.8deg); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes kc-charge {
+  from { box-shadow: 0 0 0 0 oklch(0.80 0.15 75 / 0); }
+  to   { box-shadow: 0 0 0 14px oklch(0.80 0.15 75 / 0.55), 0 0 28px 10px oklch(0.70 0.20 45 / 0.6); }
+}
+/* The whole app shudders as the range unlocks. */
+.kc-shake { animation: kc-shake 650ms cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes kc-shake {
+  10%, 90% { transform: translate(-2px, 1px); }
+  20%, 80% { transform: translate(4px, -2px); }
+  30%, 50%, 70% { transform: translate(-7px, 3px) rotate(-0.4deg); }
+  40%, 60% { transform: translate(7px, -3px) rotate(0.4deg); }
+}
+.kc-brahma-caption { animation: kc-brahma-caption 2200ms ease-out both; }
+@keyframes kc-brahma-caption {
+  0% { opacity: 0; transform: scale(0.9); }
+  18% { opacity: 1; transform: scale(1.02); }
+  75% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kc-shake, .kc-building { animation: none; }
+  input[type="range"].kc-range.kc-charging::-webkit-slider-thumb,
+  input[type="range"].kc-range.kc-charging::-moz-range-thumb { animation-duration: 1ms; }
+}
+
 /* ── Tal chakra (circular BeatIndicator) ──
    The SVG structure is memo'd in React and never re-renders per step. The
    active step is highlighted by toggling data-active on a step's <g>; the
@@ -219,22 +272,14 @@ input[type="range"].kc-range::-moz-range-thumb {
   white-space: nowrap;
   letter-spacing: 0.01em;
 }
-/* The tilak stands in as the "i" of Companion — it sits on the text
-   baseline (inline SVGs do by default) at roughly cap height. */
-.kc-wm-tilak {
-  height: 0.74em; width: auto;
-  color: var(--strap);
-  margin: 0 0.015em;
-}
-
 /* ── Splash (.kc-splash-*) — wheel hero + entrance animation ── */
 .kc-splash-wheel {
   position: absolute; left: 50%; top: 50%;
   transform: translate(-50%, -50%);
   width: 110vmin; aspect-ratio: 1;
   background: var(--clay); opacity: 0.1;
-  -webkit-mask: url(/images/dharma-wheel.png) center / contain no-repeat;
-  mask: url(/images/dharma-wheel.png) center / contain no-repeat;
+  -webkit-mask: url(/images/splash-mridanga.png) center / contain no-repeat;
+  mask: url(/images/splash-mridanga.png) center / contain no-repeat;
   pointer-events: none;
   animation: kc-wheel-in 1100ms ease-out both;
 }
@@ -396,13 +441,24 @@ input[type="range"].kc-range::-moz-range-thumb {
   transition: transform 90ms ease, background-color 90ms ease, border-color 90ms ease;
 }
 .ks-open   { width: 18px; height: 18px; border-radius: 50%; background: var(--ks-lanecolor); }
-.ks-closed { width: 18px; height: 18px; border-radius: 50%; border: 3.5px solid var(--ks-lanecolor); }
+/* Closed (te, khe): an X, the damped stroke — clearer than a ring beside a
+   filled disc. Two diagonal bars drawn as gradients, so the colour is one
+   custom property the active state can swap. */
+.ks-closed {
+  --ks-x: var(--ks-lanecolor); --ks-xw: 1.9px;
+  width: 18px; height: 18px;
+  background:
+    linear-gradient(45deg, transparent calc(50% - var(--ks-xw)), var(--ks-x) calc(50% - var(--ks-xw)),
+                    var(--ks-x) calc(50% + var(--ks-xw)), transparent calc(50% + var(--ks-xw))),
+    linear-gradient(-45deg, transparent calc(50% - var(--ks-xw)), var(--ks-x) calc(50% - var(--ks-xw)),
+                    var(--ks-x) calc(50% + var(--ks-xw)), transparent calc(50% + var(--ks-xw)));
+}
 .ks-rest   { width: 6px; height: 6px; border-radius: 50%; background: var(--rule); }
 
 /* The sounding cell: mark turns syahi-black and swells. */
 .ks-cell[data-active="true"] .ks-open,
 .ks-cell[data-active="true"] .ks-rest { background: var(--syahi); transform: scale(1.3); }
-.ks-cell[data-active="true"] .ks-closed { border-color: var(--syahi); transform: scale(1.3); }
+.ks-cell[data-active="true"] .ks-closed { --ks-x: var(--syahi); transform: scale(1.3); }
 
 .ks-bol {
   font-family: var(--font-body); font-size: 10px; font-weight: 600;
@@ -439,7 +495,7 @@ input[type="range"].kc-range::-moz-range-thumb {
 .ks-mini .ks-cell { background: transparent; border-radius: 0; }
 .ks-mini .ks-cell[data-sam="true"] { box-shadow: none; }
 .ks-mini .ks-open   { width: 8px; height: 8px; }
-.ks-mini .ks-closed { width: 8px; height: 8px; border-width: 2px; }
+.ks-mini .ks-closed { width: 8px; height: 8px; --ks-xw: 1.1px; }
 .ks-mini .ks-rest   { width: 3px; height: 3px; }
 
 @media (prefers-reduced-motion: reduce) {

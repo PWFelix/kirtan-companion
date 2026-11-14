@@ -1,15 +1,19 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { LANES } from "../data/lanes.js";
-import { EQ_BANDS, EQ_BAND_COUNT, EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
-import { TUNE_MIN_CENTS, TUNE_MAX_CENTS, END_BASE_FREQ, centsToRate, freqToNoteName } from "../data/tuning.js";
 import { MIN_BPM, MAX_BPM } from "../hooks/useTransport.js";
+import { tempoRange } from "../data/meter.js";
+import BpmRange from "../ui/BpmRange.jsx";
+import BrahmalokaBurst from "../ui/BrahmalokaBurst.jsx";
+import SequencePanel from "./SequencePanel.jsx";
+import { addEntry, setEntryBars, setEntryBeat, moveEntry, removeEntry } from "../data/sequences.js";
 import BeatStrip from "../BeatStrip.jsx";
 import Wordmark from "../Wordmark.jsx";
-import ScrollFadeRow from "../ui/ScrollFadeRow.jsx";
+import BeatPickerSheet from "../ui/BeatPickerSheet.jsx";
 import * as sh from "../ui/styles.js";
+import { t, noteLabel } from "../i18n/index.js";
+import { NotesLink, NotesSheet } from "../ui/RhythmNotes.jsx";
 import {
-  LockIcon, PencilIcon, MixerIcon, SpeakerIcon, EqIcon, TuneIcon, CheckIcon,
-  PlayIcon, PauseIcon, RadioDot,
+  LockIcon, PencilIcon, CheckIcon,
+  PlayIcon, PauseIcon,
 } from "../ui/icons.jsx";
 
 // Scroll-wheel BPM picker: an iOS-style snapping column, tuned so the
@@ -62,22 +66,6 @@ function BpmWheel({ value, min, max, onChange }) {
   );
 }
 
-// Per-end EQ (epic #1): band labels and count come from the shared spec the
-// engine and persistence also read (data/eq.js), so the sliders can't drift
-// from the DSP chain. The band gains and panel-open state live in the
-// transport (eqBands / eqOpen); EQ_FLAT is a render-safe fallback for
-// reading them — a destructure default only applies while a field is
-// undefined.
-const EQ_BAND_LABELS = EQ_BANDS.map(band => band.label);
-const EQ_FLAT = Array.from({ length: EQ_BAND_COUNT }, () => 0);
-
-// Signed gain readout for the EQ bands: "+3 dB" / "0 dB" / "−3 dB" — the
-// explicit sign makes the cut/boost direction legible at a glance.
-function fmtDb(db) {
-  if (db === 0) return "0 dB";
-  return (db > 0 ? "+" : "−") + Math.abs(db) + " dB";
-}
-
 /**
  * HomeView — the playing screen, in two layouts.
  *
@@ -88,7 +76,7 @@ function fmtDb(db) {
  * the ENTIRE transport collapses into one 44px rail and the strip takes the
  * rest, its cells sized from the slot via container query units.
  *
- * Both layouts share the same three sheets (quick-pick, mixer, tempo), which
+ * Both layouts share the same sheets (quick-pick, tempo), which
  * is why they live in one file rather than two: the sheets and every
  * transport handler would otherwise be duplicated or lifted for no reason.
  *
@@ -99,27 +87,40 @@ function HomeView({
   transport, beat, beatId, library, isLandscape,
   onSelect, onCycle, onEdit, nav,
 }) {
-  // The EQ fields arrive from the transport hook (epic #1); the flat/closed
-  // defaults are render-safety only — a destructure default applies just
-  // while a field is undefined, so they never shadow the live values.
   const {
     ready, playing, step, getPhase,
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo,
     tempoLocked, setTempoLocked,
-    volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
-    eqBands = { dayan: EQ_FLAT, bayan: EQ_FLAT },
-    eqOpen = { dayan: false, bayan: false },
-    changeEqBand, toggleEqPanel,
-    eqTune = { dayan: 0, bayan: 0 }, changeEqTune,
-    tuneOpen = { dayan: false, bayan: false }, toggleTunePanel,
+    mutedEnds, toggleMute,
     togglePlay,
+    sequence: seq, toggleSequence, editSequence, setSequenceLoop,
+    saveSequence, openSequence, newSequence, deleteSequence,
+    brahmaloka, burstKey, unlockBrahmaloka, leaveBrahmaloka,
   } = transport;
-  const { categories, activeCat, categoryBeats, catName, isCustomBeat } = library;
+  // The slider spans 40–200, or 190–500 in Brahmaloka time (data/meter.js);
+  // holding it at 200 unlocks the high range.
+  const range = tempoRange(brahmaloka);
+  const { isCustomBeat, allBeats } = library;
+
+  // The sequencer. While a sequence plays, Home shows the beat SOUNDING
+  // (and after it stops, the one last heard) rather than the library pick.
+  // Play plays the sequence whenever it has a beat to play.
+  const beatsById = new Map(allBeats.map((b) => [b.id, b]));
+  const lookup = (id) => beatsById.get(id) ?? null;
+  const shown = seq.playingBeat ?? beat;
+  const sequenceMode = seq.working.entries.some((e) => beatsById.has(e.beatId));
+  const onPlay = () => (sequenceMode ? toggleSequence() : togglePlay(beat));
+  const playLabel = playing ? t("common.pause") : sequenceMode ? t("seq.play") : t("common.play");
+  // What the beat picker is choosing FOR: null = the loaded beat,
+  // -1 = a new sequence entry, n = entry n's beat.
+  const [pickFor, setPickFor] = useState(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerTab, setPickerTab] = useState("builtin");
-  const [mixerOpen, setMixerOpen] = useState(false);
   const [bpmEntryOpen, setBpmEntryOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const notesSheet = notesOpen && shown.description && (
+    <NotesSheet title={shown.name} notes={shown.description} onClose={() => setNotesOpen(false)} />
+  );
   const [bpmDraft, setBpmDraft] = useState("");     // raw text in the entry field
   const bpmFocusRef = useRef(false);                // is the field being typed in
 
@@ -133,10 +134,10 @@ function HomeView({
   useEffect(() => {
     if (!bpmEntryOpen) return;
     const v = parseInt(bpmDraft, 10);
-    if (!Number.isFinite(v) || v < MIN_BPM || v > MAX_BPM) return;
+    if (!Number.isFinite(v) || v < MIN_BPM || v > range.max) return;
     const t = setTimeout(() => { if (v !== bpm) changeBpm(v); }, 450);
     return () => clearTimeout(t);
-  }, [bpmDraft, bpmEntryOpen, bpm]);
+  }, [bpmDraft, bpmEntryOpen, bpm, range.max]);
 
   function commitBpmDraft() {
     const v = parseInt(bpmDraft, 10);
@@ -150,74 +151,45 @@ function HomeView({
     setBpmEntryOpen(false);
   }
 
-  // Quick-pick opens on the ACTIVE category but carries its own tab row, so
-  // the user can hop to another progression without visiting the Beats page.
-  function openPicker() {
-    setPickerTab(activeCat);
+  // Quick-pick (ui/BeatPickerSheet) opens on the active category.
+  function openPicker(target = null) {
+    setPickFor(target);
     setPickerOpen(true);
   }
 
-  const fillPct = ((bpm - MIN_BPM) / (MAX_BPM - MIN_BPM)) * 100;
   const playIcon = playing ? <PauseIcon /> : <PlayIcon />;
-  const editLabel = isCustomBeat(beat.id) ? "Edit this beat" : "Customize this beat";
+  const editLabel = isCustomBeat(shown.id) ? t("home.editBeat") : t("home.customizeBeat");
 
   // ── Sheets, shared by both orientations ──
 
-  // Picking a beat makes its tab the active cycling context and dismisses.
-  const pickerBeats = categoryBeats(pickerTab);
   const beatPicker = pickerOpen && (
-    <div style={sh.sheetBackdrop} onClick={() => setPickerOpen(false)}>
-      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Choose a beat"
-        onClick={(e) => e.stopPropagation()}>
-        <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>Choose a beat</h2>
-          <button onClick={() => setPickerOpen(false)} aria-label="Close" style={sh.sheetClose}>×</button>
-        </div>
-        <ScrollFadeRow rowStyle={sh.catTabs}>
-          {["builtin", "custom", ...categories.map(c => c.id)].map(id => (
-            <button key={id} onClick={() => setPickerTab(id)}
-              style={{ ...sh.catTab, ...(pickerTab === id ? sh.catTabActive : null) }}
-              aria-pressed={pickerTab === id}>
-              {catName(id)}
-            </button>
-          ))}
-        </ScrollFadeRow>
-        <div style={sh.pickList}>
-          {pickerBeats.length === 0 && (
-            <p style={sh.emptyHint}>This category is empty — add beats to it on the Beats page.</p>
-          )}
-          {pickerBeats.map(b => {
-            const sel = b.id === beatId;
-            return (
-              <button key={b.id} onClick={() => { onSelect(b, pickerTab); setPickerOpen(false); }}
-                style={{ ...sh.pickRow, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
-                <div style={sh.beatRowTop}>
-                  <span style={sh.beatRowName}>{b.name}</span>
-                  <span style={{ ...sh.beatRowMeta, flex: 1 }}>{b.note}</span>
-                  <RadioDot selected={sel} />
-                </div>
-                <BeatStrip beat={b} mini />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    <BeatPickerSheet library={library}
+      beatId={pickFor === null ? beatId : pickFor === -1 ? null : seq.working.entries[pickFor]?.beatId}
+      onSelect={(b, tab) => {
+        if (pickFor === null) onSelect(b, tab);
+        else if (pickFor === -1) editSequence((es) => addEntry(es, b.id));
+        else editSequence((es) => setEntryBeat(es, pickFor, b.id));
+      }}
+      onClose={() => { setPickerOpen(false); setPickFor(null); }} />
   );
 
   // Precise BPM entry: type the number (desktop) or scroll the wheel (touch);
   // both drive changeBpm live.
   const bpmEntry = bpmEntryOpen && (
     <div style={sh.sheetBackdrop} onClick={closeBpmEntry}>
-      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Set tempo"
+      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label={t("tempo.set")}
         onClick={(e) => e.stopPropagation()}>
         <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>Tempo</h2>
-          <button onClick={closeBpmEntry} aria-label="Confirm tempo" style={st.sheetConfirm}>
+          <h2 style={sh.sheetName}>{t("tempo.title")}</h2>
+          <button onClick={closeBpmEntry} aria-label={t("tempo.confirm")} style={st.sheetConfirm}>
             <CheckIcon />
           </button>
         </div>
         <div style={st.bpmEntryTop}>
+          {/* Big jumps either side of the number: the wheel and keyboard are for
+              precision, ±10 for "a lot faster/slower" in one tap. */}
+          <button onClick={() => { bpmFocusRef.current = false; nudgeBpm(-10); }}
+            disabled={bpm <= MIN_BPM} style={{ ...st.bpmJump, opacity: bpm <= MIN_BPM ? 0.35 : 1 }}>−10</button>
           {/* select-all on focus so the first keystroke replaces the value
               (open at 140, type 8 → "8", type 0 → "80"); capped at 3 digits. */}
           <input type="text" inputMode="numeric" maxLength={3} value={bpmDraft}
@@ -225,151 +197,34 @@ function HomeView({
             onBlur={() => { bpmFocusRef.current = false; commitBpmDraft(); }}
             onChange={(e) => setBpmDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
             onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-            aria-label="Tempo in BPM" style={st.bpmInput} />
+            aria-label={t("tempo.inBpm")} style={st.bpmInput} />
+          <button onClick={() => { bpmFocusRef.current = false; nudgeBpm(10); }}
+            style={st.bpmJump}>+10</button>
         </div>
-        <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>BPM</span>
+        <span style={{ ...st.bpmUnit, display: "block", textAlign: "center" }}>{t("tempo.bpm")}</span>
         <div style={st.wheelWrap}>
           <div style={st.wheelBand} aria-hidden="true" />
-          <BpmWheel value={bpm} min={MIN_BPM} max={MAX_BPM} onChange={changeBpm} />
+          <BpmWheel value={bpm} min={MIN_BPM} max={range.max} onChange={changeBpm} />
         </div>
       </div>
     </div>
   );
 
-  // Mixer sheet — master fader plus one fader + mute per lane. This is where
-  // muting properly lives; the strip's small lane labels remain a shortcut.
-  const mixerSheet = mixerOpen && (
-    <div style={sh.sheetBackdrop} onClick={() => setMixerOpen(false)}>
-      <div style={sh.sheet} role="dialog" aria-modal="true" aria-label="Mixer"
-        onClick={(e) => e.stopPropagation()}>
-        <div style={sh.sheetHead}>
-          <h2 style={sh.sheetName}>Mixer</h2>
-          <button onClick={() => setMixerOpen(false)} aria-label="Close" style={sh.sheetClose}>×</button>
-        </div>
-        <div style={st.mixRows}>
-          <div style={st.mixRow}>
-            <span style={st.mixLabel}>Master</span>
-            <input className="kc-range" type="range" min={0} max={100} value={Math.round(volume * 100)}
-              onChange={(e) => changeVolume(Number(e.target.value) / 100)}
-              style={{ "--fill": volume * 100 + "%", flex: 1 }} aria-label="Master volume" />
-            {/* Three spacers: the mute, EQ and tuning columns close every
-                lane row, so the master fader keeps its right edge aligned
-                with theirs. */}
-            <span style={{ width: 44 }} aria-hidden="true" />
-            <span style={{ width: 44 }} aria-hidden="true" />
-            <span style={{ width: 44 }} aria-hidden="true" />
-          </div>
-          {LANES.map(l => {
-            const v = endVolumes[l.id] ?? 1;
-            const muted = !!mutedEnds[l.id];
-            // EQ and tuning belong to the two mridanga ends only — the
-            // frozen contract has no kartal keys (eqOpen/tuneOpen[kartal]
-            // would be undefined), so the Kartal row keeps just its fader +
-            // mute, plus spacers that hold the fader column aligned with
-            // the three-button rows.
-            const isEqEnd = l.id === "dayan" || l.id === "bayan";
-            const open = !!eqOpen[l.id];
-            const tuning = !!tuneOpen[l.id];
-            const bands = eqBands[l.id] ?? EQ_FLAT;
-            const cents = eqTune[l.id] ?? 0;
-            return (
-              <div key={l.id} style={st.mixLane}>
-                <div style={st.mixRow}>
-                  <span style={{ ...st.mixLabel, color: l.color }}>{l.label}</span>
-                  <input className="kc-range" type="range" min={0} max={100} value={Math.round(v * 100)}
-                    onChange={(e) => changeEndVolume(l.id, Number(e.target.value) / 100)}
-                    style={{ "--fill": v * 100 + "%", flex: 1, opacity: muted ? 0.35 : 1 }}
-                    aria-label={`${l.label} volume`} />
-                  <button onClick={() => toggleMute(l.id)} aria-pressed={muted}
-                    aria-label={muted ? `Unmute ${l.label}` : `Mute ${l.label}`}
-                    style={{ ...st.muteBtn, background: muted ? "var(--head-sunken)" : "transparent",
-                      color: muted ? "var(--clay)" : "var(--syahi-soft)" }}>
-                    <SpeakerIcon muted={muted} />
-                  </button>
-                  {isEqEnd ? (
-                    // The optional call + disabled gate are render-safety only:
-                    // the transport supplies toggleEqPanel, and they degrade an
-                    // absent handler to an inert button instead of a dead click.
-                    <button onClick={() => toggleEqPanel?.(l.id)} disabled={!toggleEqPanel}
-                      aria-pressed={open} aria-expanded={open} aria-label={`${l.label} EQ`}
-                      style={{ ...st.muteBtn, background: open ? "var(--head-sunken)" : "transparent",
-                        color: open ? l.color : "var(--syahi-soft)",
-                        opacity: toggleEqPanel ? 1 : 0.35, cursor: toggleEqPanel ? "pointer" : "not-allowed" }}>
-                      <EqIcon />
-                    </button>
-                  ) : (
-                    <span style={{ width: 44 }} aria-hidden="true" />
-                  )}
-                  {isEqEnd ? (
-                    // Same render-safety posture as the EQ button beside it.
-                    <button onClick={() => toggleTunePanel?.(l.id)} disabled={!toggleTunePanel}
-                      aria-pressed={tuning} aria-expanded={tuning} aria-label={`${l.label} tuning`}
-                      style={{ ...st.muteBtn, background: tuning ? "var(--head-sunken)" : "transparent",
-                        color: tuning ? l.color : "var(--syahi-soft)",
-                        opacity: toggleTunePanel ? 1 : 0.35, cursor: toggleTunePanel ? "pointer" : "not-allowed" }}>
-                      <TuneIcon />
-                    </button>
-                  ) : (
-                    <span style={{ width: 44 }} aria-hidden="true" />
-                  )}
-                </div>
-                {isEqEnd && open && (
-                  <div style={st.eqPanel} role="group" aria-label={`${l.label} equalizer`}>
-                    {EQ_BAND_LABELS.map((bandLabel, i) => {
-                      const db = bands[i] ?? 0;
-                      return (
-                        <div key={bandLabel} style={st.mixRow}>
-                          <span style={{ ...st.mixLabel, textTransform: "none" }}>{bandLabel}</span>
-                          <input className="kc-range" type="range" min={EQ_MIN_DB} max={EQ_MAX_DB} step={1} value={db}
-                            onChange={(e) => changeEqBand?.(l.id, i, Number(e.target.value))}
-                            disabled={!changeEqBand}
-                            style={{ "--fill": ((db - EQ_MIN_DB) / (EQ_MAX_DB - EQ_MIN_DB)) * 100 + "%", "--accent-action": l.color, flex: 1,
-                              opacity: changeEqBand ? 1 : 0.5, cursor: changeEqBand ? "pointer" : "not-allowed" }}
-                            aria-label={`${l.label} ${bandLabel} gain`} />
-                          <span style={st.eqDb}>{fmtDb(db)}</span>
-                          <span style={{ width: 44 }} aria-hidden="true" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {isEqEnd && tuning && (
-                  // Tuning is its own surface from the EQ panel: a separate
-                  // button, a separate disclosure. The readout names the
-                  // pitch actually sounding — the measured base freq
-                  // (data/tuning.js) shifted by the user's cents — so it
-                  // doubles as the "what note am I on" display.
-                  <div style={st.eqPanel} role="group" aria-label={`${l.label} tuning`}>
-                    <div style={st.mixRow}>
-                      <span style={st.mixLabel}>Tune</span>
-                      <input className="kc-range" type="range" min={TUNE_MIN_CENTS} max={TUNE_MAX_CENTS} step={1} value={cents}
-                        onChange={(e) => changeEqTune?.(l.id, Number(e.target.value))}
-                        disabled={!changeEqTune}
-                        style={{ "--fill": ((cents - TUNE_MIN_CENTS) / (TUNE_MAX_CENTS - TUNE_MIN_CENTS)) * 100 + "%", "--accent-action": l.color, flex: 1,
-                          opacity: changeEqTune ? 1 : 0.5, cursor: changeEqTune ? "pointer" : "not-allowed" }}
-                        aria-label={`${l.label} tuning in cents`} />
-                      <span style={st.tuneNote}>{freqToNoteName((END_BASE_FREQ[l.id] ?? 440) * centsToRate(cents))}</span>
-                      <span style={{ width: 44 }} aria-hidden="true" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <p style={{ ...sh.emptyHint, marginTop: "var(--space-4)" }}>
-          100% is balanced for phone speakers — the bass end is already boosted.
-        </p>
-      </div>
-    </div>
+
+  // In Brahmaloka: a badge that says so, and is the way back to 40–200.
+  const brahmaBadge = brahmaloka && (
+    <button onClick={leaveBrahmaloka} style={st.brahmaBadge} aria-label={t("brahma.leave")} title={t("brahma.leave")}>
+      ✦
+    </button>
   );
+  const burst = <BrahmalokaBurst fireKey={burstKey} />;
 
   const lockButton = (
     <button onClick={() => setTempoLocked(v => !v)}
       style={{ ...st.lockBtn,
         background: tempoLocked ? "var(--clay)" : "transparent",
         color: tempoLocked ? "var(--on-clay)" : "var(--syahi-soft)" }}
-      aria-label={tempoLocked ? "Unlock tempo" : "Lock tempo"}
+      aria-label={tempoLocked ? t("tempo.unlock") : t("tempo.lock")}
       aria-pressed={tempoLocked}>
       <LockIcon locked={tempoLocked} />
     </button>
@@ -379,9 +234,10 @@ function HomeView({
   if (isLandscape) {
     return (
       <div className="kc-screen" style={st.landScreen}>
+        {burst}
         <main style={st.landStripWrap}>
           <BeatStrip
-            beat={beat}
+            beat={shown}
             step={step}
             playing={playing}
             getPhase={getPhase}
@@ -391,41 +247,44 @@ function HomeView({
         </main>
 
         <div style={st.landRail}>
-          <button onClick={() => onEdit(beat)} style={st.landEditBtn} aria-label={editLabel}>
+          <button onClick={() => onEdit(shown)} style={st.landEditBtn} aria-label={editLabel}>
             <PencilIcon />
           </button>
-          <button onClick={() => onCycle(-1)} aria-label="Previous beat" style={st.chevBtnSm}>‹</button>
+          <button onClick={() => onCycle(-1)} aria-label={t("common.prevBeat")} style={st.chevBtnSm}>‹</button>
           <button onClick={openPicker} style={st.landNameBtn}
             aria-haspopup="dialog" aria-expanded={pickerOpen}>
-            {beat.name} <span style={st.nameCaret}>▾</span>
+            {shown.name} <span style={st.nameCaret}>▾</span>
           </button>
-          <button onClick={() => onCycle(1)} aria-label="Next beat" style={st.chevBtnSm}>›</button>
+          <button onClick={() => onCycle(1)} aria-label={t("common.nextBeat")} style={st.chevBtnSm}>›</button>
+          <NotesLink notes={shown.description} onOpen={() => setNotesOpen(true)} />
+          {notesSheet}
           <button onClick={() => setBpmEntryOpen(true)} style={{ ...st.bpmBtn, ...st.landBpmBtn }}
-            aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set`}>
+            aria-haspopup="dialog" aria-label={t("tempo.tapToSet", { bpm })}>
             <span style={st.landBpmNum}>{bpm}</span>
-            <span style={st.bpmUnit}>BPM</span>
+            <span style={st.bpmUnit}>{t("tempo.bpm")}</span>
             <span style={st.bpmCaret} aria-hidden="true">▾</span>
           </button>
-          <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
-            onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
-            style={{ "--fill": fillPct + "%", flex: 1, minWidth: 90, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-            aria-label="Tempo" />
+          {/* The way out of Brahmaloka rides on the number, never in the slider's
+              row, so the slider keeps its width and nothing is pushed off. */}
+          {/* Always present (zero-width), so the row's gaps are the same either way. */}
+          <span style={st.landBadgeAnchor}>
+            {brahmaloka && <span style={st.landBadge}>{brahmaBadge}</span>}
+          </span>
+          <BpmRange bpm={bpm} brahmaloka={brahmaloka} min={range.min} max={range.max}
+            onChange={changeBpm} onUnlock={unlockBrahmaloka} disabled={tempoLocked}
+            title={brahmaloka ? undefined : t("brahma.hint")} ariaLabel={t("tempo.title")}
+            style={{ minWidth: 90, opacity: tempoLocked ? 0.5 : 1 }} />
           {lockButton}
-          <button onClick={tapTempo} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
-          <button onClick={() => setMixerOpen(true)} style={st.landEditBtn} aria-label="Mixer"
-            aria-haspopup="dialog" aria-expanded={mixerOpen}>
-            <MixerIcon />
-          </button>
-          <button onClick={() => togglePlay(beat)} disabled={!ready}
+          <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
+          <button onClick={onPlay} disabled={!ready}
             style={{ ...st.landPlayBtn, opacity: ready ? 1 : 0.5 }}
-            aria-label={playing ? "Pause" : "Play"}>
+            aria-label={playLabel}>
             {playIcon}
           </button>
         </div>
 
         <div style={st.landNavWrap}>{nav}</div>
         {beatPicker}
-        {mixerSheet}
         {bpmEntry}
       </div>
     );
@@ -434,6 +293,7 @@ function HomeView({
   // ── Portrait ──
   return (
     <div className="kc-screen" style={sh.screenFixed}>
+      {burst}
       {/* Small live wordmark — same component as the splash hero. */}
       <header style={st.header}>
         <Wordmark style={{ "--wm-size": "clamp(18px, 3.6vh, 24px)" }} />
@@ -442,22 +302,24 @@ function HomeView({
       {/* Beat switcher: ‹ › step through beats; tapping the name opens
           the quick-pick sheet. Pencil edits the loaded beat. */}
       <div style={st.beatHead}>
-        <button onClick={() => onCycle(-1)} aria-label="Previous beat" style={st.chevBtn}>‹</button>
+        <button onClick={() => onCycle(-1)} aria-label={t("common.prevBeat")} style={st.chevBtn}>‹</button>
         <button onClick={openPicker} style={st.nameBtn}
           aria-haspopup="dialog" aria-expanded={pickerOpen}>
-          <h1 style={st.beatName}>{beat.name} <span style={st.nameCaret}>▾</span></h1>
-          <span style={st.beatMeta}>{beat.note} · {beat.steps} cells</span>
+          <h1 style={st.beatName}>{shown.name} <span style={st.nameCaret}>▾</span></h1>
+          <span style={st.beatMeta}>{noteLabel(shown.note)} · {t("beat.cells", { n: shown.steps })}</span>
         </button>
-        <button onClick={() => onCycle(1)} aria-label="Next beat" style={st.chevBtn}>›</button>
-        <button onClick={() => onEdit(beat)} style={st.landEditBtn} aria-label={editLabel}>
+        <button onClick={() => onCycle(1)} aria-label={t("common.nextBeat")} style={st.chevBtn}>›</button>
+        <button onClick={() => onEdit(shown)} style={st.landEditBtn} aria-label={editLabel}>
           <PencilIcon />
         </button>
       </div>
+      <NotesLink notes={shown.description} onOpen={() => setNotesOpen(true)} style={{ alignSelf: "center", flexShrink: 0, marginTop: -6 }} />
+      {notesSheet}
 
       {/* The strip — vertically centred in whatever space is left. */}
       <main style={st.stripWrap}>
         <BeatStrip
-          beat={beat}
+          beat={shown}
           step={step}
           playing={playing}
           getPhase={getPhase}
@@ -466,51 +328,54 @@ function HomeView({
         />
       </main>
 
+      <SequencePanel seq={seq} lookup={lookup}
+        onEdit={(op, i, v) => editSequence((es) =>
+          op === "bars" ? setEntryBars(es, i, v) : op === "move" ? moveEntry(es, i, v) : removeEntry(es, i))}
+        onToggleLoop={() => setSequenceLoop(!seq.working.loop)}
+        onSave={saveSequence} onOpen={openSequence} onNew={newSequence} onDelete={deleteSequence}
+        onAdd={() => openPicker(-1)} onChangeBeat={(i) => openPicker(i)} />
+
       <section style={sh.controls}>
         {/* BPM as signage: the number IS the label, and tapping it opens
             precise entry. */}
         <div>
           <div style={st.bpmRow}>
             <button onClick={() => nudgeBpm(-1)} disabled={bpm <= MIN_BPM}
-              aria-label="Slower" style={{ ...st.bpmStep, opacity: bpm <= MIN_BPM ? 0.3 : 1 }}>−</button>
+              aria-label={t("common.slower")} style={{ ...st.bpmStep, opacity: bpm <= MIN_BPM ? 0.3 : 1 }}>−</button>
             <button onClick={() => setBpmEntryOpen(true)} style={st.bpmBtn}
-              aria-haspopup="dialog" aria-label={`Tempo ${bpm} BPM — tap to set precisely`}>
+              aria-haspopup="dialog" aria-label={t("tempo.tapToSetPrecisely", { bpm })}>
               <span style={st.bpmNum}>{bpm}</span>
-              <span style={st.bpmUnit}>BPM</span>
+              <span style={st.bpmUnit}>{t("tempo.bpm")}</span>
               <span style={st.bpmCaret} aria-hidden="true">▾</span>
             </button>
             <button onClick={() => nudgeBpm(1)} disabled={bpm >= MAX_BPM}
-              aria-label="Faster" style={{ ...st.bpmStep, opacity: bpm >= MAX_BPM ? 0.3 : 1 }}>+</button>
+              aria-label={t("common.faster")} style={{ ...st.bpmStep, opacity: bpm >= MAX_BPM ? 0.3 : 1 }}>+</button>
+            {/* With the number it changes, not in the slider's row: the slider
+                keeps its width in Brahmaloka. */}
+            {brahmaBadge}
           </div>
           <div style={st.tempoRow}>
-            <input className="kc-range" type="range" min={MIN_BPM} max={MAX_BPM} value={bpm}
-              onChange={(e) => changeBpm(Number(e.target.value))} disabled={tempoLocked}
-              style={{ "--fill": fillPct + "%", flex: 1, opacity: tempoLocked ? 0.5 : 1, cursor: tempoLocked ? "not-allowed" : "pointer" }}
-              aria-label="Tempo" />
+            <BpmRange bpm={bpm} brahmaloka={brahmaloka} min={range.min} max={range.max}
+              onChange={changeBpm} onUnlock={unlockBrahmaloka} disabled={tempoLocked}
+              title={brahmaloka ? undefined : t("brahma.hint")} ariaLabel={t("tempo.title")}
+              style={{ opacity: tempoLocked ? 0.5 : 1 }} />
             {lockButton}
-            <button onClick={tapTempo} style={st.tapBtn} aria-label="Tap tempo">Tap</button>
+            <button onClick={tapTempo} style={st.tapBtn} aria-label={t("tempo.tapLabel")}>{t("tempo.tap")}</button>
           </div>
         </div>
-
-        {/* Loudness lives in the mixer: master + per-drum faders. */}
-        <button onClick={() => setMixerOpen(true)} style={st.mixerBtn}
-          aria-haspopup="dialog" aria-expanded={mixerOpen}>
-          <MixerIcon /> Mixer
-        </button>
       </section>
 
       {/* The clay play bar — full width at thumb height: impossible to
           miss, impossible to fumble. */}
-      <button onClick={() => togglePlay(beat)} disabled={!ready}
+      <button onClick={onPlay} disabled={!ready}
         style={{ ...st.playBtn, opacity: ready ? 1 : 0.5 }}
-        aria-label={playing ? "Pause" : "Play"}>
+        aria-label={playLabel}>
         {playIcon}
-        {playing ? "Pause" : "Play"}
+        {playLabel}
       </button>
 
       {nav}
       {beatPicker}
-      {mixerSheet}
       {bpmEntry}
     </div>
   );
@@ -531,6 +396,15 @@ const st = {
 
   // ── Tempo ──
   bpmRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-4)", marginBottom: "var(--space-2)" },
+  brahmaBadge: {
+    flexShrink: 0, width: 36, height: 36, padding: 0, borderRadius: 999, cursor: "pointer",
+    border: "1px solid oklch(0.70 0.17 60)", background: "oklch(0.93 0.07 80)",
+    color: "oklch(0.45 0.14 45)", fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 700, lineHeight: 1,
+  },
+  // Landscape: a zero-width anchor after the BPM button, the badge hung off it
+  // over the number's top-right corner so the packed row doesn't reflow.
+  landBadgeAnchor: { position: "relative", width: 0, alignSelf: "stretch", flexShrink: 0 },
+  landBadge: { position: "absolute", top: -8, right: 2, zIndex: 1, transform: "scale(0.7)", transformOrigin: "top right" },
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   tapBtn: { flexShrink: 0, minHeight: 44, padding: "0 16px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: "var(--text-body-sm)", cursor: "pointer", letterSpacing: "0.04em" },
   lockBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
@@ -545,24 +419,10 @@ const st = {
   // ── Tempo-entry sheet ──
   sheetConfirm: { flexShrink: 0, width: 44, height: 44, margin: "-6px -6px 0 0", borderRadius: 12, border: "none", background: "var(--clay)", color: "var(--on-clay)", cursor: "pointer", display: "grid", placeItems: "center" },
   bpmEntryTop: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", marginTop: "var(--space-4)" },
+  bpmJump: { flexShrink: 0, minWidth: 64, height: 48, borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", color: "var(--syahi)", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: 18, fontWeight: 700, cursor: "pointer" },
   bpmInput: { width: 120, textAlign: "center", border: "none", background: "transparent", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "2.75rem", fontWeight: 600, color: "var(--syahi)", outline: "none", padding: 0, MozAppearance: "textfield" },
   wheelWrap: { position: "relative", marginTop: "var(--space-5)" },
   wheelBand: { position: "absolute", left: 0, right: 0, top: "50%", height: 40, transform: "translateY(-50%)", borderRadius: 12, background: "var(--head-sunken)", pointerEvents: "none" },
-
-  // ── Mixer sheet ──
-  mixerBtn: { width: "100%", minHeight: 46, borderRadius: 14, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 },
-  mixRows: { display: "flex", flexDirection: "column", gap: "var(--space-4)", marginTop: "var(--space-4)" },
-  mixRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  mixLabel: { flexShrink: 0, width: 64, fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
-  muteBtn: { flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: "var(--rule-hairline)", cursor: "pointer", display: "grid", placeItems: "center" },
-  // A lane row plus its (optional) EQ panel — tighter gap than between lanes.
-  mixLane: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
-  eqPanel: { display: "flex", flexDirection: "column", gap: 2 },
-  // Fixed width + tabular digits so −12…+12 readouts never jitter the slider.
-  eqDb: { flexShrink: 0, width: 44, textAlign: "right", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-body-xs)", fontWeight: 600, color: "var(--syahi-soft)" },
-  // The tune readout's wider sibling: it names a note ("D♯2 +45¢"), so the
-  // dB column's 44px won't fit — same fixed-width, tabular treatment.
-  tuneNote: { flexShrink: 0, width: 68, textAlign: "right", fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "var(--text-body-xs)", fontWeight: 600, color: "var(--syahi-soft)" },
 
   playBtn: { flexShrink: 0, width: "100%", minHeight: 58, borderRadius: 16, border: "none", background: "var(--clay)", color: "var(--on-clay)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
 

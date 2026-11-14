@@ -1,10 +1,27 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { KirtanEngine } from "../engine/KirtanEngine.js";
 import { BEATS } from "../data/beats.js";
-import { MIN_BPM, MAX_BPM } from "../data/meter.js";
+import { MIN_BPM, MAX_BPM, NORMAL_MAX_BPM, brahmalokaFor } from "../data/meter.js";
+import { loadSession, saveSession } from "../storage/sessionPrefs.js";
 import { EQ_MIN_DB, EQ_MAX_DB } from "../data/eq.js";
 import { TUNE_MIN_CENTS, TUNE_MAX_CENTS } from "../data/tuning.js";
 import { loadEqPrefs, saveEqPrefs } from "../storage/eqPrefs.js";
+import {
+  EMPTY_WORKING, decodeSaved, decodeWorking, resolveSequence, saveWorking,
+} from "../data/sequences.js";
+import { clampDelay, SYNC_TEST_BEAT, SYNC_TEST_BPM } from "../data/syncCalibration.js";
+
+// The display delay (Settings → Sync sound and display), one per browser: the
+// web can't tell output devices apart without a microphone prompt.
+const DISPLAY_DELAY_KEY = "kirtan-display-delay-ms";
+
+function loadDisplayDelay() {
+  try {
+    return clampDelay(localStorage.getItem(DISPLAY_DELAY_KEY) ?? 0);
+  } catch {
+    return 0;
+  }
+}
 
 // The bounds now live in data/meter.js so pure data modules (the share codec)
 // can clamp a BPM without importing React, Tone.js and the engine along with
@@ -52,11 +69,29 @@ export function useTransport() {
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [step, setStep] = useState(-1);
-  const [bpm, setBpm] = useState(BEATS[0].bpm);
+  // The tempo you left with comes back (capped at 200 — every launch starts
+  // outside Brahmaloka; see storage/sessionPrefs.js).
+  const [bpm, setBpm] = useState(() => loadSession().bpm ?? BEATS[0].bpm);
+  // Brahmaloka time: the slider's high range (data/meter.js). `burstKey` counts
+  // unlocks so the overlay (ui/BrahmalokaBurst) plays once per unlock.
+  const [brahmaloka, setBrahmaloka] = useState(false);
+  const brahmaRef = useRef(false);
+  const [burstKey, setBurstKey] = useState(0);
+  const sessionSaveTimerRef = useRef(null);
+  const barChangeRef = useRef(null); // a hill-climb tempo waiting for its bar
   const [volume, setVolume] = useState(0.9);
   const [endVolumes, setEndVolumes] = useState({});  // per-lane faders, default 1
   const [mutedEnds, setMutedEnds] = useState({});
   const [tempoLocked, setTempoLocked] = useState(false);
+  // Swing in force: the playing beat's own unless nudged in the mixer. Mirrored
+  // from the engine's "swing" event, which fires on every beat switch too.
+  const [swing, setSwingState] = useState(50);
+  useEffect(() => {
+    engine.on("swing", setSwingState);
+    return () => engine.off("swing", setSwingState);
+  }, [engine]);
+  const setSwing = useCallback((v) => engine.setSwing(v), [engine]);
+  const [displayDelayMs, setDisplayDelayMs] = useState(loadDisplayDelay);
   // Per-end EQ: five band gains in dB, the tuning offset in cents, plus
   // each panel's open/closed state.
   // Hydrated once at mount from stored prefs via eqPrefs.js (which falls
@@ -158,7 +193,53 @@ export function useTransport() {
   // every render (the engine ref never changes).
   const getPhase = useCallback(() => engine.getPhase(), [engine]);
 
-  const clampBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
+  // ── Display sync ──
+  useEffect(() => { engine.setDisplayDelayMs(displayDelayMs); }, [engine, displayDelayMs]);
+
+  const setDisplayDelay = useCallback((ms) => {
+    const v = clampDelay(ms);
+    setDisplayDelayMs(v);
+    try { localStorage.setItem(DISPLAY_DELAY_KEY, String(v)); } catch { /* private mode: session only */ }
+  }, []);
+
+  // The sync test: a plain click on every beat, through the engine directly
+  // (like the editor's preview), so Home's beat and tempo are untouched —
+  // play() re-applies both next time.
+  async function startSyncTest() {
+    if (!ready) return;
+    await engine.unlock();
+    if (playing) engine.stop();
+    engine.setBpm(SYNC_TEST_BPM);
+    engine.setBeat(SYNC_TEST_BEAT);
+    engine.start();
+  }
+
+  function stopSyncTest() {
+    engine.stop();
+    engine.setBpm(bpmRef.current);
+  }
+
+  // Community preview: the same direct-to-engine path as the sync test, playing
+  // a beat that isn't Home's at its own tempo. endPreview restores Home's tempo;
+  // play() re-applies Home's beat next time.
+  async function startPreview(beat) {
+    if (!ready) return;
+    await engine.unlock();
+    if (playing) engine.stop();
+    engine.setBpm(clampAnyBpm(beat.bpm || bpmRef.current));
+    engine.setBeat(beat);
+    engine.start();
+  }
+
+  function endPreview() {
+    engine.stop();
+    engine.setBpm(bpmRef.current);
+  }
+
+  // Clamp to what the slider can reach right now: up to 200, or 500 in Brahmaloka.
+  const clampBpm = (v) => Math.min(brahmaRef.current ? MAX_BPM : NORMAL_MAX_BPM, Math.max(MIN_BPM, v));
+  // Clamp to anything a beat may hold (a shared 300 BPM beat still previews at 300).
+  const clampAnyBpm = (v) => Math.min(MAX_BPM, Math.max(MIN_BPM, v));
 
   // Same contract the (unexported) bandOf helper in eqPrefs.js applies on
   // load and the engine applies on set: coerce to a finite number
@@ -179,11 +260,49 @@ export function useTransport() {
   };
 
   function changeBpm(value) {
+    clearTimeout(barChangeRef.current);
     bpmRef.current = value;
     setBpm(value);
     engine.setBpm(value);
+    setMode(brahmalokaFor(value, brahmaRef.current));
+    // Debounced like the EQ prefs: a drag fires this many times a second.
+    clearTimeout(sessionSaveTimerRef.current);
+    sessionSaveTimerRef.current = setTimeout(() => saveSession({ bpm: bpmRef.current }), 400);
+  }
+  // Hill climb's step: the new tempo starts on the 1 nearest `inSeconds` from
+  // now; the display follows when it is heard. Stopped, it's an ordinary change.
+  function changeBpmAtBar(value, inSeconds) {
+    const wait = engine.setBpmAtBar(value, inSeconds);
+    if (wait == null) return changeBpm(value);
+    clearTimeout(barChangeRef.current);
+    barChangeRef.current = setTimeout(() => {
+      // Stopped before that bar: the engine dropped it, so must the display.
+      if (!engine.isPlaying) return;
+      bpmRef.current = value;
+      setBpm(value);
+      setMode(brahmalokaFor(value, brahmaRef.current));
+      saveSession({ bpm: value });
+    }, wait * 1000);
+  }
+  function setMode(on) {
+    brahmaRef.current = on;
+    setBrahmaloka(on);
+  }
+  // Holding the slider at 200 (ui/BpmRange) or pressing + there lands here.
+  function unlockBrahmaloka() {
+    if (brahmaRef.current) return;
+    setMode(true);
+    setBurstKey((k) => k + 1);
+    engine.rumble();
+    navigator.vibrate?.([90, 60, 180]);
+  }
+  // The badge's way out: back to the normal range, at its top.
+  function leaveBrahmaloka() {
+    setMode(false);
+    changeBpm(Math.min(bpmRef.current, NORMAL_MAX_BPM));
   }
   function nudgeBpm(delta) {
+    if (delta > 0 && !brahmaRef.current && bpmRef.current >= NORMAL_MAX_BPM) { unlockBrahmaloka(); return; }
     changeBpm(clampBpm(bpmRef.current + delta));
   }
   function commitBpm(value) {
@@ -287,6 +406,7 @@ export function useTransport() {
   // suggested tempo unless the user has locked the tempo — the "keep this
   // speed while I change beats mid-kirtan" affordance.
   function loadBeat(b) {
+    seq.leave();
     engine.setBeat(b);
     if (!lockedRef.current) changeBpm(b.bpm);
   }
@@ -295,7 +415,7 @@ export function useTransport() {
     if (!ready) return;            // sounds still loading — ignore the tap
     await engine.unlock();
     if (playing) engine.stop();
-    else { engine.setBpm(bpmRef.current); engine.setBeat(b); engine.start(); }
+    else { seq.leave(); engine.setBpm(bpmRef.current); engine.setBeat(b); engine.start(); }
   }
 
   // Start `b` unconditionally (no-op if already playing — selecting a beat
@@ -303,10 +423,13 @@ export function useTransport() {
   async function play(b) {
     if (!ready || playing) return;
     await engine.unlock();
+    seq.leave();
     engine.setBpm(bpmRef.current);
     engine.setBeat(b);
     engine.start();
   }
+
+  const seq = useSequence(engine, ready, playing, bpmRef);
 
   function stop() { engine.stop(); setPlaying(false); }
 
@@ -315,12 +438,142 @@ export function useTransport() {
   const unlock = () => engine.unlock();
 
   return {
+    changeBpmAtBar,
     engine, ready, playing, step, getPhase,
     bpm, changeBpm, nudgeBpm, commitBpm, tapTempo, clampBpm,
-    tempoLocked, setTempoLocked,
+    brahmaloka, burstKey, unlockBrahmaloka, leaveBrahmaloka,
+    tempoLocked, setTempoLocked, swing, setSwing,
     volume, changeVolume, endVolumes, changeEndVolume, mutedEnds, toggleMute,
     eqBands, eqOpen, changeEqBand, toggleEqPanel, eqTune, changeEqTune,
     tuneOpen, toggleTunePanel,
     loadBeat, togglePlay, play, stop, unlock,
+    sequence: seq.state, bindSequenceBeats: seq.bindBeats, toggleSequence: seq.toggle,
+    editSequence: seq.edit, setSequenceLoop: seq.setLoop, saveSequence: seq.save,
+    openSequence: seq.open, newSequence: seq.reset, deleteSequence: seq.remove,
+    displayDelayMs, setDisplayDelay, startSyncTest, stopSyncTest, startPreview, endPreview,
+  };
+}
+
+// ── Home's sequencer ──
+//
+// The running order lives here, not in a view, because it FEEDS THE ENGINE:
+// edits made while it plays must reach the Sequencer at once. Pure edits and
+// the storage format are in data/sequences.js.
+
+const SAVED_KEY = "kirtan-sequences";
+const WORKING_KEY = "kirtan-working-sequence";
+
+function readStored(key, decode) {
+  try { return decode(localStorage.getItem(key)); } catch { return decode(null); }
+}
+function writeStored(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode: in memory only */ }
+}
+
+function useSequence(engine, ready, playing, bpmRef) {
+  const [working, setWorking] = useState(() => readStored(WORKING_KEY, decodeWorking));
+  const [saved, setSaved] = useState(() => readStored(SAVED_KEY, decodeSaved));
+  // While playing: which ENTRY (index into working.entries) and bar (1-based).
+  // playingBeat is the sequence's beat last heard — kept after a stop, so
+  // Home doesn't snap back to a beat that never played; choosing a beat by
+  // hand (leave) clears it.
+  const [at, setAt] = useState({ entry: null, bar: null, beat: null });
+
+  // Beats are looked up by id at play time; App hands over the library.
+  const beatsRef = useRef(new Map());
+  // Played index → entry index (missing beats are skipped in playback).
+  const planRef = useRef([]);
+  // Commands read the latest working copy without re-binding on every edit.
+  const workingRef = useRef(working);
+  useLayoutEffect(() => { workingRef.current = working; }, [working]);
+
+  useEffect(() => { writeStored(WORKING_KEY, working); }, [working]);
+  useEffect(() => { writeStored(SAVED_KEY, saved); }, [saved]);
+
+  useEffect(() => {
+    const onAt = ({ index, bar }) => {
+      const p = planRef.current[index];
+      if (p) setAt({ entry: p.entryIndex, bar, beat: p.beat });
+    };
+    const onEnded = () => setAt((a) => ({ ...a, entry: null, bar: null }));
+    const onStopped = () => setAt((a) => ({ ...a, entry: null, bar: null }));
+    engine.on("sequenceAt", onAt);
+    engine.on("sequenceEnded", onEnded);
+    engine.on("stopped", onStopped);
+    return () => {
+      engine.off("sequenceAt", onAt);
+      engine.off("sequenceEnded", onEnded);
+      engine.off("stopped", onStopped);
+    };
+  }, [engine]);
+
+  const lookup = (id) => beatsRef.current.get(id) ?? null;
+
+  // Hand the engine the playable plan; returns whether anything can play.
+  function push(w) {
+    const plan = resolveSequence(w.entries, lookup);
+    planRef.current = plan;
+    engine.setSequence(plan.length ? plan.map(({ beat, bars }) => ({ beat, bars })) : null, w.loop);
+    return plan.length > 0;
+  }
+
+  function bindBeats(beats) {
+    beatsRef.current = new Map(beats.map((b) => [b.id, b]));
+    // An edited beat should sound edited in a playing sequence.
+    if (engine.hasSequence) push(workingRef.current);
+  }
+
+  function update(w) {
+    setWorking(w);
+    if (engine.hasSequence) {
+      if (!push(w)) engine.stop();
+    }
+  }
+
+  async function toggle() {
+    if (!ready) return;
+    await engine.unlock();
+    if (playing) { engine.stop(); return; }
+    if (!push(workingRef.current)) return;
+    engine.setBpm(bpmRef.current);
+    engine.start();
+  }
+
+  function leave() {
+    if (!engine.hasSequence) return;
+    engine.setSequence(null, false);
+    planRef.current = [];
+    setAt({ entry: null, bar: null, beat: null });
+  }
+
+  function newId() {
+    return globalThis.crypto?.randomUUID?.() ?? `seq-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  return {
+    state: { working, saved, playingEntry: at.entry, playingBar: at.bar, playingBeat: at.beat },
+    bindBeats,
+    toggle,
+    leave,
+    edit: (fn) => update({ ...workingRef.current, entries: fn(workingRef.current.entries) }),
+    setLoop: (loop) => {
+      setWorking((w) => ({ ...w, loop }));
+      engine.setSequenceLoop(loop);
+    },
+    save: (name, asNew) => {
+      const r = saveWorking(workingRef.current, saved, name, asNew, newId());
+      setSaved(r.saved);
+      setWorking(r.working);
+    },
+    open: (id) => {
+      const s = saved.find((x) => x.id === id);
+      if (!s) return;
+      update({ entries: s.entries, savedId: s.id, name: s.name, loop: workingRef.current.loop });
+    },
+    reset: () => update({ ...EMPTY_WORKING, loop: workingRef.current.loop }),
+    remove: (id) => {
+      setSaved((all) => all.filter((x) => x.id !== id));
+      if (workingRef.current.savedId === id) setWorking((w) => ({ ...w, savedId: null }));
+    },
   };
 }

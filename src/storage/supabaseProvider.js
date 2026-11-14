@@ -21,6 +21,7 @@
  * surfaces as a sentence a person can read — never a silent loss.
  */
 
+import { t } from "../i18n/index.js";
 import { supabase } from "./supabaseClient.js";
 import { StorageError } from "./BeatsProvider.js";
 
@@ -42,12 +43,12 @@ function isClockSkew(err) {
 // A Postgres/PostgREST failure, mapped to the code the app branches on.
 function mapError(error, whileDoing) {
   const code = error?.code;
-  if (code === "23505") return new StorageError("conflict", "That already exists.", error);
-  if (code === "PGRST116") return new StorageError("notFound", `${whileDoing} no longer exists.`, error);
+  if (code === "23505") return new StorageError("conflict", t("storage.exists"), error);
+  if (code === "PGRST116") return new StorageError("notFound", t("storage.gone"), error);
   if (code === "42501" || error?.status === 401 || error?.status === 403) {
-    return new StorageError("unavailable", "You're signed out, so that couldn't be saved. Sign in and try again.", error);
+    return new StorageError("unavailable", t("storage.signedOut"), error);
   }
-  return new StorageError("unknown", `Couldn't save ${whileDoing}. ${error?.message ?? ""}`.trim(), error);
+  return new StorageError("unknown", `${t("storage.couldntSave", { what: t(whileDoing) })} ${error?.message ?? ""}`.trim(), error);
 }
 
 /**
@@ -65,7 +66,7 @@ async function run(build, whileDoing) {
       res = await build();
     } catch (err) {
       if (attempt < 1 && isClockSkew(err)) { await sleep(2000); continue; }
-      throw new StorageError("network", `Couldn't reach the server, so ${whileDoing} wasn't saved. Check your connection and try again.`, err);
+      throw new StorageError("network", t("storage.offline", { what: t(whileDoing) }), err);
     }
     if (res.error) {
       if (attempt < 1 && isClockSkew(res.error)) { await sleep(2000); continue; }
@@ -87,11 +88,11 @@ export function createSupabaseProvider(userId) {
   return {
     async loadAll() {
       const [beats, playlists, profile] = await Promise.all([
-        run(() => supabase.from("beats").select("id, name, data").eq("user_id", userId).order("created_at"), "your beats"),
-        run(() => supabase.from("playlists").select("id, name, beat_ids").eq("user_id", userId).order("created_at"), "your playlists"),
+        run(() => supabase.from("beats").select("id, name, data").eq("user_id", userId).order("created_at"), "what.yourBeats"),
+        run(() => supabase.from("playlists").select("id, name, beat_ids").eq("user_id", userId).order("created_at"), "what.yourPlaylists"),
         // maybeSingle: a brand-new user may not have a profile row yet (the
         // trigger normally makes one). Absent → fall back to the built-ins.
-        run(() => supabase.from("profiles").select("active_category_id").eq("id", userId).maybeSingle(), "your settings"),
+        run(() => supabase.from("profiles").select("active_category_id").eq("id", userId).maybeSingle(), "what.yourSettings"),
       ]);
       return {
         beats: (beats ?? []).map(rowToBeat),
@@ -103,7 +104,7 @@ export function createSupabaseProvider(userId) {
     async createBeat(draft) {
       const row = await run(
         () => supabase.from("beats").insert({ user_id: userId, name: draft.name, data: beatBody(draft) }).select("id, name, data").single(),
-        "that beat",
+        "what.thatBeat",
       );
       return rowToBeat(row);
     },
@@ -116,7 +117,7 @@ export function createSupabaseProvider(userId) {
         () => supabase.from("beats")
           .insert(drafts.map((d) => ({ user_id: userId, name: d.name, data: beatBody(d) })))
           .select("id, name, data"),
-        "those beats",
+        "what.thoseBeats",
       );
       return (rows ?? []).map(rowToBeat);
     },
@@ -127,20 +128,20 @@ export function createSupabaseProvider(userId) {
       const row = await run(
         () => supabase.from("beats").update({ name: patch.name, data: beatBody(patch) })
           .eq("id", id).eq("user_id", userId).select("id, name, data").single(),
-        "that beat",
+        "what.thatBeat",
       );
       return rowToBeat(row);
     },
 
     async deleteBeat(id) {
-      await run(() => supabase.from("beats").delete().eq("id", id).eq("user_id", userId), "that change");
+      await run(() => supabase.from("beats").delete().eq("id", id).eq("user_id", userId), "what.thatChange");
     },
 
     async createCategory(draft) {
       const row = await run(
         () => supabase.from("playlists").insert({ user_id: userId, name: draft.name, beat_ids: draft.beatIds ?? [] })
           .select("id, name, beat_ids").single(),
-        "that playlist",
+        "what.thatPlaylist",
       );
       return rowToCategory(row);
     },
@@ -154,13 +155,13 @@ export function createSupabaseProvider(userId) {
       const row = await run(
         () => supabase.from("playlists").update(rowPatch).eq("id", id).eq("user_id", userId)
           .select("id, name, beat_ids").single(),
-        "that playlist",
+        "what.thatPlaylist",
       );
       return rowToCategory(row);
     },
 
     async deleteCategory(id) {
-      await run(() => supabase.from("playlists").delete().eq("id", id).eq("user_id", userId), "that change");
+      await run(() => supabase.from("playlists").delete().eq("id", id).eq("user_id", userId), "what.thatChange");
     },
 
     // Upsert so the row is created on first use even if the new-user trigger
@@ -168,7 +169,7 @@ export function createSupabaseProvider(userId) {
     async setActiveCategory(id) {
       await run(
         () => supabase.from("profiles").upsert({ id: userId, active_category_id: id }, { onConflict: "id" }),
-        "that change",
+        "what.thatChange",
       );
     },
   };

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase, isSupabaseConfigured } from "../storage/supabaseClient.js";
+import { t } from "../i18n/index.js";
 
 /**
  * useAuth — the signed-in user, and the handful of ways in and out.
@@ -43,12 +44,12 @@ export function useAuth() {
   const wrap = (result) => ({ error: result?.error ? result.error.message : null });
 
   const signInWithPassword = useCallback(async (email, password) => {
-    if (!supabase) return { error: "Cloud accounts aren't set up in this build." };
+    if (!supabase) return { error: t("auth.notConfigured") };
     return wrap(await supabase.auth.signInWithPassword({ email, password }));
   }, []);
 
   const signUpWithPassword = useCallback(async (email, password, name) => {
-    if (!supabase) return { error: "Cloud accounts aren't set up in this build." };
+    if (!supabase) return { error: t("auth.notConfigured") };
     return wrap(await supabase.auth.signUp({
       email, password,
       options: { data: name ? { name } : undefined },
@@ -56,7 +57,7 @@ export function useAuth() {
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    if (!supabase) return { error: "Cloud accounts aren't set up in this build." };
+    if (!supabase) return { error: t("auth.notConfigured") };
     return wrap(await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: window.location.origin },

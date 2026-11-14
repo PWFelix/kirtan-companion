@@ -1,7 +1,24 @@
 import { useState, useRef, useEffect } from "react";
+import SwingControl from "./ui/SwingControl.jsx";
+import { SWING_STRAIGHT } from "./data/swing.js";
+import { runBetween, copyRun, pasteRun, clipLength } from "./data/clipboard.js";
 import BeatStrip from "./BeatStrip.jsx";
 import { labelsFromGroups } from "./data/stepLabels.js";
-import { BOLS, COMBO_BOLS } from "./data/bols.js";
+import { BOLS } from "./data/bols.js";
+import { t, tOr } from "./i18n/index.js";
+import { tagLine } from "./data/tags.js";
+import { NotesEditorSheet } from "./ui/RhythmNotes.jsx";
+import { TagPicker } from "./ui/TagPicker.jsx";
+import { MAX_NAME_LEN, clampName } from "./data/names.js";
+import { closedMarkBackground } from "./data/strokes.js";
+import { tempoRange, brahmalokaFor } from "./data/meter.js";
+import BpmRange from "./ui/BpmRange.jsx";
+import BrahmalokaBurst from "./ui/BrahmalokaBurst.jsx";
+import { leverFor, reshape, resample, pagesFor } from "./data/resolution.js";
+import { MAX_STEPS, MAX_GROUPS } from "./data/shareCodec.js";
+import EditorTimeline from "./ui/EditorTimeline.jsx";
+import { loadEditorView, saveEditorView } from "./data/editorTimeline.js";
+import { METERS, meterFor, emptyGrid, sum, draftFrom, nextGroup } from "./data/editorDraft.js";
 
 /**
  * BeatEditor — three zones, phone-first
@@ -9,13 +26,14 @@ import { BOLS, COMBO_BOLS } from "./data/bols.js";
  * 1. OVERVIEW  — a mini BeatStrip of the WHOLE beat with a draggable frame
  *    showing which page the zoom is on; doubles as the live visualiser.
  * 2. ZOOM      — one page of cells, magnified, the lanes aligned in a column
- *    (the two mridanga heads, plus the karatalas when present). The CURSOR is
- *    a column; tapping a cell moves it. A lane label above each row doubles as
- *    an "edit only this lane" toggle — which is how the cymbal row is authored,
- *    since the both-hands pads only write the drum.
- * 3. PADS      — one pad per enterable stroke (from data/bols.js). Tapping a
- *    pad writes the cursor column (or one lane when isolated), SOUNDS the
- *    sample(s), and advances the cursor.
+ *    (the two mridanga heads and the karatalas). Editing is CELL-DRIVEN: the
+ *    cursor is one cell (a lane and a step). Tapping any cell selects it, and
+ *    the pads become that row's strokes.
+ * 3. PADS      — the selected row's palette (data/bols.js): its open and
+ *    closed strokes plus Rest. Tapping a pad writes the selected cell, SOUNDS
+ *    the stroke, and advances to the next cell along the same row, so a row
+ *    can be typed in one go. A two-hand bol (Da, Gi...) is simply both drum
+ *    rows filled in the same column.
  *
  * The three zones sit in one scrolling region so a viewport too short for all
  * of them scrolls instead of overflowing; the title, Save and the nav bar are
@@ -30,62 +48,11 @@ import { BOLS, COMBO_BOLS } from "./data/bols.js";
  * and the engine handles it.
  */
 
-const emptyGrid = (n) => Array(n).fill(null);
-const sum = (a) => a.reduce((x, y) => x + y, 0);
-
-// Meter/feel presets. `bar` = one bar's groups, `unit` = what +/- Group adds
-// or removes, `cpq` = cells per quarter note (sets timing via beatsPerBar).
-const METERS = [
-  { id: "std",  label: "Standard",    sig: "4/4 · eighths",    bar: [2, 2, 2, 2], unit: [2],       cpq: 2 },
-  { id: "trip", label: "Triplets",    sig: "swing · 12/8",     bar: [3, 3, 3, 3], unit: [3],       cpq: 3 },
-  { id: "dbl",  label: "Double-time", sig: "16ths",            bar: [4, 4, 4, 4], unit: [4],       cpq: 4 },
-  { id: "68",   label: "Six-eight",   sig: "6/8 · 3+3",        bar: [3, 3],       unit: [3, 3],    cpq: 2 },
-  { id: "78",   label: "Seven-eight", sig: "7/8 · 2+2+3",      bar: [2, 2, 3],    unit: [2, 2, 3], cpq: 2 },
-];
-
-// Does `arr` consist of whole repetitions of `pattern`?
-function repeats(pattern, arr) {
-  if (arr.length === 0 || arr.length % pattern.length !== 0) return false;
-  return arr.every((v, i) => v === pattern[i % pattern.length]);
-}
-
-// Recover the meter preset (or a synthesized "custom" one) from a beat's
-// groups + cpq, so editing an existing beat lands on the right picker entry.
-function meterFor(groups, cpq) {
-  const uniform = groups.every((g) => g === groups[0]);
-  if (uniform && groups[0] === cpq) {
-    const m = METERS.find((x) => x.cpq === cpq && x.unit.length === 1 && x.unit[0] === cpq);
-    if (m) return m;
-  }
-  if (cpq === 2 && repeats([3, 3], groups)) return METERS.find((m) => m.id === "68");
-  if (cpq === 2 && repeats([2, 2, 3], groups)) return METERS.find((m) => m.id === "78");
-  return { id: "custom", label: "Custom", sig: "", unit: uniform ? [groups[0]] : [...groups], cpq };
-}
-
-function seedGroups(b) {
-  if (!b) return [...METERS[0].bar];
-  if (Array.isArray(b.groups)) return [...b.groups];
-  const cpg = b.cellsPerGroup ?? Math.max(1, Math.round(b.steps / (b.beatsPerBar ?? 4)));
-  const beats = Math.max(1, Math.round(b.steps / cpg));
-  return Array(beats).fill(cpg);
-}
-const seedCpq = (b) => (b ? Math.max(1, Math.round(b.steps / (b.beatsPerBar ?? 4))) : 2);
-
-// filled = open, ring = closed, faint dot = silent.
+// filled = open, X = closed, faint dot = silent.
 function dotStyle(v, color, size) {
   if (v === "O") return { width: size, height: size, borderRadius: "50%", background: color };
-  if (v === "X") return { width: size, height: size, borderRadius: "50%", border: `2.5px solid ${color}` };
+  if (v === "X") return { width: size, height: size, background: closedMarkBackground(color, 1.4) };
   return { width: 4, height: 4, borderRadius: "50%", background: "var(--rule)" };
-}
-
-// Top/bottom mark PAIR — used on the both-hands pads (top = dayan, bottom = bayan).
-function StrokeMark({ dayan, bayan, size = 12 }) {
-  return (
-    <span aria-hidden="true" style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-      <span style={dotStyle(dayan, "var(--lane-dayan)", size)} />
-      <span style={dotStyle(bayan, "var(--lane-bayan)", size)} />
-    </span>
-  );
 }
 
 function PencilIcon() {
@@ -99,57 +66,56 @@ function PencilIcon() {
 
 const soundName = (end, v) => (v === "O" ? `${end}_open` : v === "X" ? `${end}_closed` : null);
 
-// Pad palettes keyed by edit mode (both hands / one isolated lane). Each
-// pad's `write` names exactly the lanes it touches.
-const PAD_SETS = {
-  both: [
-    { key: "ta",   label: BOLS.dayan.O,      write: { dayan: "O",  bayan: null } },
-    { key: "te",   label: BOLS.dayan.X,      write: { dayan: "X",  bayan: null } },
-    { key: "ge",   label: BOLS.bayan.O,      write: { dayan: null, bayan: "O"  } },
-    { key: "khe",  label: BOLS.bayan.X,      write: { dayan: null, bayan: "X"  } },
-    { key: "da",   label: COMBO_BOLS["O+O"], write: { dayan: "O",  bayan: "O"  } },
-    { key: "gi",   label: COMBO_BOLS["X+O"], write: { dayan: "X",  bayan: "O"  } },
-    { key: "tk",   label: COMBO_BOLS["O+X"], write: { dayan: "O",  bayan: "X"  } },
-    { key: "tek",  label: COMBO_BOLS["X+X"], write: { dayan: "X",  bayan: "X"  } },
-    { key: "rest", label: "Rest",            write: { dayan: null, bayan: null }, rest: true },
-  ],
-  dayan: [
-    { key: "ta", label: BOLS.dayan.O, write: { dayan: "O" } },
-    { key: "te", label: BOLS.dayan.X, write: { dayan: "X" } },
-    { key: "rd", label: "Rest",       write: { dayan: null }, rest: true },
-  ],
-  bayan: [
-    { key: "ge",  label: BOLS.bayan.O, write: { bayan: "O" } },
-    { key: "khe", label: BOLS.bayan.X, write: { bayan: "X" } },
-    { key: "rb",  label: "Rest",       write: { bayan: null }, rest: true },
-  ],
-  // Karatalas are authored on their own (isolate the lane), so they only need
-  // an isolated pad set — ring, damped, rest. No "both" combo pads: the cymbal
-  // isn't struck together with a drum head under one bol.
-  kartal: [
-    { key: "kch", label: BOLS.kartal.O, write: { kartal: "O" } },
-    { key: "kdm", label: BOLS.kartal.X, write: { kartal: "X" } },
-    { key: "rk",  label: "Rest",        write: { kartal: null }, rest: true },
-  ],
-};
+// The editable rows, top to bottom.
+const ROWS = [["dayan", "Dayan"], ["bayan", "Bayan"], ["kartal", "Kartal"]];
 
-function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
-  const [groups, setGroups] = useState(() => seedGroups(initialBeat));
-  const [meter, setMeter]   = useState(() => meterFor(seedGroups(initialBeat), seedCpq(initialBeat)));
-  const [dayan, setDayan] = useState(initialBeat ? [...initialBeat.dayan] : emptyGrid(sum(seedGroups(initialBeat))));
-  const [bayan, setBayan] = useState(initialBeat ? [...initialBeat.bayan] : emptyGrid(sum(seedGroups(initialBeat))));
-  // Kartal is optional on a beat, so an existing beat may not carry one —
-  // fall back to an empty grid of the same length as the drum lanes.
-  const [kartal, setKartal] = useState(
-    initialBeat?.kartal ? [...initialBeat.kartal] : emptyGrid(sum(seedGroups(initialBeat)))
-  );
-  const [bpm, setBpm]     = useState(initialBeat?.bpm ?? 90);
-  const [name, setName]   = useState(initialBeat?.name ?? "");
+/** The palette for a row: its open stroke, its closed stroke, and Rest. */
+const padsFor = (lane) => [
+  { key: lane + "O", label: BOLS[lane].O, value: "O" },
+  { key: lane + "X", label: BOLS[lane].X, value: "X" },
+  { key: lane + "-", label: "Rest", value: null, rest: true },
+];
+
+function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, initialDraft, onDraftChange, onDiscard, dirty, nav }) {
+  // The draft lives in App (one session, kept across screens and reloads):
+  // start from it, and report every change back below.
+  const [start] = useState(() => initialDraft ?? draftFrom(initialBeat));
+  const [groups, setGroups] = useState(start.groups);
+  const [meter, setMeter]   = useState(start.meter);
+  const [dayan, setDayan] = useState(start.dayan);
+  const [bayan, setBayan] = useState(start.bayan);
+  const [kartal, setKartal] = useState(start.kartal);
+  const [bpm, setBpm]     = useState(start.bpm);
+  const [swing, setSwing] = useState(start.swing ?? SWING_STRAIGHT);
+  // Brahmaloka time, editor-local (the editor's tempo is the draft's, not the
+  // transport's). A beat saved above 200 opens already in the high range.
+  const [brahmaloka, setBrahmaloka] = useState(() => start.bpm > 200);
+  const [burstKey, setBurstKey] = useState(0);
+  const [name, setName]   = useState(start.name);
   const [previewing, setPreviewing] = useState(false);
   const [step, setStep]   = useState(-1);
-  const [cursor, setCursor] = useState(0);
-  const [editLane, setEditLane] = useState("both");
+  const [cursor, setCursor] = useState(start.cursor ?? 0);
+  // The row the cursor is on — the cursor is a CELL (cursorLane, cursor). It
+  // picks the pads' palette. Set by tapping any cell.
+  const [cursorLane, setCursorLane] = useState(start.cursorLane ?? "dayan");
   const [feelOpen, setFeelOpen] = useState(false);
+  // The author's tags, published with the beat (data/tags.js).
+  const [tags, setTags] = useState(start.tags ?? []);
+  const [notes, setNotes] = useState(start.notes ?? "");
+  const [discardOpen, setDiscardOpen] = useState(false);
+  // Copy and paste (data/clipboard.js). While choosing a run, selectAnchor is
+  // the cell it started at and the cursor is its other end, so tapping cells —
+  // on any page — moves that end. The clip outlives the run: paste it again
+  // and again.
+  const [selectAnchor, setSelectAnchor] = useState(null);
+  // Timeline (vertical, the default) or the original strip; remembered per browser.
+  const [view, setView] = useState(loadEditorView);
+  const [clip, setClip] = useState(null);
+  useEffect(() => {
+    onDraftChange?.({ groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags, notes });
+  }, [groups, meter, dayan, bayan, kartal, bpm, swing, name, cursor, cursorLane, tags, notes, onDraftChange]);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const overviewRef = useRef(null);
   const scrubbingRef = useRef(false);
@@ -160,15 +126,24 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const beatsPerBar = steps / cpq;
   const labels = labelsFromGroups(groups);
 
-  // The zoom shows up to 8 cells at once (matching the main strip). Pages
-  // tile the beat in fixed 8-cell windows; the visible one holds the cursor.
-  const zoomCells = Math.min(steps, 8);
-  const pageCount = Math.ceil(steps / zoomCells);
-  const page = Math.floor(cursor / zoomCells);
-  const windowStart = page * zoomCells;
-  const windowEnd = Math.min(windowStart + zoomCells, steps);
+  // The zoom shows up to 8 cells at once (matching the main strip). Pages hold
+  // whole beats, so one never starts mid-beat; the visible one holds the cursor.
+  const pages = pagesFor(groups);
+  const pageCount = pages.length;
+  const page = Math.max(0, pages.findIndex(([a, b]) => cursor >= a && cursor < b));
+  const [windowStart, windowEnd] = pages[page] ?? [0, steps];
+  const zoomCells = windowEnd - windowStart;
 
-  const previewBeat = { id: "preview", name: name || "Preview", note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan, kartal };
+  // The two levers: beats (±, capped so the beat stays within MAX_STEPS cells, 384) and resolution.
+  // + and − move one beat at a time (a whole 3+3 cycle at once made 6/8 unable to land on 4 bars).
+  const addSize = nextGroup(meter, groups);
+  const canAddBeat = steps + addSize <= MAX_STEPS && groups.length + 1 <= MAX_GROUPS;
+  const canRemoveBeat = groups.length > 1;
+  const lever = leverFor(groups, cpq);
+  // What the last resolution change moved or dropped, shown until the next edit.
+  const [resampleReport, setResampleReport] = useState(null);
+
+  const previewBeat = { id: "preview", name: name || t("editor.preview"), note: "Custom", bpm, steps, beatsPerBar, cellsPerGroup: cpq, groups, dayan, bayan, kartal, swing };
   const beatRef = useRef(previewBeat);
   useEffect(() => { beatRef.current = previewBeat; });
 
@@ -176,7 +151,8 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
   const undoRef = useRef([]);
   const [canUndo, setCanUndo] = useState(false);
   function pushUndo() {
-    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor });
+    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor, cursorLane });
+    setResampleReport(null);
     if (undoRef.current.length > 60) undoRef.current.shift();
     setCanUndo(true);
   }
@@ -184,9 +160,39 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     const prev = undoRef.current.pop();
     if (!prev) return;
     setDayan(prev.dayan); setBayan(prev.bayan); setKartal(prev.kartal); setCursor(prev.cursor);
+    if (prev.cursorLane) setCursorLane(prev.cursorLane);
+    // A resolution change's entry also carries the grid shape it replaced.
+    if (prev.groups) { setGroups(prev.groups); setMeter(prev.meter); }
+    setResampleReport(null);
     setCanUndo(undoRef.current.length > 0);
   }
-  function resetUndo() { undoRef.current = []; setCanUndo(false); }
+  function resetUndo() { undoRef.current = []; setCanUndo(false); setResampleReport(null); setSelectAnchor(null); }
+
+  /**
+   * Change the resolution, KEEPING THE RHYTHM: every hit stays at its moment in
+   * the bar on the nearest new cell (see data/resolution.js). Undoable — the
+   * undo entry carries the old grid shape along with the old hits.
+   */
+  function changeResolution(option) {
+    if (option === lever.current) return;
+    const next = reshape(groups, cpq, meter.unit, option);
+    if (!next) return;
+    if (previewing) { engine.stop(); setPreviewing(false); }
+    const n = sum(next.groups);
+    const report = { moved: 0, dropped: 0 };
+    undoRef.current.push({ dayan: [...dayan], bayan: [...bayan], kartal: [...kartal], cursor, groups, meter });
+    setSelectAnchor(null);
+    if (undoRef.current.length > 60) undoRef.current.shift();
+    setCanUndo(true);
+    setDayan(resample(dayan, cpq, next.cpq, n, report));
+    setBayan(resample(bayan, cpq, next.cpq, n, report));
+    setKartal(resample(kartal, cpq, next.cpq, n, report));
+    const found = meterFor(next.groups, next.cpq);
+    setMeter(found.id === "custom" ? { ...found, unit: next.unit } : found);
+    setGroups(next.groups);
+    setCursor(Math.min(n - 1, Math.floor((cursor * next.cpq) / cpq)));
+    setResampleReport(report.moved || report.dropped ? report : null);
+  }
 
   useEffect(() => {
     const onStep = (s) => setStep(s);
@@ -198,22 +204,23 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     if (!previewing) return;
     engine.setBeat(beatRef.current);
     engine.setBpm(bpm);
-  }, [previewing, dayan, bayan, kartal, bpm, steps, engine]);
+  }, [previewing, dayan, bayan, kartal, bpm, swing, steps, engine]);
 
   const getPhase = () => engine.getPhase();
 
   function addGroup() {
-    const u = meter.unit, pad = Array(sum(u)).fill(null);
-    setGroups((g) => [...g, ...u]);
+    if (!canAddBeat) return;
+    const pad = Array(addSize).fill(null);
+    setGroups((g) => [...g, addSize]);
     setDayan((p) => [...p, ...pad]);
     setBayan((p) => [...p, ...pad]);
     setKartal((p) => [...p, ...pad]);
     resetUndo();
   }
   function removeGroup() {
-    if (groups.length <= meter.unit.length) return;
-    const drop = sum(meter.unit);
-    setGroups((g) => g.slice(0, -meter.unit.length));
+    if (!canRemoveBeat) return;
+    const drop = groups[groups.length - 1];
+    setGroups((g) => g.slice(0, -1));
     setDayan((p) => p.slice(0, -drop));
     setBayan((p) => p.slice(0, -drop));
     setKartal((p) => p.slice(0, -drop));
@@ -233,17 +240,50 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setFeelOpen(false);
   }
 
-  // One setter per authorable lane — lets tapPad write any lane a pad names
-  // (a pad only ever writes the lanes in its `write`) without a branch each.
+  // One setter per authorable lane, so tapPad writes the cursor's row without a branch each.
   const laneSetters = { dayan: setDayan, bayan: setBayan, kartal: setKartal };
+  /** Write the pad into the selected cell, sound it, and step along the same row. */
   function tapPad(pad) {
     pushUndo();
-    const w = pad.write;
-    for (const lane of Object.keys(w)) {
-      laneSetters[lane]?.((p) => { const c = [...p]; c[cursor] = w[lane]; return c; });
-      if (!previewing) { const n = soundName(lane, w[lane]); if (n) engine.playStroke(n); }
-    }
+    laneSetters[cursorLane]((p) => { const c = [...p]; c[cursor] = pad.value; return c; });
+    if (!previewing) { const n = soundName(cursorLane, pad.value); if (n) engine.playStroke(n); }
     setCursor((c) => (c + 1) % steps);
+  }
+
+  /**
+   * Steps a cell on through its row's palette — rest → open → closed → rest —
+   * so a cell is edited without moving. The cursor stays put; the stroke sounds; undo takes it back.
+   */
+  function cycleCell(lane, i) {
+    const order = [null, ...padsFor(lane).filter((p) => !p.rest).map((p) => p.value)];
+    const now = { dayan, bayan, kartal }[lane][i] ?? null;
+    const next = order[(order.indexOf(now) + 1) % order.length];
+    pushUndo();
+    laneSetters[lane]((p) => { const c = [...p]; c[i] = next; return c; });
+    if (!previewing) { const n = soundName(lane, next); if (n) engine.playStroke(n); }
+  }
+
+  /**
+   * A tap on a grid cell, in either view. Choosing a run to copy only ever moves
+   * its end. Another cell: select it, and an EMPTY one gets the row's first stroke
+   * at once (a filled one is only selected, so moving never overwrites). The
+   * selected cell: step it on through the palette.
+   */
+  function tapCell(end, i) {
+    const v = { dayan, bayan, kartal }[end][i] ?? null;
+    const isCursor = end === cursorLane && i === cursor;
+    const pick = () => { setCursor(i); setCursorLane(end); };
+    if (selectAnchor != null) pick();
+    else if (isCursor) cycleCell(end, i);
+    else { pick(); if (v == null) cycleCell(end, i); }
+  }
+
+  /** Scrubbing the timeline: sound every hand that plays on the cell crossing the line. */
+  function soundCell(i) {
+    for (const [end] of ROWS) {
+      const n = soundName(end, { dayan, bayan, kartal }[end][i] ?? null);
+      if (n) engine.playStroke(n);
+    }
   }
 
   async function togglePreview() {
@@ -267,16 +307,19 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
    *    discarded here, so closing on a failed write would throw the user's
    *    work away and leave them only an error message about it.
    */
-  async function handleSave() {
+  async function handleSave(asNew = false) {
     if (saving) return;
     if (previewing) { engine.stop(); setPreviewing(false); }
     const hasAnyHit = dayan.some((c) => c !== null) || bayan.some((c) => c !== null) || kartal.some((c) => c !== null);
-    if (!hasAnyHit) { alert("Add at least one stroke before saving."); return; }
-    const finalName = name.trim() || "Custom Beat";
+    if (!hasAnyHit) { alert(t("editor.needStroke")); return; }
+    let finalName = clampName(name.trim()) || t("editor.defaultName");
+    // A variation left with the original's name would be two identical rows.
+    if (asNew && finalName === initialBeat?.name) finalName = clampName(t("editor.copyName", { name: finalName }));
     // No id means "new" — the library mints one on save, and it is now the
     // only place in the app ids come from. Editing an existing custom beat
     // keeps its id and so overwrites in place.
-    const id = initialBeat?.id ?? null;
+    // "Save as new" drops the id, so the original stays as it was.
+    const id = asNew ? null : initialBeat?.id ?? null;
     const uniform = groups.every((g) => g === groups[0]);
     // Only persist a kartal line when the user actually drew one, so a beat
     // with no cymbals stays a two-lane beat (matches beats.js's convention and
@@ -285,9 +328,33 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setSaving(true);
     const saved = await onSave({ id, name: finalName, note: "Custom", bpm, steps, beatsPerBar,
       cellsPerGroup: uniform ? groups[0] : cpq, groups, dayan, bayan,
-      ...(hasKartal ? { kartal } : {}) });
+      ...(hasKartal ? { kartal } : {}),
+      ...(tags.length ? { tags } : {}),
+      ...(notes.trim() ? { description: notes.trim() } : {}),
+      ...(swing > SWING_STRAIGHT ? { swing } : {}),
+      // A copy of a community beat remembers its original (see communityTracking.js).
+      ...(initialBeat?.forkedFrom ? { forkedFrom: initialBeat.forkedFrom } : {}) });
     if (saved) { onClose(); return; }   // unmounts — no state to reset
     setSaving(false);
+  }
+
+  const selection = selectAnchor == null ? null
+    : runBetween(Math.min(selectAnchor, steps - 1), Math.min(cursor, steps - 1));
+  function copySelection() {
+    if (!selection) return;
+    setClip(copyRun({ dayan, bayan, kartal }, selection[0], selection[1]));
+    setCursor(selection[0]);
+    setSelectAnchor(null);
+  }
+  function paste(closeBayan) {
+    if (!clip) return;
+    const { lanes, written } = pasteRun({ dayan, bayan, kartal }, clip, cursor, closeBayan);
+    if (!written) return;
+    pushUndo();
+    setDayan(lanes.dayan); setBayan(lanes.bayan); setKartal(lanes.kartal);
+    setSelectAnchor(null);
+    setResampleReport(null);
+    setCursor((cursor + written) % steps);
   }
 
   function clearGrid() {
@@ -303,19 +370,41 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
     setCursor(Math.min(steps - 1, Math.floor(frac * steps)));
   }
 
-  const fillPct = ((bpm - 40) / 160) * 100;
+  const range = tempoRange(brahmaloka);
+  const unlockBrahmaloka = () => { setBrahmaloka(true); setBurstKey((k) => k + 1); engine.rumble(); navigator.vibrate?.([90, 60, 180]); };
+  function changeBpm(v) {
+    setBpm(v);
+    setBrahmaloka((was) => brahmalokaFor(v, was));
+  }
 
   return (
     <div className="kc-screen" style={st.screen}>
+      <BrahmalokaBurst fireKey={burstKey} />
       <header style={st.header}>
-        {onBack && <button onClick={onBack} style={st.backBtn} aria-label="Back">‹</button>}
+        {onBack && <button onClick={onBack} style={st.backBtn} aria-label={t("common.back")}>‹</button>}
         <div style={st.titleWrap}>
           <input ref={nameInputRef} type="text" value={name} onChange={(e) => setName(e.target.value)}
-            placeholder="Name your beat" aria-label="Beat name" style={st.titleInput} />
-          <button onClick={() => nameInputRef.current?.focus()} aria-label="Rename beat"
+            maxLength={MAX_NAME_LEN}
+            placeholder={t("editor.namePlaceholder")} aria-label={t("editor.name")} style={st.titleInput} />
+          <button onClick={() => nameInputRef.current?.focus()} aria-label={t("editor.rename")}
             style={st.titlePencil}><PencilIcon /></button>
         </div>
+        {/* Only when there is something to lose; the Editor tab's dot says the
+            same from anywhere else in the app. */}
+        {dirty && (
+          <button onClick={() => setDiscardOpen(true)} style={st.revertBtn}>
+            {t(initialBeat ? "editor.revert" : "editor.startOver")}
+          </button>
+        )}
       </header>
+      <button onClick={() => setTagsOpen(true)} style={st.tagsLine} aria-label={t("tags.editAuthor")}>
+        <span style={st.tagsLabel}>{t("tags.title")}</span>
+        <span style={st.tagsValue}>{tagLine(tags) || t("tags.none")}</span>
+      </button>
+      <button onClick={() => setNotesOpen(true)} style={st.tagsLine} aria-label={t("notes.edit")}>
+        <span style={st.tagsLabel}>{t("notes.title")}</span>
+        <span style={st.tagsValue}>{notes.trim().split("\n")[0] || t("tags.none")}</span>
+      </button>
 
       {/* Everything between the title and Save scrolls as one region. The
           editor's sections are all flexShrink:0 (a squashed pad grid is
@@ -324,6 +413,24 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           Save and nav keeps the nav pill at the same y as every other page. */}
       <div style={st.body}>
 
+        <div style={st.viewSwitch} role="group">
+          {["timeline", "strip"].map((v) => (
+            <button key={v} aria-pressed={view === v} onClick={() => { setView(v); saveEditorView(v); }}
+              style={{ ...st.viewChip, ...(view === v ? st.viewChipOn : null) }}>
+              {t(v === "timeline" ? "editor.viewTimeline" : "editor.viewStrip")}
+            </button>
+          ))}
+        </div>
+
+        {view === "timeline" ? (
+          <EditorTimeline rows={ROWS} patterns={{ dayan, bayan, kartal }} groups={groups} labels={labels}
+            cursor={cursor} cursorLane={cursorLane} selection={selection} previewing={previewing} getPhase={getPhase}
+            onCellTap={tapCell}
+            onLaneTap={(end) => setCursorLane(end)}
+            onCursor={setCursor}
+            onPause={() => { if (previewing) togglePreview(); }}
+            onScrubSound={soundCell} />
+        ) : (<>
         {/* ── OVERVIEW: whole beat + a draggable frame over the current page ── */}
         <div ref={overviewRef} style={st.overviewWrap}
           onPointerDown={(e) => { scrubbingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); scrubTo(e.clientX); }}
@@ -331,6 +438,11 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           onPointerUp={() => { scrubbingRef.current = false; }}
           onPointerCancel={() => { scrubbingRef.current = false; }}>
           <BeatStrip beat={previewBeat} step={step} playing={previewing} getPhase={getPhase} mini />
+          {selection && (
+            <div aria-hidden="true" style={{ ...st.overviewSel,
+              left: (selection[0] / steps) * 100 + "%",
+              width: ((selection[1] + 1 - selection[0]) / steps) * 100 + "%" }} />
+          )}
           {pageCount > 1 && (
             <div aria-hidden="true" style={{ ...st.overviewFrame,
               left: (windowStart / steps) * 100 + "%",
@@ -338,15 +450,15 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           )}
         </div>
 
-        {/* ── ZOOM: one magnified page; the cursor is a column ── */}
+        {/* ── ZOOM: one magnified page; the cursor is a cell ── */}
         <div style={st.zoom}>
           <div style={st.zoomHead}>
-            <button onClick={() => setCursor(Math.max(0, windowStart - zoomCells))}
-              disabled={page === 0} aria-label="Previous page"
+            <button onClick={() => setCursor(pages[Math.max(0, page - 1)][0])}
+              disabled={page === 0} aria-label={t("editor.prevPage")}
               style={{ ...st.pageBtn, opacity: page === 0 ? 0.3 : 1 }}>‹</button>
-            <span style={st.zoomLabel}>{windowStart + 1}–{windowEnd} of {steps}</span>
-            <button onClick={() => setCursor(Math.min(steps - 1, windowStart + zoomCells))}
-              disabled={page >= pageCount - 1} aria-label="Next page"
+            <span style={st.zoomLabel}>{t("editor.pageRange", { from: windowStart + 1, to: windowEnd, total: steps })}</span>
+            <button onClick={() => setCursor(pages[Math.min(pageCount - 1, page + 1)][0])}
+              disabled={page >= pageCount - 1} aria-label={t("editor.nextPage")}
               style={{ ...st.pageBtn, opacity: page >= pageCount - 1 ? 0.3 : 1 }}>›</button>
           </div>
           <div style={st.zoomRows}>
@@ -355,28 +467,39 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
                 <div key={"n" + j} style={{ ...st.zoomNum, opacity: l !== "·" ? 0.9 : 0.4, fontWeight: l !== "·" ? 700 : 400 }}>{l}</div>
               ))}
             </div>
-            {[["dayan", "Dayan", dayan], ["bayan", "Bayan", bayan], ["kartal", "Kartal", kartal]].map(([end, label, arr]) => {
-              const isolatedOut = editLane !== "both" && editLane !== end;
-              const active = editLane === end;
+            {ROWS.map(([end, label]) => {
+              const arr = { dayan, bayan, kartal }[end];
+              const onRow = end === cursorLane;
+              const pick = (i) => { setCursor(i); setCursorLane(end); };
               return (
-                <div key={end} style={{ opacity: isolatedOut ? 0.4 : 1 }}>
-                  <button onClick={() => setEditLane((m) => (m === end ? "both" : end))}
-                    aria-pressed={active}
-                    style={{ ...st.laneLabel, color: `var(--lane-${end})`, fontWeight: active ? 800 : 700 }}>
-                    {label}{active ? " · editing only" : ""}
+                <div key={end}>
+                  <button onClick={() => pick(cursor)}
+                    aria-pressed={onRow}
+                    style={{ ...st.laneLabel, color: `var(--lane-${end})`, fontWeight: onRow ? 800 : 400 }}>
+                    {label}
                   </button>
                   <div style={{ ...st.zoomLine, gridTemplateColumns: `repeat(${zoomCells}, 1fr)` }}>
                     {arr.slice(windowStart, windowEnd).map((v, j) => {
                       const i = windowStart + j;
-                      const isCursor = i === cursor;
+                      const isCursor = onRow && i === cursor;
                       const lit = previewing && i === step;
+                      const chosen = selection && i >= selection[0] && i <= selection[1];
                       return (
-                        <button key={end + i} onClick={() => setCursor(i)}
-                          aria-label={`${end} cell ${i + 1}${v ? `, ${BOLS[end]?.[v] ?? v}` : ", empty"}`}
+                        <button key={end + i}
+                          // Choosing a run to copy only ever moves its end.
+                          // Another cell: select it, and an EMPTY one gets the row's first
+                          // stroke at once (a filled one is only selected, so moving never
+                          // overwrites). The selected cell: step it on through the palette.
+                          onClick={() => tapCell(end, i)}
+                          aria-current={isCursor || undefined}
+                          aria-label={v ? t("editor.cell", { lane: end, n: i + 1, bol: BOLS[end]?.[v] ?? v }) : t("editor.cellEmpty", { lane: end, n: i + 1 })}
                           style={{ ...st.zoomCell,
                             borderColor: isCursor ? "var(--clay)" : "var(--rule)",
                             borderWidth: isCursor ? 2 : 1,
-                            background: lit ? "var(--head-sunken)" : "var(--head)" }}>
+                            // The cursor's column, faintly, on the other rows: where the
+                            // other hands fall at the same moment.
+                            background: lit ? "var(--head-sunken)" : chosen ? "color-mix(in srgb, var(--clay) 16%, var(--head))"
+                              : (!onRow && i === cursor) ? "var(--head-worn)" : "var(--head)" }}>
                           <span aria-hidden="true"
                             style={dotStyle(v, `var(--lane-${end})`, 18)} />
                         </button>
@@ -389,35 +512,60 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
           </div>
         </div>
 
+        </>)}
+
+        {/* ── COPY / PASTE ── */}
+        <div style={st.clip}>
+          {selection ? (
+            <>
+              <div style={st.clipPrompt}>
+                {t("editor.selection", { from: selection[0] + 1, to: selection[1] + 1 })} · {t("editor.selectHint")}
+              </div>
+              <div style={st.controlRow}>
+                <button onClick={copySelection} style={{ ...st.utilBtn, ...st.previewOn }}>{t("editor.copy")}</button>
+                <button onClick={() => setSelectAnchor(null)} style={st.utilBtn}>{t("common.cancel")}</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={st.controlRow}>
+                <button onClick={() => setSelectAnchor(cursor)} style={st.utilBtn}>{t("editor.select")}</button>
+                <button onClick={() => paste(false)} disabled={!clip} style={{ ...st.utilBtn, opacity: clip ? 1 : 0.4 }}>{t("editor.paste")}</button>
+              </div>
+              {clip && (
+                <>
+                  <button onClick={() => paste(true)} style={st.utilBtn}>{t("editor.pasteClosed")}</button>
+                  <div style={st.clipHint}>{t("editor.clip", { n: clipLength(clip) })} · {t("editor.pasteClosedHint")}</div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
         {/* ── PADS ── */}
+        <div style={st.padsHead}>
+          <span style={{ color: `var(--lane-${cursorLane})` }}>{ROWS.find(([l]) => l === cursorLane)[1]}</span>
+          {" · "}{t("editor.cellN", { n: cursor + 1 })}{" "}
+          <span style={st.padsHint}>· {t("editor.tapAnyCell")}</span>
+        </div>
         <div style={st.pads}>
-          {PAD_SETS[editLane].map((pad) => {
-            const w = pad.write;
-            const both = "dayan" in w && "bayan" in w;
-            // Isolated pads write exactly one lane; colour the dot from it.
-            const soleLane = Object.keys(w)[0];
-            return (
-              <button key={pad.key} onClick={() => tapPad(pad)}
-                aria-label={pad.rest ? "Rest" : pad.label}
-                style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
-                <span style={st.padLabel}>{pad.label}</span>
-                {!pad.rest && (both
-                  ? <StrokeMark dayan={w.dayan} bayan={w.bayan} size={9} />
-                  : <span aria-hidden="true"
-                      style={dotStyle(w[soleLane], `var(--lane-${soleLane})`, 11)} />
-                )}
-              </button>
-            );
-          })}
+          {padsFor(cursorLane).map((pad) => (
+            <button key={pad.key} onClick={() => tapPad(pad)}
+              aria-label={pad.rest ? t("editor.rest") : pad.label}
+              style={{ ...st.pad, ...(pad.rest ? st.padRest : null) }}>
+              <span style={st.padLabel}>{pad.rest ? t("editor.rest") : pad.label}</span>
+              {!pad.rest && <span aria-hidden="true" style={dotStyle(pad.value, `var(--lane-${cursorLane})`, 11)} />}
+            </button>
+          ))}
         </div>
 
         {/* ── Controls ── */}
         <div style={st.controls}>
           <div style={st.controlRow}>
-            <button onClick={undo} disabled={!canUndo} style={{ ...st.utilBtn, opacity: canUndo ? 1 : 0.4 }}>↶ Undo</button>
-            <button onClick={clearGrid} style={st.utilBtn}>Clear</button>
+            <button onClick={undo} disabled={!canUndo} style={{ ...st.utilBtn, opacity: canUndo ? 1 : 0.4 }}>{t("editor.undo")}</button>
+            <button onClick={clearGrid} style={st.utilBtn}>{t("editor.clear")}</button>
             <button onClick={togglePreview} style={{ ...st.utilBtn, ...(previewing ? st.previewOn : null) }}>
-              {previewing ? "■ Stop" : "▶ Preview"}
+              {previewing ? t("editor.stopPreview") : t("editor.playPreview")}
             </button>
           </div>
 
@@ -425,54 +573,124 @@ function BeatEditor({ engine, onSave, onClose, onBack, initialBeat, nav }) {
             {/* Feel/meter — one picker button. */}
             <button onClick={() => setFeelOpen(true)} style={st.feelBtn}
               aria-haspopup="dialog" aria-expanded={feelOpen}>
-              <span style={st.feelName}>{meter.label}</span>
+              <span style={st.feelName}>{tOr(`meter.${meter.id}`, meter.label)}</span>
               <span style={st.feelCaret}>▾</span>
             </button>
             {/* Length: add/remove one unit of the current meter. */}
             <div style={st.lengthRow}>
-              <button onClick={removeGroup} disabled={groups.length <= meter.unit.length}
-                style={{ ...st.groupBtn, opacity: groups.length <= meter.unit.length ? 0.4 : 1 }}
-                aria-label="Remove a group">−</button>
-              <span style={st.lengthLabel}>{steps} cells</span>
-              <button onClick={addGroup} style={st.groupBtn} aria-label="Add a group">+</button>
+              <button onClick={removeGroup} disabled={!canRemoveBeat}
+                style={{ ...st.groupBtn, opacity: canRemoveBeat ? 1 : 0.4 }}
+                aria-label={t("editor.removeGroup")}>−</button>
+              <span style={st.lengthLabel}>{t("editor.beatCount", { n: groups.length })}</span>
+              <button onClick={addGroup} disabled={!canAddBeat}
+                style={{ ...st.groupBtn, opacity: canAddBeat ? 1 : 0.4 }}
+                aria-label={t("editor.addGroup")}>+</button>
             </div>
           </div>
 
-          <div style={st.tempoRow}>
-            <span style={st.bpmNum}>{bpm}</span><span style={st.bpmUnit}>BPM</span>
-            <input className="kc-range" type="range" min={40} max={200} value={bpm}
-              onChange={(e) => setBpm(Number(e.target.value))}
-              style={{ "--fill": fillPct + "%", flex: 1 }} aria-label="Tempo" />
+          {/* Resolution: cells per beat (or ×N for odd meters). Keeps the rhythm. */}
+          <div style={st.resBlock}>
+            <span style={st.resLabel}>{lever.multiplier ? t("editor.resolution") : t("editor.cellsPerBeat")}</span>
+            <div style={st.resRow} role="radiogroup" aria-label={lever.multiplier ? t("editor.resolution") : t("editor.cellsPerBeat")}>
+              {lever.options.map((o) => {
+                const selected = o === lever.current;
+                const ok = selected || reshape(groups, cpq, meter.unit, o) != null;
+                return (
+                  <button key={o} role="radio" aria-checked={selected} disabled={!ok}
+                    onClick={() => changeResolution(o)}
+                    style={{ ...st.resChip, ...(selected ? st.resChipOn : null), opacity: ok ? 1 : 0.35 }}>
+                    {lever.multiplier ? `×${o}` : o}
+                  </button>
+                );
+              })}
+            </div>
+            {resampleReport && (
+              <p style={st.resNote} role="status">
+                {[
+                  resampleReport.moved ? t("editor.resampleMoved", { n: resampleReport.moved }) : null,
+                  resampleReport.dropped ? t("editor.resampleDropped", { n: resampleReport.dropped }) : null,
+                  t("editor.resampleUndo"),
+                ].filter(Boolean).join(" ")}
+              </p>
+            )}
           </div>
+
+          <div style={st.tempoRow}>
+            {/* Three digits' room, so the slider doesn't shift at 100 or 200. */}
+            <span style={{ ...st.bpmNum, minWidth: "3ch", textAlign: "right" }}>{bpm}</span>{/* One fixed slot: "BPM", or in Brahmaloka the ✦ way back out. */}
+            <span style={{ display: "inline-flex", width: 36, flexShrink: 0, justifyContent: "flex-start" }}>
+              {brahmaloka ? (
+                <button onClick={() => { setBrahmaloka(false); setBpm((b) => Math.min(b, 200)); }}
+                  aria-label={t("brahma.leave")} title={t("brahma.leave")} style={st.brahmaBadge}>✦</button>
+              ) : <span style={st.bpmUnit}>{t("tempo.bpm")}</span>}
+            </span>
+            <BpmRange bpm={bpm} brahmaloka={brahmaloka} min={range.min} max={range.max}
+              onChange={changeBpm} onUnlock={unlockBrahmaloka}
+              title={brahmaloka ? t("brahma.badge") : t("brahma.hint")} ariaLabel={t("tempo.title")} />
+          </div>
+          <SwingControl value={swing} onChange={setSwing} hint={t("swing.editorHint")} />
         </div>
 
       </div>
 
       <div style={st.footer}>
-        <button onClick={handleSave} disabled={saving}
+        {/* Only your own beat has an id here (others arrive as forks), and only
+            it can be saved over — so only it needs the way to make a variation. */}
+        {initialBeat?.id && (
+          <button onClick={() => handleSave(true)} disabled={saving} style={st.saveAsBtn}>
+            {t("editor.saveAsNew")}
+          </button>
+        )}
+        <button onClick={() => handleSave()} disabled={saving}
           style={{ ...st.saveBtn, ...(saving ? st.saveBtnBusy : null) }}>
-          {saving ? "Saving…" : "Save beat"}
+          {saving ? t("editor.saving") : t("editor.save")}
         </button>
       </div>
+
+      {notesOpen && (
+        <NotesEditorSheet initial={notes} onDone={(v) => { setNotes(v); setNotesOpen(false); }} onClose={() => setNotesOpen(false)} />
+      )}
+      {tagsOpen && (
+        <TagPicker title={t("tags.title")} hint={t("tags.authorHint")}
+          selected={tags} onChange={setTags} onClose={() => setTagsOpen(false)} />
+      )}
+
+      {discardOpen && (
+        <div style={st.sheetBackdrop} onClick={() => setDiscardOpen(false)}>
+          <div style={st.sheet} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div style={st.sheetHead}>
+              <h2 style={st.sheetTitle}>{t(initialBeat ? "editor.revert" : "editor.startOver")}</h2>
+              <button onClick={() => setDiscardOpen(false)} aria-label={t("common.close")} style={st.sheetClose}>×</button>
+            </div>
+            <p style={st.sheetHint}>
+              {initialBeat ? t("editor.revertBody", { name: initialBeat.name }) : t("editor.startOverBody")}
+            </p>
+            <button style={{ ...st.saveBtn, marginTop: "var(--space-3)" }}
+              onClick={() => { if (previewing) engine.stop(); setDiscardOpen(false); onDiscard?.(); }}>
+              {t(initialBeat ? "editor.revert" : "editor.startOver")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Feel/meter picker sheet */}
       {feelOpen && (
         <div style={st.sheetBackdrop} onClick={() => setFeelOpen(false)}>
-          <div style={st.sheet} role="dialog" aria-modal="true" aria-label="Feel"
+          <div style={st.sheet} role="dialog" aria-modal="true" aria-label={t("editor.feel")}
             onClick={(e) => e.stopPropagation()}>
             <div style={st.sheetHead}>
-              <h2 style={st.sheetTitle}>Feel &amp; meter</h2>
-              <button onClick={() => setFeelOpen(false)} aria-label="Close" style={st.sheetClose}>×</button>
+              <h2 style={st.sheetTitle}>{t("editor.feelMeter")}</h2>
+              <button onClick={() => setFeelOpen(false)} aria-label={t("common.close")} style={st.sheetClose}>×</button>
             </div>
-            <p style={st.sheetHint}>Changing the feel clears the grid.</p>
+            <p style={st.sheetHint}>{t("editor.feelClears")}</p>
             <div style={st.feelList}>
               {METERS.map((m) => {
                 const sel = m.id === meter.id;
                 return (
                   <button key={m.id} onClick={() => selectMeter(m)}
                     style={{ ...st.feelOption, borderColor: sel ? "var(--clay)" : "var(--rule)" }}>
-                    <span style={st.feelOptName}>{m.label}</span>
-                    <span style={st.feelOptSig}>{m.sig}</span>
+                    <span style={st.feelOptName}>{tOr(`meter.${m.id}`, m.label)}</span>
+                    <span style={st.feelOptSig}>{tOr(`meterSig.${m.id}`, m.sig)}</span>
                   </button>
                 );
               })}
@@ -493,10 +711,20 @@ const st = {
   // the overview's and the pads' outer edges off the clipping boundary.
   body: { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)", padding: "2px" },
   backBtn: { flexShrink: 0, width: 40, height: 44, border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 28, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center", paddingBottom: 4 },
+  tagsLine: { flexShrink: 0, display: "flex", alignItems: "baseline", gap: "var(--space-2)", minHeight: 40, padding: "var(--space-2) 0", border: "none", background: "transparent", textAlign: "left", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)" },
+  tagsLabel: { fontWeight: 700, color: "var(--syahi-soft)" },
+  tagsValue: { color: "var(--syahi)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   titleWrap: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" },
   titleInput: { flex: 1, minWidth: 0, border: "none", background: "transparent", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)", padding: "2px 0", outline: "none" },
   titlePencil: { flexShrink: 0, width: 40, height: 40, border: "none", background: "transparent", color: "var(--syahi-soft)", cursor: "pointer", display: "grid", placeItems: "center" },
 
+  overviewSel: { position: "absolute", top: 4, bottom: 4, borderRadius: 4, background: "var(--clay)", opacity: 0.22, pointerEvents: "none" },
+  viewSwitch: { flexShrink: 0, display: "flex", gap: "var(--space-2)" },
+  viewChip: { minHeight: 36, padding: "0 16px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--ink-primary)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, cursor: "pointer" },
+  viewChipOn: { background: "var(--clay)", borderColor: "var(--clay)", color: "white" },
+  clip: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" },
+  clipPrompt: { color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600 },
+  clipHint: { color: "var(--syahi-soft)", fontFamily: "var(--font-body)", fontSize: 12 },
   overviewWrap: { position: "relative", flexShrink: 0, padding: "6px 2px", cursor: "grab", touchAction: "none" },
   overviewFrame: { position: "absolute", top: 0, bottom: 0, borderRadius: 8, border: "2px solid var(--clay)", background: "oklch(0.54 0.12 40 / 0.08)", pointerEvents: "none" },
 
@@ -510,6 +738,8 @@ const st = {
   zoomNum: { textAlign: "center", fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)", lineHeight: 1 },
   zoomCell: { height: 56, borderRadius: 10, border: "1px solid var(--rule)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, transition: "border-color 120ms ease, background 120ms ease" },
 
+  padsHead: { flexShrink: 0, marginBottom: -6, fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ink-primary)" },
+  padsHint: { fontWeight: 500, letterSpacing: 0, textTransform: "none", color: "var(--ink-secondary)", fontSize: 12 },
   pads: { flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-2)" },
   pad: { minHeight: 58, borderRadius: 14, border: "var(--rule-hairline)", background: "var(--head-worn)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 },
   padRest: { background: "transparent" },
@@ -523,14 +753,28 @@ const st = {
   feelBtn: { flex: 1, minHeight: 46, padding: "0 14px", borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 },
   feelName: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, color: "var(--ink-primary)" },
   feelCaret: { fontSize: "0.7rem", color: "var(--syahi-soft)" },
+  resBlock: { display: "flex", flexDirection: "column", gap: 8 },
+  resLabel: { fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--syahi-soft)" },
+  resRow: { display: "flex", gap: 8, flexWrap: "wrap" },
+  resChip: { minWidth: 44, height: 36, padding: "0 12px", borderRadius: 999, border: "var(--rule-hairline)", background: "transparent", color: "var(--syahi)", fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  // Full `border`, not borderColor: React drops a removed longhand without restoring
+  // the shorthand, which left previously selected chips with a dark border.
+  resChipOn: { background: "var(--clay)", border: "1px solid var(--clay)", color: "var(--on-clay)" },
+  resNote: { margin: 0, fontFamily: "var(--font-body)", fontSize: 12, color: "var(--syahi-soft)" },
   lengthRow: { flexShrink: 0, display: "flex", alignItems: "center", gap: 8 },
   groupBtn: { flexShrink: 0, width: 44, height: 46, borderRadius: 12, border: "var(--rule-hairline)", background: "transparent", color: "var(--clay)", fontSize: 24, fontWeight: 700, cursor: "pointer", display: "grid", placeItems: "center" },
   lengthLabel: { minWidth: 54, textAlign: "center", fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", fontWeight: 700, color: "var(--syahi-soft)" },
+  brahmaBadge: {
+    width: 32, height: 32, padding: 0, borderRadius: 999, cursor: "pointer",
+    border: "1px solid oklch(0.70 0.17 60)", background: "oklch(0.93 0.07 80)",
+    color: "oklch(0.45 0.14 45)", fontSize: 15, fontWeight: 700, lineHeight: 1,
+  },
   tempoRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   bpmNum: { fontFamily: "var(--font-numeric)", fontVariantNumeric: "tabular-nums", fontSize: "1.5rem", fontWeight: 600, color: "var(--syahi)", lineHeight: 1 },
   bpmUnit: { fontFamily: "var(--font-body)", fontSize: "var(--text-body-xs)", fontWeight: 700, letterSpacing: "0.08em", color: "var(--syahi-soft)" },
 
-  footer: { flexShrink: 0, display: "flex", justifyContent: "flex-end" },
+  footer: { flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: "var(--space-3)" },
+  saveAsBtn: { minHeight: 48, padding: "0 20px", borderRadius: 14, border: "1px solid var(--rule)", background: "transparent", color: "var(--syahi)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 600, cursor: "pointer" },
   saveBtn: { minHeight: 48, padding: "0 28px", borderRadius: 14, border: "none", background: "var(--clay)", color: "var(--on-clay)", fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer" },
   // Dimmed rather than greyed: the button keeps its colour so the press
   // clearly registered, it just isn't pressable again.
@@ -538,6 +782,7 @@ const st = {
 
   sheetBackdrop: { position: "fixed", inset: 0, background: "oklch(0.24 0.02 60 / 0.35)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 10 },
   sheet: { width: "100%", maxWidth: 430, maxHeight: "85dvh", overflowY: "auto", background: "var(--head)", borderRadius: "20px 20px 0 0", padding: "var(--space-5) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column" },
+  revertBtn: { flexShrink: 0, minHeight: 40, padding: "0 var(--space-2)", border: "none", background: "transparent", color: "var(--clay)", fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, cursor: "pointer" },
   sheetHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" },
   sheetTitle: { margin: 0, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "var(--text-display-lg)", color: "var(--syahi)" },
   sheetClose: { flexShrink: 0, width: 44, height: 44, margin: "-8px -8px 0 0", border: "none", background: "transparent", color: "var(--syahi-soft)", fontSize: 26, lineHeight: 1, cursor: "pointer", display: "grid", placeItems: "center" },

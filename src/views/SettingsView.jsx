@@ -1,33 +1,92 @@
+import { useState } from "react";
 import * as sh from "../ui/styles.js";
-import { BackIcon } from "../ui/icons.jsx";
+import { t, DICTS, LANGUAGE_NAMES, languageChoice, setLanguageChoice, pickLocale } from "../i18n/index.js";
+import { BackIcon, ChevronRightIcon } from "../ui/icons.jsx";
+import AboutView from "./AboutView.jsx";
+import SyncView from "./SyncView.jsx";
+import MixerSheet from "./MixerSheet.jsx";
 
 /**
- * SettingsView — a placeholder shell for now.
+ * SettingsView — a near-empty shell, plus the way into About.
  *
- * It exists as its own screen (rather than waiting until there's something
- * in it) so the fourth nav tab always lands somewhere, and so the header /
- * back-button chrome is already in the shape the real settings will use.
+ * It exists as its own screen so the fourth nav tab always lands somewhere.
+ * About opens IN PLACE (local state, not an App view) because it means
+ * nothing outside Settings — the same rule the rest of the UI layer follows.
  */
-function SettingsView({ onBack, nav }) {
+function SettingsView({ onBack, nav, transport }) {
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [mixerOpen, setMixerOpen] = useState(false);
+  if (aboutOpen) return <AboutView onBack={() => setAboutOpen(false)} nav={nav} />;
+  if (syncOpen) return <SyncView transport={transport} onBack={() => setSyncOpen(false)} nav={nav} />;
+
   return (
     <div className="kc-screen" style={sh.screenFixed}>
       <header style={sh.subHeader}>
-        <button onClick={onBack} style={sh.backBtn} aria-label="Back">
+        <button onClick={onBack} style={sh.backBtn} aria-label={t("common.back")}>
           <BackIcon />
         </button>
-        <h1 style={sh.subTitle}>Settings</h1>
+        <h1 style={sh.subTitle}>{t("settings.title")}</h1>
         <span style={{ width: 44 }} />
       </header>
       <section style={{ ...sh.controls, flex: 1 }}>
-        <p style={st.subtitle}>More settings coming soon.</p>
+        <p style={st.subtitle}>{t("settings.comingSoon")}</p>
+        {/* The mixer lives here rather than on Home: set once, rarely touched mid-kirtan. */}
+        <button onClick={() => setMixerOpen(true)} style={st.row} aria-haspopup="dialog" aria-expanded={mixerOpen}>
+          <span style={st.rowText}>
+            <span>{t("mixer.title")}</span>
+            <span style={st.rowSub}>{t("mixer.rowSub")}</span>
+          </span>
+          <ChevronRightIcon />
+        </button>
+        <button onClick={() => setSyncOpen(true)} style={st.row}>
+          <span style={st.rowText}>
+            <span>{t("sync.rowTitle")}</span>
+            <span style={st.rowSub}>
+              {t("sync.rowSub")}
+              {" "}{transport.displayDelayMs === 0 ? t("sync.rowNoDelay") : t("sync.rowDelay", { ms: transport.displayDelayMs })}
+            </span>
+          </span>
+          <ChevronRightIcon />
+        </button>
+        <label style={st.row}>
+          <span>{t("settings.language")}</span>
+          <select
+            value={languageChoice()}
+            onChange={(e) => setLanguageChoice(e.target.value)}
+            style={st.select}
+          >
+            <option value="system">{t("settings.languageSystem", { name: LANGUAGE_NAMES[pickLocale(navigator.languages?.length ? navigator.languages : [navigator.language])] })}</option>
+            {Object.keys(DICTS).map((code) => (
+              <option key={code} value={code} lang={code}>{LANGUAGE_NAMES[code]}</option>
+            ))}
+          </select>
+        </label>
+        <button onClick={() => setAboutOpen(true)} style={st.row}>
+          <span>{t("about.title")}</span>
+          <ChevronRightIcon />
+        </button>
       </section>
       {nav}
+      {mixerOpen && <MixerSheet transport={transport} onClose={() => setMixerOpen(false)} />}
     </div>
   );
 }
 
 const st = {
+  rowText: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, padding: "10px 0", textAlign: "left" },
+  rowSub: { fontSize: "var(--text-body-sm)", fontWeight: 400, color: "var(--ink-secondary)", lineHeight: 1.4 },
   subtitle: { margin: 0, fontFamily: "var(--font-body)", fontSize: "var(--text-body-sm)", color: "var(--ink-secondary)", fontWeight: 400, maxWidth: 260, lineHeight: 1.45 },
+  select: {
+    font: "inherit", fontWeight: 500, color: "var(--syahi)", background: "transparent",
+    border: "none", padding: "8px 0", cursor: "pointer", textAlign: "right",
+  },
+  row: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    minHeight: 52, padding: "0 16px", borderRadius: 16, border: "var(--rule-hairline)",
+    background: "var(--head-worn)", color: "var(--syahi)", cursor: "pointer",
+    fontFamily: "var(--font-body)", fontSize: "var(--text-body-md)", fontWeight: 600,
+  },
 };
 
 export default SettingsView;

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { BEATS } from "../data/beats.js";
+import { isCommunity } from "../data/communityTracking.js";
+import { t } from "../i18n/index.js";
 import { beatsProvider, storageErrorMessage } from "../storage/index.js";
+import { MAX_NAME_LEN, clampName } from "../data/names.js";
 
 /**
  * The shipped beats, tagged once at module load.
@@ -30,8 +33,12 @@ const BUILTIN_BEATS = BEATS.map((b) => ({ ...b, readOnly: true }));
  * itself and not just against what was already saved.
  */
 function uniqueName(wanted, taken) {
-  let name = wanted;
-  for (let n = 2; taken.has(name); n++) name = `${wanted} (${n})`;
+  let name = clampName(wanted);
+  // The suffix must fit inside the limit too, so the base gives way to it.
+  for (let n = 2; taken.has(name); n++) {
+    const suffix = ` (${n})`;
+    name = clampName(wanted, MAX_NAME_LEN - suffix.length) + suffix;
+  }
   taken.add(name);
   return name;
 }
@@ -65,12 +72,35 @@ function uniqueName(wanted, taken) {
  * The old code caught every storage failure and carried on, so a beat saved
  * into a full store appeared in the list and vanished on reload.
  */
+const PRIVATE_TAGS_KEY = "kirtan-private-tags";
+
+function loadPrivateTags() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PRIVATE_TAGS_KEY) || "{}");
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
 export function useBeatLibrary(provider = beatsProvider) {
   const [customBeats, setCustomBeats] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeCat, setActiveCatState] = useState("builtin");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // The user's private tags, beat id → [tag ids]. On this device only and
+  // apart from the beats, so they work on built-in and community beats
+  // (which are read-only) and are never published.
+  const [privateTags, setPrivateTagsState] = useState(loadPrivateTags);
+  function setPrivateTags(beatId, tags) {
+    setPrivateTagsState((all) => {
+      const next = { ...all };
+      if (tags.length) next[beatId] = tags; else delete next[beatId];
+      try { localStorage.setItem(PRIVATE_TAGS_KEY, JSON.stringify(next)); } catch { /* full or blocked: tags last the session */ }
+      return next;
+    });
+  }
 
   // Reads are async now, so the library starts empty and fills in. App gates
   // the splash's Begin button on `loading`, which means this has always
@@ -135,14 +165,17 @@ export function useBeatLibrary(provider = beatsProvider) {
   /** The ordered beats of a category ("builtin" | "custom" | user cat id). */
   function categoryBeats(catId) {
     if (catId === "builtin") return BUILTIN_BEATS;
-    if (catId === "custom") return customBeats;
+    // Your beats leaves out community beats: those have their own list.
+    if (catId === "custom") return customBeats.filter((b) => !isCommunity(b));
+    if (catId === "community") return customBeats.filter(isCommunity);
     const c = categories.find((c) => c.id === catId);
     if (!c) return allBeats;
     return c.beatIds.map((id) => allBeats.find((b) => b.id === id)).filter(Boolean);
   }
   function catName(catId) {
-    if (catId === "builtin") return "Built in";
-    if (catId === "custom") return "Your beats";
+    if (catId === "builtin") return t("library.builtin");
+    if (catId === "custom") return t("library.custom");
+    if (catId === "community") return t("library.community");
     return categories.find((c) => c.id === catId)?.name ?? "Beats";
   }
 
@@ -154,6 +187,12 @@ export function useBeatLibrary(provider = beatsProvider) {
    */
   async function saveBeat(newBeat) {
     const { id, ...fields } = newBeat;
+    // The editor builds a fresh beat and knows nothing of where this one came
+    // from; carry the origin over so an edit can't silently drop it.
+    const existing = id ? customBeats.find((b) => b.id === id) : null;
+    for (const key of ["sourceItemId", "sourceIndex", "forkedFrom"]) {
+      if (fields[key] == null && existing?.[key] != null) fields[key] = existing[key];
+    }
     // Every name in the library EXCEPT this beat's own — otherwise editing a
     // beat without renaming it would suffix it a little further every save
     // ("My Beat (2)", "My Beat (2) (2)"). Built-ins are included, so a custom
@@ -180,6 +219,25 @@ export function useBeatLibrary(provider = beatsProvider) {
       console.error("[library] save failed", err);
       setError(storageErrorMessage(err));
       return null;
+    }
+  }
+
+  /**
+   * Overwrite a library beat as given — name, origin and all. For bringing a
+   * community beat up to its original and the one-time migration; the editor
+   * uses saveBeat. Resolves true when it stuck.
+   */
+  async function replaceBeat(beat) {
+    const { id, ...fields } = beat;
+    if (!id || !customBeats.some((b) => b.id === id)) return false;
+    try {
+      const saved = await provider.updateBeat(id, fields);
+      setCustomBeats((list) => list.map((b) => (b.id === id ? saved : b)));
+      return true;
+    } catch (err) {
+      console.error("[library] replace failed", err);
+      setError(storageErrorMessage(err));
+      return false;
     }
   }
 
@@ -225,7 +283,7 @@ export function useBeatLibrary(provider = beatsProvider) {
    *    the categories. Calling createBeat in a loop would read stale state
    *    and drop beats, which is exactly the bug this shape prevents.
    */
-  async function importShared(payload) {
+  async function importShared(payload, sourceItemId = null) {
     if (!payload || (payload.kind !== "beat" && payload.kind !== "category")) {
       return { beats: [], catId: null };
     }
@@ -233,7 +291,15 @@ export function useBeatLibrary(provider = beatsProvider) {
     // Re-importing your own link shouldn't produce two rows with one name.
     const takenNames = new Set(allBeats.map((b) => b.name));
     const drafts = (payload.kind === "beat" ? [payload.beat] : payload.beats).map(
-      (draft) => ({ ...draft, name: uniqueName(draft.name, takenNames) })
+      // A community copy remembers its item (and a list's beats their place
+      // in it) so it can follow the original; share links have no source.
+      (draft, index) => ({
+        ...draft,
+        name: uniqueName(draft.name, takenNames),
+        sourceItemId: sourceItemId ?? undefined,
+        sourceIndex: sourceItemId && payload.kind === "category" ? index : undefined,
+        forkedFrom: undefined,
+      })
     );
 
     let beats;
@@ -392,7 +458,8 @@ export function useBeatLibrary(provider = beatsProvider) {
   return {
     customBeats, allBeats, isCustomBeat,
     categories, activeCat, setActiveCat, categoryBeats, catName,
-    saveBeat, deleteBeat, importShared, importLibrary,
+    saveBeat, replaceBeat, deleteBeat, importShared, importLibrary,
+    privateTags, setPrivateTags,
     createCategory, deleteCategory, toggleBeatInCategory, reorderCategory,
     loading, error, dismissError,
   };

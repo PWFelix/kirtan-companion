@@ -61,6 +61,7 @@
 import { LANES } from "./lanes.js";
 import { STROKES } from "./strokes.js";
 import { MIN_BPM, MAX_BPM, groupsFor, cpqFor, sumGroups } from "./meter.js";
+import { clampSwing, SWING_STRAIGHT } from "./swing.js";
 
 const VERSION = 1;
 const REST_CHAR = "-";
@@ -69,10 +70,10 @@ const REST_CHAR = "-";
 // hostile payload can't allocate anything interesting.
 const MAX_CODE_LEN = 8000;   // ~a category of ten beats, with headroom
 const MAX_NAME_LEN = 40;
-const MAX_GROUPS = 32;       // numbered beats in one pattern
-const MAX_GROUP_CELLS = 12;  // cells in one numbered beat
-const MAX_STEPS = 64;        // total cells — this is the DoS bound that matters
-const MAX_CPQ = 12;
+export const MAX_GROUPS = 32;      // numbered beats in one pattern
+export const MAX_GROUP_CELLS = 27;  // cells in one numbered beat (9-matra tala ×3); 12 before 0.4.41
+export const MAX_STEPS = 384;       // total cells — this is the DoS bound that matters
+const MAX_CPQ = 27; // a 9-matra tala ×3; 12 before 0.4.41
 const MAX_CAT_BEATS = 50;
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -118,7 +119,10 @@ function packBeat(beat) {
     const packed = packPattern(beat, lane.id, steps);
     if (packed !== null) patterns[lane.id] = packed;
   }
-  return { n: beat.name, m: beat.bpm, g: groups, q: cpqFor(beat), p: patterns };
+  const out = { n: beat.name, m: beat.bpm, g: groups, q: cpqFor(beat), p: patterns };
+  // Swing rides as "w", only when set: older apps ignore it and play straight.
+  if (clampSwing(beat.swing) > SWING_STRAIGHT) out.w = clampSwing(beat.swing);
+  return out;
 }
 
 export function encodeBeat(beat) {
@@ -206,6 +210,8 @@ function decodeBeat(raw) {
     cellsPerGroup: uniform ? groups[0] : q,
     groups,
     ...lanes,
+    // Junk or out-of-range plays straight rather than refusing the beat.
+    ...(clampSwing(raw.w) > SWING_STRAIGHT ? { swing: clampSwing(raw.w) } : {}),
   };
 }
 

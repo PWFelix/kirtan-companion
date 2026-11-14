@@ -27,7 +27,11 @@
  *   emits "step" (derived index) on every tick.
  */
 import * as Tone from "tone";
+import { ticksToNearestBar } from "../data/hillClimb.js";
 import { EventEmitter } from "./EventEmitter.js";
+import { SequenceCursor } from "../data/sequences.js";
+import { groupsFor } from "../data/meter.js";
+import { swingOffbeats, lateFraction, clampSwing, SWING_STRAIGHT } from "../data/swing.js";
 
 // Tiny tolerance added before flooring phase→step. getTicksAtTime()
 // returns a float, so a value that should be exactly e.g. 3.0 at a step
@@ -49,10 +53,44 @@ export class Sequencer extends EventEmitter {
     // right after a beat switch) can't produce a double hit. Reset to
     // -1 on stop / start.
     this._lastFiredStep = -1;
+    // A playing SEQUENCE (Home's running order), or null for one looping beat.
+    // _plan is [{ beat, bars }]; the cursor counts downbeats through it.
+    this._plan = null;
+    this._cursor = null;
   }
+
+  /**
+   * Play `steps` ([{ beat, bars }]) in order instead of one beat, switching on
+   * bar lines; null goes back to a single beat. Re-setting it while playing
+   * (an edit) keeps the place: same entry and bar where they still exist.
+   * Emits "sequenceAt" ({ index, bar }, bar 1-based) on every downbeat and
+   * "sequenceEnded" when the last entry finishes with loop off.
+   */
+  setSequence(steps, loop) {
+    if (!steps || steps.length === 0) {
+      this._plan = null;
+      this._cursor = null;
+      return;
+    }
+    const cursor = new SequenceCursor(steps.map((s) => s.bars), loop);
+    if (this._cursor && this._loopId !== null) cursor.adopt(this._cursor);
+    this._plan = steps;
+    this._cursor = cursor;
+    if (this._loopId === null) this._beat = steps[0].beat;
+  }
+
+  setSequenceLoop(loop) {
+    if (this._cursor) this._cursor.loop = loop;
+  }
+
+  get hasSequence() { return this._plan !== null; }
 
   setBeat(beat) {
     this._beat = beat;
+    // A beat brings its own swing, replacing any live nudge from the mixer.
+    this._offbeats = swingOffbeats(groupsFor(beat));
+    this._swing = clampSwing(beat.swing ?? SWING_STRAIGHT);
+    this.emit("swing", this._swing);
     // Update transport's loop length to the new bar — this is the
     // ONLY remap a beat switch needs. The transport keeps running,
     // so phase is preserved across the switch.
@@ -68,13 +106,38 @@ export class Sequencer extends EventEmitter {
     // ("1m") and the step interval (now expressed in ticks, "...i")
     // are BOTH tempo-relative musical-time units, they auto-scale
     // together — no resched needed on a tempo change.
+    // A direct change overrides one waiting for its bar (hill climb).
+    Tone.Transport.bpm.cancelScheduledValues(0);
     Tone.Transport.bpm.value = bpm;
+  }
+
+  /**
+   * Change tempo ON THE 1 nearest `inSeconds` from now — Learn's hill climb,
+   * so a speed-up starts a bar instead of landing mid-phrase. Scheduled on the
+   * Transport's own tempo automation, so it takes effect at that downbeat's
+   * exact audio time. Returns the seconds until then (the UI shows the new
+   * tempo as it is heard), or null when stopped.
+   */
+  setBpmAtBar(bpm, inSeconds) {
+    if (Tone.Transport.state !== "started" || !this._beat) return null;
+    const now = Tone.now();
+    const bar = Tone.Transport.PPQ * this._beatsPerBar();
+    const ticksPerSec = (Tone.Transport.bpm.value / 60) * Tone.Transport.PPQ;
+    const into = Tone.Transport.getTicksAtTime(now) % bar;
+    const wait = ticksToNearestBar(into, inSeconds * ticksPerSec, bar) / ticksPerSec;
+    Tone.Transport.bpm.cancelScheduledValues(now);
+    Tone.Transport.bpm.setValueAtTime(bpm, now + wait);
+    return wait;
   }
 
   start() {
     if (!this._beat) {
       console.warn("Sequencer: no beat loaded");
       return;
+    }
+    if (this._plan) {
+      this._cursor.reset();
+      this._beat = this._plan[0].beat;
     }
     this._applyTransportLoop();
     // Start the bar at phase 0 so the visual playhead and the audio
@@ -91,9 +154,11 @@ export class Sequencer extends EventEmitter {
       this._loopId = null;
     }
     Tone.Transport.stop();
+    Tone.Transport.bpm.cancelScheduledValues(0);
     Tone.Transport.position = 0;
     Tone.Transport.loop = false;
     this._lastFiredStep = -1;
+    this._cursor?.reset();
   }
 
   /**
@@ -104,6 +169,39 @@ export class Sequencer extends EventEmitter {
   getPhase() {
     if (Tone.Transport.state !== "started") return 0;
     return Tone.Transport.progress;
+  }
+
+  /**
+   * Bar phase at context time `time` (seconds), 0 while stopped or before the
+   * bar started. The engine's playhead asks for the time being HEARD, which
+   * lags Tone's own now() by the lookahead and the output latency.
+   */
+  getPhaseAt(time) {
+    if (Tone.Transport.state !== "started" || !this._beat) return 0;
+    const loopTicks = Tone.Transport.PPQ * this._beatsPerBar();
+    const ticks = Math.max(0, Tone.Transport.getTicksAtTime(time));
+    return (ticks % loopTicks) / loopTicks;
+  }
+
+  /** Swing in force (50–67): the beat's own until nudged. */
+  get swing() { return this._swing ?? SWING_STRAIGHT; }
+  setSwing(v) {
+    this._swing = clampSwing(v);
+    this.emit("swing", this._swing);
+  }
+
+  /** Duration of one step in ms at the current tempo. */
+  stepMs() {
+    if (!this._beat) return 0;
+    return (60_000 / Tone.Transport.bpm.value) * this._beatsPerBar() / this._beat.steps;
+  }
+
+  get isRunning() {
+    return Tone.Transport.state === "started";
+  }
+
+  get beat() {
+    return this._beat;
   }
 
   // ── Internals ──────────────────────────────────────────────────────
@@ -184,12 +282,31 @@ export class Sequencer extends EventEmitter {
     if (step === this._lastFiredStep) return;
     this._lastFiredStep = step;
 
+    // A sequence decides on each 1. By the time this callback runs Tone has
+    // already wrapped the bar loop to tick 0 at `time`, so a switch here
+    // re-lays the loop (new meter, new grid) from this very downbeat and the
+    // new beat's first stroke is the one played below. End stops on the 1,
+    // unplayed — the last bar of the last entry was the music.
+    if (step === 0 && this._cursor) {
+      const out = this._cursor.onDownbeat();
+      if (out.type === "end") {
+        this.emit("sequenceEnded");
+        return;
+      }
+      if (out.type === "switch") this.setBeat(this._plan[out.index].beat);
+      this.emit("sequenceAt", { index: this._cursor.index, bar: this._cursor.bar + 1 });
+    }
+
     const dayanHit = this._beat.dayan[step];
     const bayanHit = this._beat.bayan[step];
     // Optional lane: only some beats carry karatalas, so guard the read
     // (an absent kartal array must not throw, and an unloaded kartal sample
     // just no-ops in SoundPlayer.play).
     const kartalHit = this._beat.kartal?.[step];
+
+    // Swing: the 2nd, 4th… cell of an even beat sounds late. Only the sound
+    // moves; the "step" event (and so the strip) stays on the grid.
+    if (this._offbeats?.[step]) time += (lateFraction(this._swing) * this.stepMs()) / 1000;
 
     if (dayanHit === "O") this._soundPlayer.play("dayan_open", time);
     else if (dayanHit === "X") this._soundPlayer.play("dayan_closed", time);

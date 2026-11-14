@@ -16,6 +16,16 @@
 // Padlock for the tempo lock — open when free, closed when locked. An icon
 // (not the words Lock/Locked) so the button's size never changes with state,
 // which would resize the flexible slider beside it.
+/** Hill climb: a staircase rising left to right — the tempo going up in steps. */
+export function StairsIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 20h5v-5h5v-5h5V5h3" />
+    </svg>
+  );
+}
+
 export function LockIcon({ locked }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -191,6 +201,26 @@ export function ShareIcon() {
   );
 }
 
+// Upvote arrow on Community cards; filled once you've voted.
+export function UpvoteIcon({ filled }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor"
+      strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 4 4.5 12.5H9V20h6v-7.5h4.5Z" />
+    </svg>
+  );
+}
+
+// Bin, for the library rows' swipe-to-delete.
+export function TrashIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 6.5h16M9.5 6.5V4h5v2.5M6 6.5 7 20h10l1-13.5M10 10v6.5M14 10v6.5" />
+    </svg>
+  );
+}
+
 // Globe for the Browse tab. It marks the one tab whose beats come from
 // OUTSIDE this device — today by pasted code, later from the community
 // library (PROJECT_PLAN §7), which is why it isn't a paste/clipboard glyph.
@@ -220,6 +250,14 @@ export function PauseIcon({ size = 22 }) {
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <rect x="5" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
       <rect x="14" y="4" width="5" height="16" rx="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function StopIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
     </svg>
   );
 }
@@ -254,5 +292,49 @@ export function RadioDot({ selected }) {
       border: `2px solid ${selected ? "var(--accent-action)" : "var(--rule)"}` }}>
       {selected && <span style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--accent-action)" }} />}
     </span>
+  );
+}
+
+// ── Home's sequencer ──
+
+function Glyph({ children, size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+export function LoopIcon() {
+  return (
+    <Glyph>
+      <path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+      <path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" />
+    </Glyph>
+  );
+}
+
+export function FolderIcon() {
+  return (
+    <Glyph>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+    </Glyph>
+  );
+}
+
+export function SaveIcon() {
+  return (
+    <Glyph>
+      <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+    </Glyph>
+  );
+}
+
+export function PlusIcon({ size = 18 }) {
+  return (
+    <Glyph size={size}>
+      <path d="M12 5v14" /><path d="M5 12h14" />
+    </Glyph>
   );
 }

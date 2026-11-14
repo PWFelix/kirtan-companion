@@ -24,6 +24,7 @@
  *    on, which is why a failed save used to look identical to a good one.
  */
 
+import { t } from "../i18n/index.js";
 import { StorageError, newId } from "./BeatsProvider.js";
 import { migrateIfNeeded, KEYS } from "./migrate.js";
 
@@ -43,8 +44,8 @@ function wrap(err, whileDoing) {
   const code = classify(err);
   const message =
     code === "quota"
-      ? "There's no room left in this browser's storage, so that couldn't be saved. Deleting a few beats you don't use will free some up."
-      : `This browser is blocking storage, so ${whileDoing} couldn't be saved. Private browsing windows often do this.`;
+      ? t("storage.full")
+      : t("storage.blocked", { what: t(whileDoing) });
   return new StorageError(code, message, err);
 }
 
@@ -64,7 +65,7 @@ export function createLocalStorageProvider() {
     try {
       raw = localStorage.getItem(key);
     } catch (err) {
-      throw wrap(err, "your beats");
+      throw wrap(err, "what.yourBeats");
     }
     if (raw == null) return fallback;
     try {
@@ -107,7 +108,7 @@ export function createLocalStorageProvider() {
     async createBeat(draft) {
       await ready();
       const beat = { ...draft, id: newId() };
-      write(KEYS.beats, [...readBeats(), beat], "that beat");
+      write(KEYS.beats, [...readBeats(), beat], "what.thatBeat");
       return beat;
     },
 
@@ -115,7 +116,7 @@ export function createLocalStorageProvider() {
     async createBeats(drafts) {
       await ready();
       const beats = drafts.map((d) => ({ ...d, id: newId() }));
-      write(KEYS.beats, [...readBeats(), ...beats], "those beats");
+      write(KEYS.beats, [...readBeats(), ...beats], "what.thoseBeats");
       return beats;
     },
 
@@ -124,24 +125,24 @@ export function createLocalStorageProvider() {
       const beats = readBeats();
       const i = beats.findIndex((b) => b.id === id);
       if (i === -1) {
-        throw new StorageError("notFound", "That beat no longer exists.");
+        throw new StorageError("notFound", t("storage.beatGone"));
       }
       const beat = { ...beats[i], ...patch, id };
       const next = beats.slice();
       next[i] = beat;
-      write(KEYS.beats, next, "that beat");
+      write(KEYS.beats, next, "what.thatBeat");
       return beat;
     },
 
     async deleteBeat(id) {
       await ready();
-      write(KEYS.beats, readBeats().filter((b) => b.id !== id), "that change");
+      write(KEYS.beats, readBeats().filter((b) => b.id !== id), "what.thatChange");
     },
 
     async createCategory(draft) {
       await ready();
       const category = { beatIds: [], ...draft, id: newId() };
-      write(KEYS.categories, [...readCategories(), category], "that list");
+      write(KEYS.categories, [...readCategories(), category], "what.thatList");
       return category;
     },
 
@@ -150,23 +151,23 @@ export function createLocalStorageProvider() {
       const cats = readCategories();
       const i = cats.findIndex((c) => c.id === id);
       if (i === -1) {
-        throw new StorageError("notFound", "That list no longer exists.");
+        throw new StorageError("notFound", t("storage.listGone"));
       }
       const category = { ...cats[i], ...patch, id };
       const next = cats.slice();
       next[i] = category;
-      write(KEYS.categories, next, "that list");
+      write(KEYS.categories, next, "what.thatList");
       return category;
     },
 
     async deleteCategory(id) {
       await ready();
-      write(KEYS.categories, readCategories().filter((c) => c.id !== id), "that change");
+      write(KEYS.categories, readCategories().filter((c) => c.id !== id), "what.thatChange");
     },
 
     async setActiveCategory(id) {
       await ready();
-      write(KEYS.activeCategory, id, "that change");
+      write(KEYS.activeCategory, id, "what.thatChange");
     },
   };
 }

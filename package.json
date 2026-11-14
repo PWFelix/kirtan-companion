@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "analyze-tuning": "node scripts/analyzeTuning.mjs",
+    "check-i18n": "node scripts/checkI18n.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.js";
 /**
  * BeatsProvider.js
  * ----------------
@@ -93,7 +94,7 @@ export class StorageError extends Error {
 /** Human-readable text for a failure, whatever it turns out to be. */
 export function storageErrorMessage(err) {
   if (err instanceof StorageError) return err.message;
-  return "Something went wrong saving that. Your beat may not have been kept.";
+  return t("storage.unknown");
 }
 
 /**
