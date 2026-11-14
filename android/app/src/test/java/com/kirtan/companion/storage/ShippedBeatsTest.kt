@@ -170,8 +170,7 @@ class ShippedBeatsTest {
         // bound, so one more beat crosses it). Checked before the lanes, so the
         // pattern lengths here are irrelevant to the refusal.
         val tooLong = buildJsonArray { repeat(ShareCodec.MAX_GROUPS + 1) { add(ShareCodec.MAX_GROUP_CELLS) } }
-        assertEquals(396, tooLong.sumOf { it.jsonPrimitive.int })
-        assertTrue(396 > ShareCodec.MAX_STEPS)
+        assertTrue(tooLong.sumOf { it.jsonPrimitive.int } > ShareCodec.MAX_STEPS)
         assertNull(shippedBeatsOf(one(good.with("groups", tooLong))))
 
         // The bounds are INCLUSIVE, and the ceiling is reachable by a real beat:

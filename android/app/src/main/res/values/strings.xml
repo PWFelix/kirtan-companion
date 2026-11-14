@@ -277,7 +277,11 @@
     <string name="meter_dbl">Double-time</string>
     <string name="meter_sig_dbl">16ths</string>
     <string name="meter_sig_std">4/4 · eighths</string>
+    <string name="meter_sig_tala">%1$d cells per beat</string>
     <string name="meter_std">Standard</string>
+    <string name="meter_t5">Five</string>
+    <string name="meter_t7">Seven</string>
+    <string name="meter_t9">Nine</string>
     <string name="meter_trip">Triplets</string>
     <string name="migrate_body">Moving copies them up; the copies on this device stay until you delete them. Leaving them here means this account starts empty.</string>
     <string name="migrate_leave">Leave on device</string>

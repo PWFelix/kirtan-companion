@@ -123,12 +123,12 @@ class EditorDraftTest {
     }
 
     @Test
-    fun `adding on an uneven meter appends the whole cycle`() {
+    fun `adding on an uneven meter appends the pattern's next beat`() {
         val draft = EditorDraft.from(null).selectMeter(METERS.first { it.id == "78" })
         assertEquals(7, draft.steps)
         val grown = draft.addGroup()
-        assertEquals(listOf(2, 2, 3, 2, 2, 3), grown.groups)
-        assertEquals(14, grown.steps)
+        assertEquals(listOf(2, 2, 3, 2), grown.groups)
+        assertEquals(9, grown.steps)
     }
 
     @Test
@@ -472,8 +472,8 @@ class EditorDraftTest {
         assertEquals(listOf(0, 8, 12), dayanHits(doubled))
         assertEquals("78", doubled.meter.id)
         assertEquals(2, doubled.resolution.current)
-        // ± still adds a whole 2+2+3 cycle, at the new resolution.
-        assertEquals(listOf(4, 4, 6, 4, 4, 6), doubled.addGroup().groups)
+        // + adds the pattern's next beat, at the new resolution.
+        assertEquals(listOf(4, 4, 6, 4), doubled.addGroup().groups)
         // And a saved ×2 seven-eight reopens as seven-eight.
         assertEquals("78", meterFor(listOf(4, 4, 6), 4).id)
     }
@@ -592,5 +592,56 @@ class EditorDraftTest {
         assertEquals(Stroke.CLOSED, d.pattern(LaneId.DAYAN)[0])
         d = d.startSelect().tapCell(LaneId.BAYAN, 7)
         assertNull(d.pattern(LaneId.BAYAN)[7])
+    }
+
+    // ── One beat at a time, and tala feels ──
+
+    @Test
+    fun `plus adds one beat of the pattern, minus removes one`() {
+        var d = EditorDraft.from(null).selectMeter(METERS.first { it.id == "68" })
+        d = d.addGroup()
+        assertEquals(listOf(3, 3, 3), d.groups)
+        assertEquals(9, d.steps)
+        d = EditorDraft.from(null).selectMeter(METERS.first { it.id == "78" }).addGroup().addGroup().addGroup()
+        assertEquals(listOf(2, 2, 3, 2, 2, 3), d.groups)
+        d = d.removeGroup()
+        assertEquals(listOf(2, 2, 3, 2, 2), d.groups)
+        var one = EditorDraft.from(null).selectMeter(METERS.first { it.id == "68" }).removeGroup()
+        assertEquals(listOf(3), one.groups)
+        assertFalse(one.canRemoveBeat)
+        assertEquals(one, one.removeGroup())
+    }
+
+    @Test
+    fun `tala feels offer only whole multiples of their beat`() {
+        val d = EditorDraft.from(null).selectMeter(METERS.first { it.id == "t7" })
+        assertEquals(listOf(7, 7, 7, 7), d.groups)
+        assertEquals(listOf(7, 14, 21), d.resolution.options)
+        assertFalse(d.resolution.multiplier)
+        val fine = d.setResolution(21)
+        assertEquals(List(4) { 21 }, fine.groups)
+        assertEquals("t7", fine.meter.id)
+        assertEquals(listOf(7, 14, 21), fine.resolution.options)
+        assertEquals(listOf(21, 21, 21, 21, 21), fine.addGroup().groups)
+        val nine = EditorDraft.from(null).selectMeter(METERS.first { it.id == "t9" })
+        assertTrue(nine.resolutionFits(27))
+        assertEquals(listOf(5, 10, 15), EditorDraft.from(null).selectMeter(METERS.first { it.id == "t5" }).resolution.options)
+    }
+
+    @Test
+    fun `a beat wider than a page is split across pages`() {
+        val d = EditorDraft.from(null).selectMeter(METERS.first { it.id == "t7" }).setResolution(21)
+        assertEquals(listOf(0 until 11, 11 until 21, 21 until 32), d.pages.take(3))
+        assertEquals(8, d.pageCount)
+        assertTrue(d.pages.all { it.count() <= 12 })
+    }
+
+    @Test
+    fun `a 27-cell tala beat survives the share codec`() {
+        val beat = EditorDraft.from(null).selectMeter(METERS.first { it.id == "t9" }).setResolution(27)
+            .tapCell(LaneId.DAYAN, 26).toBeat(null)
+        val back = (ShareCodec.decodeShare(ShareCodec.encodeBeat(beat)) as ShareCodec.SharePayload.BeatPayload).beat
+        assertEquals(List(4) { 27 }, back.groups)
+        assertEquals(Stroke.OPEN, back.pattern(LaneId.DAYAN)!![26])
     }
 }

@@ -100,9 +100,9 @@ object ShareCodec {
     const val MAX_CODE_LEN = 8000   // ~a category of ten beats, with headroom
     const val MAX_NAME_LEN = 40
     const val MAX_GROUPS = 32       // numbered beats in one pattern
-    const val MAX_GROUP_CELLS = 12  // cells in one numbered beat
-    const val MAX_STEPS = 384       // total cells: 32 beats × 12 — the DoS bound that matters
-    const val MAX_CPQ = 12
+    const val MAX_GROUP_CELLS = 27  // cells in one numbered beat (9-matra tala ×3); 12 before 0.4.41
+    const val MAX_STEPS = 384       // total cells: 32 beats × 12 — the DoS bound that matters (wider tala beats just fit fewer)
+    const val MAX_CPQ = 27         // cells per beat: a 9-matra tala ×3; 12 before 0.4.41
     const val MAX_CAT_BEATS = 50
 
     private const val DEFAULT_NAME_BEAT = "Shared Beat"

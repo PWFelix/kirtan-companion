@@ -1042,6 +1042,9 @@ private fun meterLabel(preset: MeterPreset): String = when (preset.id) {
     "dbl" -> stringResource(R.string.meter_dbl)
     "68" -> stringResource(R.string.meter_68)
     "78" -> stringResource(R.string.meter_78)
+    "t5" -> stringResource(R.string.meter_t5)
+    "t7" -> stringResource(R.string.meter_t7)
+    "t9" -> stringResource(R.string.meter_t9)
     "custom" -> stringResource(R.string.meter_custom)
     else -> preset.label
 }
@@ -1050,6 +1053,7 @@ private fun meterLabel(preset: MeterPreset): String = when (preset.id) {
 private fun meterSig(preset: MeterPreset): String = when (preset.id) {
     "std" -> stringResource(R.string.meter_sig_std)
     "dbl" -> stringResource(R.string.meter_sig_dbl)
+    "t5", "t7", "t9" -> stringResource(R.string.meter_sig_tala, preset.cpq)
     else -> preset.sig
 }
 

@@ -271,7 +271,11 @@
     <string name="meter_dbl">Doble tiempo</string>
     <string name="meter_sig_dbl">semicorcheas</string>
     <string name="meter_sig_std">4/4 · corcheas</string>
+    <string name="meter_sig_tala">%1$d celdas por pulso</string>
     <string name="meter_std">Estándar</string>
+    <string name="meter_t5">Cinco</string>
+    <string name="meter_t7">Siete</string>
+    <string name="meter_t9">Nueve</string>
     <string name="meter_trip">Tresillos</string>
     <string name="migrate_body">Al pasarlos se copian a la nube; las copias de este dispositivo se quedan hasta que las borres. Si los dejas aquí, esta cuenta empieza vacía.</string>
     <string name="migrate_leave">Dejar en el dispositivo</string>

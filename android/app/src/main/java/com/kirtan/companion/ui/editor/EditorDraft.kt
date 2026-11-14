@@ -50,7 +50,19 @@ val METERS: List<MeterPreset> = listOf(
     MeterPreset("dbl", "Double-time", "16ths", listOf(4, 4, 4, 4), listOf(4), 4),
     MeterPreset("68", "Six-eight", "6/8 · 3+3", listOf(3, 3), listOf(3, 3), 2),
     MeterPreset("78", "Seven-eight", "7/8 · 2+2+3", listOf(2, 2, 3), listOf(2, 2, 3), 2),
+    // Tala-style: every beat holds 5, 7 or 9 cells (matras), and the resolution
+    // lever only offers whole multiples of that, so a beat never stops being one.
+    MeterPreset("t5", "Five", "5 per beat", listOf(5, 5, 5, 5), listOf(5), 5),
+    MeterPreset("t7", "Seven", "7 per beat", listOf(7, 7, 7, 7), listOf(7), 7),
+    MeterPreset("t9", "Nine", "9 per beat", listOf(9, 9, 9, 9), listOf(9), 9),
 )
+
+/** The tala-style feels' beat sizes: a cpq of 5, 7 or 9 (×1–3) is one of them. */
+val TALA_BASES = listOf(5, 7, 9)
+
+/** The 5/7/9 a cells-per-beat count is a whole multiple (1–3×) of, or null. */
+fun talaBase(cpq: Int): Int? =
+    TALA_BASES.lastOrNull { cpq % it == 0 && cpq / it in 1..3 }
 
 /** The preset at k× its resolution: every group and cpq multiplied by [k]. */
 fun MeterPreset.scaled(k: Int): MeterPreset =
@@ -78,6 +90,8 @@ fun meterFor(groups: List<Int>, cpq: Int): MeterPreset {
     if (uniform && groups.isNotEmpty() && groups[0] == cpq) {
         METERS.firstOrNull { it.cpq == cpq && it.unit.size == 1 && it.unit[0] == cpq }
             ?.let { return it }
+        // A tala feel at ×2 or ×3 (7 → 14) is still that feel.
+        talaBase(cpq)?.let { b -> return METERS.first { it.id == "t$b" }.scaled(cpq / b) }
     }
     // Odd meters at a finer resolution (6/8 ×2 is [6,6] at cpq 4) are still that
     // meter: divide the common factor out, match, and scale the preset back up so
@@ -229,6 +243,21 @@ data class EditorDraft(
         var start = 0
         var end = 0
         for (g in groups) {
+            // A tala beat finer than 12 cells (14, 21, 27…) would be too narrow to
+            // tap on one page: it gets several, in near-equal parts (21 = 7+7+7).
+            if (g > MAX_PAGE_CELLS) {
+                if (end > start) out += start until end
+                val parts = (g + MAX_PAGE_CELLS - 1) / MAX_PAGE_CELLS
+                var at = end
+                for (i in 0 until parts) {
+                    val len = g / parts + if (i < g % parts) 1 else 0
+                    out += at until at + len
+                    at += len
+                }
+                end += g
+                start = end
+                continue
+            }
             if (end > start && end - start + g > ZOOM_CELLS) {
                 out += start until end
                 start = end
@@ -244,16 +273,24 @@ data class EditorDraft(
     val windowEnd: Int get() = pages.getOrNull(page)?.let { it.last + 1 } ?: steps
     val zoomCells: Int get() = windowEnd - windowStart
 
-    /** ± is refused past MAX_STEPS (384 cells, 32 beats at 12 per beat). Versions before 0.4.35 / iOS 0.4.29 capped beats at 64 cells and drop longer ones. */
+    /**
+     * The beat + appends: the next group of the feel's pattern, so 6/8 grows by
+     * one 3 and 7/8 (2+2+3) by its next 2 or 3 — one beat at a time, never a
+     * whole cycle (a user could not make 6/8 land on 4 bars that way).
+     */
+    val nextGroup: Int get() = meter.unit[groups.size % meter.unit.size]
+
+    /** ± is refused past MAX_STEPS (384 cells) or MAX_GROUPS beats. Versions before 0.4.35 / iOS 0.4.29 capped beats at 64 cells and drop longer ones. */
     val canAddBeat: Boolean get() =
-        steps + meter.unit.sum() <= ShareCodec.MAX_STEPS && groups.size + meter.unit.size <= ShareCodec.MAX_GROUPS
-    val canRemoveBeat: Boolean get() = groups.size > meter.unit.size
+        steps + nextGroup <= ShareCodec.MAX_STEPS && groups.size + 1 <= ShareCodec.MAX_GROUPS
+    val canRemoveBeat: Boolean get() = groups.size > 1
 
     /** How many beats the bar has — one per numbered group. */
     val beatCount: Int get() = groups.size
 
     val resolution: ResolutionLever get() {
         if (groups.isNotEmpty() && groups.all { it == cpq }) {
+            talaBase(cpq)?.let { b -> return ResolutionLever(false, cpq, listOf(b, 2 * b, 3 * b)) }
             return ResolutionLever(false, cpq, (SIMPLE_RESOLUTIONS + cpq).distinct().sorted())
         }
         val k = resolutionFactor(groups, cpq)
@@ -359,15 +396,15 @@ data class EditorDraft(
     // ── Meter and length ───────────────────────────────────────────────────
 
     /**
-     * Append one unit of the current meter, padding every lane with rests.
+     * Append one beat ([nextGroup]), padding every lane with rests.
      * Resets undo, as the web editor does: an undo entry records patterns of the
      * OLD length, so restoring one after a resize would write past the end.
      */
     fun addGroup(): EditorDraft {
         if (!canAddBeat) return this
-        val pad = List(meter.unit.sum()) { null as Stroke? }
+        val pad = List(nextGroup) { null as Stroke? }
         return copy(
-            groups = groups + meter.unit,
+            groups = groups + nextGroup,
             lanes = lanes.mapValues { (_, cells) -> cells + pad },
             undo = emptyList(),
             selectAnchor = null,
@@ -375,12 +412,12 @@ data class EditorDraft(
         )
     }
 
-    /** Drop the last unit; refused when only one unit's worth of groups remains. */
+    /** Drop the last beat; refused at one. */
     fun removeGroup(): EditorDraft {
-        if (groups.size <= meter.unit.size) return this
-        val drop = meter.unit.sum()
+        if (!canRemoveBeat) return this
+        val drop = groups.last()
         return copy(
-            groups = groups.dropLast(meter.unit.size),
+            groups = groups.dropLast(1),
             lanes = lanes.mapValues { (_, cells) -> cells.dropLast(drop) },
             cursor = min(cursor, steps - drop - 1).coerceAtLeast(0),
             undo = emptyList(),
@@ -596,6 +633,8 @@ data class EditorDraft(
     companion object {
         const val UNDO_LIMIT = 60
         const val ZOOM_CELLS = 8
+        /** The most cells one zoom page shows: a 6/8 ×2 beat's 12. */
+        const val MAX_PAGE_CELLS = 12
         /** Cells-per-beat choices for a simple meter; the lever greys any that would pass MAX_STEPS cells. */
         val SIMPLE_RESOLUTIONS = listOf(1, 2, 3, 4, 6, 8)
         /** Multipliers offered for an odd meter. */
