@@ -625,6 +625,10 @@ private fun SettingsScreen(
     val state by transport.state.collectAsState()
     val dimens = KirtanTheme.dimens
     var aboutOpen by remember { mutableStateOf(false) }
+    var mixerOpen by remember { mutableStateOf(false) }
+    if (mixerOpen) {
+        com.kirtan.companion.ui.home.MixerSheet(transport = transport, onDismiss = { mixerOpen = false })
+    }
     if (aboutOpen) {
         com.kirtan.companion.ui.about.AboutScreen(onBack = { aboutOpen = false })
         return
@@ -676,6 +680,12 @@ private fun SettingsScreen(
         )
 
         SectionLabel(stringResource(R.string.settings_sound))
+        // The mixer lives here rather than on Home: set once, rarely touched mid-kirtan.
+        SettingsLink(
+            title = stringResource(R.string.mixer_title),
+            subtitle = stringResource(R.string.mixer_row_sub),
+            onClick = { mixerOpen = true },
+        )
         SettingsLink(
             title = stringResource(R.string.sync_row_title),
             subtitle = stringResource(R.string.sync_row_sub) + " " +

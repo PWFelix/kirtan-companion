@@ -512,14 +512,19 @@ data class EditorDraft(
         setCursor(index).copy(cursorLane = lane)
 
     /**
-     * A tap on a grid cell. The first tap selects it (and so picks the pads); a
-     * tap on the cell ALREADY selected steps it through its row's palette —
-     * rest → open → closed → rest — so a cell can be edited without moving.
-     * The cursor stays put. While choosing a run to copy, taps only move its end.
+     * A tap on a grid cell. A tap on another cell selects it (and so picks the
+     * pads), and an EMPTY one gets the row's first stroke at once; a filled one
+     * is only selected, so moving around never overwrites. A tap on the cell
+     * ALREADY selected steps it on through the palette — open → closed → rest →
+     * open — so a cell is edited without moving. While choosing a run to copy,
+     * taps only move its end.
      */
-    fun tapCell(lane: LaneId, index: Int): EditorDraft =
-        if (selectAnchor == null && lane == cursorLane && index == cursor) cycleCell()
-        else pickCell(lane, index)
+    fun tapCell(lane: LaneId, index: Int): EditorDraft = when {
+        selectAnchor != null -> pickCell(lane, index)
+        lane == cursorLane && index == cursor -> cycleCell()
+        pattern(lane).getOrNull(index) == null -> pickCell(lane, index).cycleCell()
+        else -> pickCell(lane, index)
+    }
 
     /** The selected cell, one step on through its palette; undoable like a pad. */
     fun cycleCell(): EditorDraft {

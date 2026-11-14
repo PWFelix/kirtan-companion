@@ -80,7 +80,7 @@ import androidx.compose.ui.res.pluralStringResource
 import com.kirtan.companion.ui.BeatText
 
 /** Which of the home screen's three sheets is open, if any. */
-private enum class HomeSheet { PICKER, MIXER, TEMPO, SEQ_SAVE, SEQ_OPEN }
+private enum class HomeSheet { PICKER, TEMPO, SEQ_SAVE, SEQ_OPEN }
 
 /**
  * Below this screen height the wordmark is dropped to give the strip and the
@@ -238,7 +238,6 @@ internal fun HomeScreen(
                     onLeave = { transport.leaveBrahmaloka() },
                     onToggleLock = { transport.setTempoLocked(!state.settings.tempoLocked) },
                     onTapTempo = { transport.tapTempo() },
-                    onOpenMixer = { sheet = HomeSheet.MIXER },
                 )
             }
 
@@ -315,7 +314,6 @@ internal fun HomeScreen(
             onDismiss = { sheet = null },
         )
 
-        HomeSheet.MIXER -> MixerSheet(transport = transport, onDismiss = { sheet = null })
 
         HomeSheet.TEMPO -> TempoSheet(
             bpm = state.bpm,
@@ -458,7 +456,6 @@ private fun TransportControls(
     onLeave: () -> Unit,
     onToggleLock: () -> Unit,
     onTapTempo: () -> Unit,
-    onOpenMixer: () -> Unit,
 ) {
     val dimens = KirtanTheme.dimens
 
@@ -556,8 +553,6 @@ private fun TransportControls(
                 minHeight = 44.dp,
             )
         }
-
-        SecondaryButton(label = stringResource(R.string.mixer_title), icon = KcIcons.Mixer, onClick = onOpenMixer)
     }
 }
 
@@ -570,7 +565,7 @@ private fun TransportControls(
  * than hard-coding a lane list keeps this honest if an instrument is ever added.
  */
 @Composable
-private fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
+internal fun MixerSheet(transport: TransportViewModel, onDismiss: () -> Unit) {
     val state by transport.state.collectAsState()
     val settings = state.settings
     val dimens = KirtanTheme.dimens

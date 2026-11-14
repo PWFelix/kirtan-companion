@@ -287,6 +287,7 @@
     <string name="mixer_balanced_hint">100% is balanced for phone speakers — the bass end is already boosted.</string>
     <string name="mixer_master">Master</string>
     <string name="mixer_mute">Mute %1$s</string>
+    <string name="mixer_row_sub">Volume, EQ, tuning, feel and swing</string>
     <string name="mixer_title">Mixer</string>
     <string name="mixer_tone">Tone</string>
     <string name="mixer_tune">Tune</string>

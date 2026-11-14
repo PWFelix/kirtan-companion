@@ -281,6 +281,7 @@
     <string name="mixer_balanced_hint">100 % está equilibrado para altavoces de teléfono: los graves ya van reforzados.</string>
     <string name="mixer_master">General</string>
     <string name="mixer_mute">Silenciar %1$s</string>
+    <string name="mixer_row_sub">Volumen, ecualizador, afinación, sensación y swing</string>
     <string name="mixer_title">Mezclador</string>
     <string name="mixer_tone">Tono</string>
     <string name="mixer_tune">Afinar</string>

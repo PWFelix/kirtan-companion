@@ -568,30 +568,29 @@ class EditorDraftTest {
     // ── Tap-to-cycle ──
 
     @Test
-    fun `first tap selects a cell, further taps cycle rest-open-closed-rest in place`() {
+    fun `a tap on an empty cell writes the first stroke, then re-taps cycle in place`() {
         var d = EditorDraft.from(null)
         d = d.tapCell(LaneId.BAYAN, 3)
         assertEquals(3, d.cursor)
         assertEquals(LaneId.BAYAN, d.cursorLane)
-        assertNull(d.pattern(LaneId.BAYAN)[3])
-        d = d.tapCell(LaneId.BAYAN, 3)
         assertEquals(Stroke.OPEN, d.pattern(LaneId.BAYAN)[3])
         d = d.tapCell(LaneId.BAYAN, 3)
         assertEquals(Stroke.CLOSED, d.pattern(LaneId.BAYAN)[3])
         d = d.tapCell(LaneId.BAYAN, 3)
         assertNull(d.pattern(LaneId.BAYAN)[3])
+        d = d.tapCell(LaneId.BAYAN, 3)
+        assertEquals(Stroke.OPEN, d.pattern(LaneId.BAYAN)[3])
         assertEquals(3, d.cursor)
-        // Other rows untouched, and each step undoes.
         assertTrue(d.pattern(LaneId.DAYAN).all { it == null })
-        assertEquals(Stroke.CLOSED, d.undoLast().pattern(LaneId.BAYAN)[3])
+        assertNull(d.undoLast().pattern(LaneId.BAYAN)[3])
     }
 
     @Test
-    fun `a tap on another row or column only moves, and choosing a run never cycles`() {
-        var d = EditorDraft.from(null).tapCell(LaneId.DAYAN, 0)
-        d = d.tapCell(LaneId.BAYAN, 0)
-        assertNull(d.pattern(LaneId.BAYAN)[0])
-        d = d.startSelect().tapCell(LaneId.BAYAN, 0)
-        assertNull(d.pattern(LaneId.BAYAN)[0])
+    fun `a filled cell is only selected, and choosing a run never writes`() {
+        var d = EditorDraft.from(null).tapCell(LaneId.DAYAN, 0).tapCell(LaneId.DAYAN, 0) // closed
+        d = d.tapCell(LaneId.BAYAN, 5).tapCell(LaneId.DAYAN, 0)
+        assertEquals(Stroke.CLOSED, d.pattern(LaneId.DAYAN)[0])
+        d = d.startSelect().tapCell(LaneId.BAYAN, 7)
+        assertNull(d.pattern(LaneId.BAYAN)[7])
     }
 }
