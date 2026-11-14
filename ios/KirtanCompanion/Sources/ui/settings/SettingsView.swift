@@ -3,8 +3,8 @@ import SwiftUI
 /// The settings screen: the notation-display toggles, and — when a cloud is compiled
 /// in — the account (sign in / sign out).
 ///
-/// Ported from `src/views/SettingsView.jsx`. The EQ/tuning panels live on the Home mixer,
-/// not here, matching the web. The cloud section is deliberately minimal — an account row
+/// Ported from `src/views/SettingsView.jsx`. The mixer (volumes, EQ, tuning, feel, swing) opens
+/// from here as a sheet: set once, rarely touched mid-kirtan, so it no longer sits on Home. The cloud section is deliberately minimal — an account row
 /// and one action — because sign-in is a redirect round trip the app owns, and the Browse
 /// screen offers the same action for those who land there first.
 struct SettingsView: View {
@@ -30,6 +30,8 @@ struct SettingsView: View {
         #endif
     }()
 
+    @State private var mixerOpen = false
+
     var body: some View {
         // A stack only so About and Sync can be pushed; Settings draws its own title.
         NavigationStack {
@@ -37,6 +39,10 @@ struct SettingsView: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(isPresented: $aboutOpen) { AboutView() }
                 .navigationDestination(isPresented: $syncOpen) { SyncView(transport: transport) }
+                .sheet(isPresented: $mixerOpen) {
+                    MixerSheet(container: container)
+                        .presentationDetents([.medium, .large])
+                }
         }
     }
 
@@ -55,6 +61,16 @@ struct SettingsView: View {
                 }
 
                 Section(String(localized: "Sound", bundle: .strings)) {
+                    Button {
+                        mixerOpen = true
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "Mixer", bundle: .strings)).foregroundStyle(Palette.syahi)
+                            Text(String(localized: "Volume, EQ, tuning, feel and swing", bundle: .strings))
+                                .font(.footnote)
+                                .foregroundStyle(Palette.syahiSoft)
+                        }
+                    }
                     Button {
                         syncOpen = true
                     } label: {

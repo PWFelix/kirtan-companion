@@ -8,7 +8,6 @@ import SwiftUI
 /// the persisted snapshot, so reopening the sheet shows exactly what is sounding.
 struct MixerSheet: View {
     let container: AppContainer
-    let beat: Beat
 
     private var transport: TransportViewModel { container.transport }
 

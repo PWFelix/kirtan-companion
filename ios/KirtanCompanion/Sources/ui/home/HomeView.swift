@@ -3,7 +3,7 @@ import SwiftUI
 /// The playing screen: the beat's name, the transport, and the tempo.
 ///
 /// Ported from `src/views/HomeView.jsx`. For now this is the core transport only;
-/// the beat strip, the mixer sheet and the quick-pick are added around it. Every
+/// the beat strip and the quick-pick are added around it. Every
 /// read and write goes through the container's [TransportViewModel] — the one
 /// place that calls the engine.
 struct HomeView: View {
@@ -12,7 +12,6 @@ struct HomeView: View {
     private var transport: TransportViewModel { container.transport }
     private var beat: Beat { beatForTransport() }
 
-    @State private var mixerOpen = false
     @State private var pickerOpen = false
     @State private var tempoOpen = false
 
@@ -46,10 +45,6 @@ struct HomeView: View {
         // Sequences find their beats by id; keep them handed the library's.
         .onAppear { transport.setBeatLookup(container.library.allBeats) }
         .onChange(of: container.library.allBeats) { _, beats in transport.setBeatLookup(beats) }
-        .sheet(isPresented: $mixerOpen) {
-            MixerSheet(container: container, beat: beat)
-                .presentationDetents([.medium, .large])
-        }
         #if DEBUG
         // DEBUG: `-kirtanTempo` opens the tempo sheet, for screenshots.
         .onAppear { if ProcessInfo.processInfo.arguments.contains("-kirtanTempo") { tempoOpen = true } }
@@ -86,17 +81,6 @@ struct HomeView: View {
             )
             .frame(height: rowHeight * CGFloat(lanes.count))
             .background(Palette.headWorn, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(alignment: .topTrailing) {
-                Button {
-                    mixerOpen = true
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.footnote)
-                        .foregroundStyle(Palette.syahiSoft)
-                        .padding(8)
-                }
-                .padding(6)
-            }
         }
     }
 

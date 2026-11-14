@@ -410,12 +410,15 @@ struct BeatEditorView: View {
 
     private var cursorLane: LaneId { LaneId.ordered[cursor.lane] }
 
-    /// First tap selects a cell; a tap on the selected one cycles it (EditorPads.cycled),
-    /// sounding what lands. Choosing a run to copy only ever moves its end.
+    /// A tap on another cell selects it, and an EMPTY one gets the row's first stroke at
+    /// once (a filled one is only selected, so moving never overwrites); a tap on the
+    /// selected cell steps it on (EditorPads.cycled). What lands sounds. Choosing a run
+    /// to copy only ever moves its end.
     private func tapCell(lane: Int, step: Int) {
-        guard selectAnchor == nil, lane == cursor.lane, step == cursor.step else {
+        guard selectAnchor == nil else { setCursor(lane: lane, step: step); return }
+        if lane != cursor.lane || step != cursor.step {
             setCursor(lane: lane, step: step)
-            return
+            guard patternValue(lane, step) == nil else { return }
         }
         beforePaste = nil
         let next = EditorPads.cycled(patternValue(lane, step), lane: LaneId.ordered[lane])

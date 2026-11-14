@@ -2231,6 +2231,16 @@
         }
       }
     },
+    "Mixer" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mezclador"
+          }
+        }
+      }
+    },
     "More bars" : {
       "localizations" : {
         "es" : {
@@ -4397,6 +4407,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Versión %@"
+          }
+        }
+      }
+    },
+    "Volume, EQ, tuning, feel and swing" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volumen, ecualizador, afinación, sensación y swing"
           }
         }
       }
