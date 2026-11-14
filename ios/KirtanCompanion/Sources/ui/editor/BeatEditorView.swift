@@ -60,6 +60,9 @@ struct BeatEditorView: View {
     @State private var saveError: String?
     /// The author's tags, published with the beat.
     @State private var tags: [String] = []
+    /// The rhythm's notes (saved as the beat's description).
+    @State private var notes = ""
+    @State private var editingNotes = false
     @State private var pickingTags = false
     @State private var confirmingDiscard = false
 
@@ -131,6 +134,7 @@ struct BeatEditorView: View {
         let d = session.draft
         name = d.name
         tags = d.tags
+        notes = d.notes
         bpm = d.bpm
         swing = d.swing
         brahmaloka = d.bpm > NORMAL_MAX_BPM
@@ -144,7 +148,7 @@ struct BeatEditorView: View {
     /// The draft as the session keeps it.
     private var snapshot: EditorSnapshot {
         EditorSnapshot(name: name, bpm: bpm, shape: shape, dayan: dayan, bayan: bayan, kartal: kartal,
-                       tags: tags, swing: swing, cursorLane: cursor.lane, cursorStep: cursor.step)
+                       tags: tags, notes: notes, swing: swing, cursorLane: cursor.lane, cursorStep: cursor.step)
     }
 
     // MARK: header
@@ -653,7 +657,7 @@ struct BeatEditorView: View {
             beatsPerBar: shape.beatsPerBar,
             cellsPerGroup: shape.groups.allSatisfy { $0 == shape.groups.first } ? (shape.groups.first ?? shape.cpq) : shape.cpq,
             groups: shape.groups,
-            description: keepsIdentity ? seed?.description : nil,
+            description: { let n = notes.trimmingCharacters(in: .whitespacesAndNewlines); return n.isEmpty ? nil : n }(),
             lanePatterns: patterns,
             group: keepsIdentity ? seed?.group : nil
         )
@@ -678,6 +682,20 @@ struct BeatEditorView: View {
                 Button(String(localized: "Edit", bundle: .strings)) { pickingTags = true }
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Palette.clay)
+            }
+            HStack {
+                Text(String(localized: "Notes", bundle: .strings) + ": " + (notes.split(separator: "\n").first.map(String.init) ?? String(localized: "none", bundle: .strings)))
+                    .font(.footnote)
+                    .foregroundStyle(Palette.syahiSoft)
+                    .lineLimit(1)
+                Spacer()
+                Button(String(localized: "Edit", bundle: .strings)) { editingNotes = true }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Palette.clay)
+                    .accessibilityLabel(String(localized: "Edit the rhythm’s notes", bundle: .strings))
+            }
+            .sheet(isPresented: $editingNotes) {
+                NotesEditorSheet(initial: notes) { notes = $0 }
             }
             if case .fork(let original) = mode, original.isCommunity {
                 Text(String(localized: "The community beat stays as it is. Saving adds your version to Your beats; you can share it once the rhythm differs.", bundle: .strings))

@@ -39,6 +39,8 @@ struct EditorSnapshot: Equatable {
     var bayan: [Stroke?]
     var kartal: [Stroke?]
     var tags: [String]
+    /// The rhythm's notes, saved as the beat's description (ui/components/RhythmNotes.swift).
+    var notes = ""
     /// Swing, 50–67 (see Swing). Saved with the beat.
     var swing = Swing.straight
     var cursorLane = 0
@@ -65,7 +67,7 @@ struct EditorSnapshot: Equatable {
             : EditorShape.seeded(groups: [n], cpq: cpqFor(beat))
         return EditorSnapshot(name: beat.name, bpm: beat.bpm, shape: shape,
                               dayan: lane(.dayan), bayan: lane(.bayan), kartal: lane(.kartal), tags: beat.tags,
-                              swing: Swing.clamp(beat.swing))
+                              notes: beat.description ?? "", swing: Swing.clamp(beat.swing))
     }
 
     /// What a save would write, compared; the cursor doesn't count.
@@ -75,7 +77,8 @@ struct EditorSnapshot: Equatable {
         return n == o.shape.steps && shape.groups == o.shape.groups && shape.cpq == o.shape.cpq && bpm == o.bpm && swing == o.swing &&
             name.trimmingCharacters(in: .whitespaces) == o.name.trimmingCharacters(in: .whitespaces) &&
             pad(dayan) == pad(o.dayan) && pad(bayan) == pad(o.bayan) && pad(kartal) == pad(o.kartal) &&
-            tags == o.tags
+            tags == o.tags &&
+            notes.trimmingCharacters(in: .whitespacesAndNewlines) == o.notes.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -138,7 +141,7 @@ enum EditorSessionStore {
         }
         var pairs: [(String, JValue)] = [
             ("mode", .str(kind)), ("name", .str(d.name)), ("draft", LibraryJson.encodeStored(beat)),
-            ("tags", .arr(d.tags.map { .str($0) })), ("cursorLane", .int(d.cursorLane)), ("cursorStep", .int(d.cursorStep)),
+            ("tags", .arr(d.tags.map { .str($0) })), ("notes", .str(d.notes)), ("cursorLane", .int(d.cursorLane)), ("cursorStep", .int(d.cursorStep)),
         ]
         if let seed = s.mode.seed { pairs.append(("seed", LibraryJson.encodeStored(seed))) }
         return JValue.object(pairs.map { JPair(key: $0.0, value: $0.1) }).write()
@@ -157,6 +160,7 @@ enum EditorSessionStore {
         var draft = EditorSnapshot.seeded(from: beat)
         draft.name = o.stringField("name") ?? draft.name
         draft.tags = (o.element("tags")?.asArray() ?? []).compactMap { $0.asString() }
+        draft.notes = o.stringField("notes") ?? draft.notes
         draft.cursorLane = min(max(o.intField("cursorLane") ?? 0, 0), 2)
         draft.cursorStep = min(max(o.intField("cursorStep") ?? 0, 0), draft.shape.steps - 1)
         return EditorSession(mode: mode, draft: draft)

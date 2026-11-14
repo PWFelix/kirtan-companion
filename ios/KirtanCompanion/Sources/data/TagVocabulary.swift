@@ -57,6 +57,11 @@ enum TagVocabulary {
                 Tag(id: "intermediate", label: String(localized: "Intermediate", bundle: .strings)),
                 Tag(id: "advanced", label: String(localized: "Advanced", bundle: .strings)),
             ]),
+            Group(id: "practice", label: String(localized: "Hasta sadhana (practice)", bundle: .strings), tags: [
+                Tag(id: "exercise-beginner", label: String(localized: "Beginner exercise", bundle: .strings)),
+                Tag(id: "exercise-intermediate", label: String(localized: "Intermediate exercise", bundle: .strings)),
+                Tag(id: "exercise-advanced", label: String(localized: "Advanced exercise", bundle: .strings)),
+            ]),
         ]
     }
 

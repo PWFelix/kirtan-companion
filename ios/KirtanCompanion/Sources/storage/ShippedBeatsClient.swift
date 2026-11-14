@@ -169,7 +169,7 @@ final class ShippedBeatsClient {
         let row = try checkedRow(
             shippedRowFor(
                 id: id, ordinal: meta.ordinal, heading: meta.heading, beat: edited,
-                sourcePublishedId: meta.sourcePublishedId, description: meta.description,
+                sourcePublishedId: meta.sourcePublishedId, description: edited.description, // the editor carries the notes now
             ),
             refusal: String(localized: "That edit can't be saved — its name or its pattern is outside what the built-in set allows.", bundle: .strings),
         )

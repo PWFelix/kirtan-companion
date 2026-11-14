@@ -18,6 +18,7 @@ struct LearnView: View {
         return list.isEmpty ? container.library.allBeats : list
     }
     @State private var pickerOpen = false
+    @State private var notesOpen = false
     // Hill climb. On/off is per session (a lesson never speeds up unasked); the step
     // and interval are remembered in prefs, so turning it back on offers the last choice.
     @State private var climbOn = false
@@ -122,7 +123,9 @@ struct LearnView: View {
                 Text(String(localized: "Watch the strokes land, and play along", bundle: .strings))
                     .font(.caption)
                     .foregroundStyle(Palette.syahiSoft)
+                NotesLink(notes: beat.description) { notesOpen = true }
             }
+            .sheet(isPresented: $notesOpen) { NotesSheet(title: beat.name, notes: beat.description ?? "") }
             .frame(maxWidth: .infinity)
             iconButton("chevron.right", String(localized: "Next beat", bundle: .strings)) { cycle(1) }
         }

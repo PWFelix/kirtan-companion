@@ -621,6 +621,26 @@
         }
       }
     },
+    "About the rhythm: its history, when to use it, how to play it, which fingers to use. Saved and published with the beat; share links leave it out." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre el ritmo: su historia, cuándo usarlo, cómo tocarlo, qué dedos usar. Se guarda y se publica con el ritmo; los enlaces para compartir no lo incluyen."
+          }
+        }
+      }
+    },
+    "About this rhythm" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre este ritmo"
+          }
+        }
+      }
+    },
     "Actions for %@" : {
       "localizations" : {
         "es" : {
@@ -799,6 +819,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Avanzado"
+          }
+        }
+      }
+    },
+    "Advanced exercise" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejercicio avanzado"
           }
         }
       }
@@ -1061,6 +1091,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Principiante"
+          }
+        }
+      }
+    },
+    "Beginner exercise" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejercicio de principiante"
           }
         }
       }
@@ -1641,6 +1681,16 @@
         }
       }
     },
+    "Edit the rhythm’s notes" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editar las notas del ritmo"
+          }
+        }
+      }
+    },
     "Email" : {
       "localizations" : {
         "es" : {
@@ -1831,6 +1881,16 @@
         }
       }
     },
+    "Hasta sadhana (practice)" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasta sadhana (práctica)"
+          }
+        }
+      }
+    },
     "Headphones" : {
       "localizations" : {
         "es" : {
@@ -1907,6 +1967,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Intermedio"
+          }
+        }
+      }
+    },
+    "Intermediate exercise" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejercicio intermedio"
           }
         }
       }
@@ -2563,6 +2633,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Notación"
+          }
+        }
+      }
+    },
+    "Notes" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notas"
           }
         }
       }

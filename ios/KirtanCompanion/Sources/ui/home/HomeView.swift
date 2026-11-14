@@ -14,6 +14,7 @@ struct HomeView: View {
 
     @State private var pickerOpen = false
     @State private var tempoOpen = false
+    @State private var notesOpen = false
 
     private let rowHeight: CGFloat = 46
 
@@ -84,6 +85,9 @@ struct HomeView: View {
         }
     }
 
+    /// The beat Home is showing: the sequence's last-heard beat, else the loaded one.
+    private var shownBeat: Beat? { transport.sequence.playingBeat ?? transport.loadedBeat }
+
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 6) {
@@ -98,6 +102,10 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "Choose a beat", bundle: .strings))
+                NotesLink(notes: shownBeat?.description) { notesOpen = true }
+                    .sheet(isPresented: $notesOpen) {
+                        NotesSheet(title: shownBeat?.name ?? "", notes: shownBeat?.description ?? "")
+                    }
                 // Tap the tempo to type it, or jump it by ten (TempoSheet).
                 HStack(spacing: 8) {
                 Button { tempoOpen = true } label: {
