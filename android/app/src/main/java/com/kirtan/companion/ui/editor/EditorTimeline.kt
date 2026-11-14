@@ -39,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import com.kirtan.companion.data.PaletteToken
 import com.kirtan.companion.data.colorToken
@@ -86,6 +88,16 @@ internal object TimelineMath {
         return index + cycle * steps
     }
 
+    /**
+     * The columns left to right, as on the Learn highway: a right-handed player's
+     * bayan (left hand) on the left and dayan on the right; [leftHanded] mirrors the
+     * drum. Kartal has no side, so it stays on the far right either way.
+     */
+    fun columns(leftHanded: Boolean): List<LaneId> {
+        val drum = if (leftHanded) listOf(LaneId.DAYAN, LaneId.BAYAN) else listOf(LaneId.BAYAN, LaneId.DAYAN)
+        return drum + LaneId.ORDERED.filter { it !in drum }
+    }
+
     /** Which loop [row] belongs to, counting the one on the line as 0. */
     fun cycleOf(row: Int, steps: Int): Int = if (steps <= 0) 0 else Math.floorDiv(row, steps)
 }
@@ -99,6 +111,9 @@ internal fun TimelineZone(
     draft: EditorDraft,
     previewing: Boolean,
     getPhase: () -> Double,
+    /** Shared with Learn's handedness setting: flipping it here flips it there. */
+    leftHanded: Boolean,
+    onFlip: () -> Unit,
     onCellTap: (LaneId, Int) -> Unit,
     onLaneTap: (LaneId) -> Unit,
     onCursor: (Int) -> Unit,
@@ -106,7 +121,7 @@ internal fun TimelineZone(
     onScrubSound: (Int) -> Unit,
 ) {
     val steps = draft.steps
-    val lanes = LaneId.ORDERED
+    val lanes = TimelineMath.columns(leftHanded)
     val scope = rememberCoroutineScope()
     val pos = remember { Animatable(draft.cursor.toFloat()) }
     var dragging by remember { mutableStateOf(false) }
@@ -133,7 +148,21 @@ internal fun TimelineZone(
     Column(Modifier.fillMaxWidth()) {
         // Column heads; tapping one moves to that row on the line, never edits.
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.width(GUTTER))
+            // ⇄ mirrors the drum, as Learn's handedness button does (the same setting).
+            val flipLabel = androidx.compose.ui.res.stringResource(
+                if (leftHanded) com.kirtan.companion.R.string.learn_left_handed else com.kirtan.companion.R.string.learn_right_handed,
+            )
+            Box(
+                Modifier
+                    .width(GUTTER)
+                    .height(30.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClickLabel = flipLabel, onClick = onFlip)
+                    .then(androidx.compose.ui.Modifier.semantics { contentDescription = flipLabel }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("⇄", color = PaletteToken.CLAY.color, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
             for (lane in lanes) {
                 val on = draft.cursorLane == lane
                 Text(

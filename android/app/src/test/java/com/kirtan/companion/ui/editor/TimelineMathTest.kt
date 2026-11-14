@@ -1,6 +1,7 @@
 package com.kirtan.companion.ui.editor
 
 import org.junit.Assert.assertEquals
+import com.kirtan.companion.data.model.LaneId
 import org.junit.Test
 
 class TimelineMathTest {
@@ -21,5 +22,10 @@ class TimelineMathTest {
         assertEquals(8f, TimelineMath.nearest(0, 7f, 8), 0f)   // 7 → next cycle's 0, not back seven
         assertEquals(-1f, TimelineMath.nearest(7, 0f, 8), 0f)  // 0 → previous cycle's 7
         assertEquals(3f, TimelineMath.nearest(3, 2.6f, 8), 0f)
+    }
+
+    @Test fun bayanSitsLeftForARightHandedPlayerAndKartalStaysRight() {
+        assertEquals(listOf(LaneId.BAYAN, LaneId.DAYAN, LaneId.KARTAL), TimelineMath.columns(leftHanded = false))
+        assertEquals(listOf(LaneId.DAYAN, LaneId.BAYAN, LaneId.KARTAL), TimelineMath.columns(leftHanded = true))
     }
 }

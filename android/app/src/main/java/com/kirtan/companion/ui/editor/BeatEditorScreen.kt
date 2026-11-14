@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -147,6 +148,7 @@ internal fun BeatEditorScreen(
     // Timeline (vertical, the default) or the original strip; remembered per device.
     val viewPrefs = androidx.compose.ui.platform.LocalContext.current.let { EditorViewPref(it) }
     var timelineView by remember { mutableStateOf(viewPrefs.timeline) }
+    val transportState by transport.state.collectAsState()
 
     // Follow the engine's step so the zoom lights the sounding column while
     // previewing, and stop the preview whenever the editor leaves composition —
@@ -344,6 +346,8 @@ internal fun BeatEditorScreen(
                 draft = draft,
                 previewing = previewing,
                 getPhase = { engine.getPhase() },
+                leftHanded = transportState.settings.learnLeftHanded,
+                onFlip = { transport.setLearnLeftHanded(!transportState.settings.learnLeftHanded) },
                 onCellTap = { lane, index ->
                     val before = draft
                     draft = draft.tapCell(lane, index)
